@@ -1,0 +1,125 @@
+{
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+      "^u-(.*)": "uview-plus/components/u-$1/u-$1.vue"
+    }
+  },
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "漫展摄影",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/search/search",
+      "style": {
+        "navigationBarTitleText": "搜索"
+      }
+    },
+    {
+      "path": "pages/photographer/list",
+      "style": {
+        "navigationBarTitleText": "摄影师"
+      }
+    },
+    {
+      "path": "pages/photographer/detail",
+      "style": {
+        "navigationBarTitleText": "摄影师详情"
+      }
+    },
+    {
+      "path": "pages/portfolio/index",
+      "style": {
+        "navigationBarTitleText": "作品集"
+      }
+    },
+    {
+      "path": "pages/booking/index",
+      "style": {
+        "navigationBarTitleText": "预约"
+      }
+    },
+    {
+      "path": "pages/order/list",
+      "style": {
+        "navigationBarTitleText": "我的订单"
+      }
+    },
+    {
+      "path": "pages/order/detail",
+      "style": {
+        "navigationBarTitleText": "订单详情"
+      }
+    },
+    {
+      "path": "pages/chat/index",
+      "style": {
+        "navigationBarTitleText": "聊天"
+      }
+    },
+    {
+      "path": "pages/message/index",
+      "style": {
+        "navigationBarTitleText": "消息"
+      }
+    },
+    {
+      "path": "pages/comment/index",
+      "style": {
+        "navigationBarTitleText": "评价"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "漫展摄影",
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#f5f5f5",
+    "app-plus": {
+      "background": "#f5f5f5"
+    }
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#6366f1",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/photographer/list",
+        "text": "摄影师",
+        "iconPath": "static/tab/photographer.png",
+        "selectedIconPath": "static/tab/photographer-active.png"
+      },
+      {
+        "pagePath": "pages/message/index",
+        "text": "消息",
+        "iconPath": "static/tab/message.png",
+        "selectedIconPath": "static/tab/message-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/profile.png",
+        "selectedIconPath": "static/tab/profile-active.png"
+      }
+    ]
+  }
+}

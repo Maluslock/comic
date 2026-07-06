@@ -1,0 +1,204 @@
+page {
+  background-color: $bg-page;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: $font-size-base;
+  color: $text-primary;
+  line-height: 1.5;
+}
+
+view, text {
+  box-sizing: border-box;
+}
+
+.container {
+  padding: $spacing-md;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.gap-xs {
+  gap: $spacing-xs;
+}
+
+.gap-sm {
+  gap: $spacing-sm;
+}
+
+.gap-md {
+  gap: $spacing-md;
+}
+
+.gap-lg {
+  gap: $spacing-lg;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-primary {
+  color: $primary-color;
+}
+
+.text-secondary {
+  color: $text-secondary;
+}
+
+.text-tertiary {
+  color: $text-tertiary;
+}
+
+.text-sm {
+  font-size: $font-size-sm;
+}
+
+.text-base {
+  font-size: $font-size-base;
+}
+
+.text-lg {
+  font-size: $font-size-lg;
+}
+
+.text-xl {
+  font-size: $font-size-xl;
+}
+
+.font-bold {
+  font-weight: 600;
+}
+
+.mt-xs {
+  margin-top: $spacing-xs;
+}
+
+.mt-sm {
+  margin-top: $spacing-sm;
+}
+
+.mt-md {
+  margin-top: $spacing-md;
+}
+
+.mt-lg {
+  margin-top: $spacing-lg;
+}
+
+.mb-xs {
+  margin-bottom: $spacing-xs;
+}
+
+.mb-sm {
+  margin-bottom: $spacing-sm;
+}
+
+.mb-md {
+  margin-bottom: $spacing-md;
+}
+
+.mb-lg {
+  margin-bottom: $spacing-lg;
+}
+
+.card {
+  background: $bg-primary;
+  border-radius: $border-radius-lg;
+  padding: $spacing-md;
+  box-shadow: $shadow-sm;
+}
+
+.btn-primary {
+  background: $primary-color;
+  color: #fff;
+  border-radius: $border-radius-md;
+  padding: $spacing-sm $spacing-lg;
+  text-align: center;
+  font-size: $font-size-base;
+  font-weight: 500;
+  
+  &:active {
+    background: $primary-dark;
+  }
+}
+
+.btn-outline {
+  background: transparent;
+  color: $primary-color;
+  border: 2rpx solid $primary-color;
+  border-radius: $border-radius-md;
+  padding: $spacing-sm $spacing-lg;
+  text-align: center;
+  font-size: $font-size-base;
+  
+  &:active {
+    background: rgba($primary-color, 0.1);
+  }
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $border-radius-sm;
+  font-size: $font-size-xs;
+}
+
+.tag-primary {
+  background: rgba($primary-color, 0.1);
+  color: $primary-color;
+}
+
+.tag-success {
+  background: rgba($success-color, 0.1);
+  color: $success-color;
+}
+
+.tag-warning {
+  background: rgba($warning-color, 0.1);
+  color: $warning-color;
+}
+
+.avatar {
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ellipsis-2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

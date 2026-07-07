@@ -94,3 +94,56 @@ export interface ComicEvent {
   photographerCount: number
   status: 'upcoming' | 'ongoing' | 'ended'
 }
+
+// Backend HomeResponse DTO types
+export interface BannerItem {
+  id: number
+  imageUrl: string
+  title: string
+  linkType: string
+  linkId: number | null
+}
+
+export interface EventItem {
+  id: number
+  name: string
+  location: string
+  venue: string
+  startDate: string  // ISO8601 from backend
+  endDate: string    // ISO8601 from backend
+  coverUrl: string
+  tags: string[]
+  status: string
+  typeName: string
+}
+
+export interface TagItem {
+  name: string
+  usageCount: number
+}
+
+export interface PhotographerItem {
+  id: number
+  name: string
+  avatar: string
+  location: string
+  rating: number
+  reviewCount: number
+  orderCount: number
+  tags: string[]
+}
+
+export interface WorkItem {
+  id: number
+  title: string
+  images: string[]
+  photographerName: string
+}
+
+export interface HomeResponse {
+  banners: BannerItem[]
+  upcomingEvents: EventItem[]
+  hotTags: TagItem[]
+  recommendedPhotographers: PhotographerItem[]
+  featuredWorks: WorkItem[]
+}

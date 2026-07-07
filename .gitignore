@@ -33,3 +33,4 @@ unpackage/
 # Server build (Go)
 server/tmp/
 server/bin/
+server/*.exe

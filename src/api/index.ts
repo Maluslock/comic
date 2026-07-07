@@ -1,7 +1,7 @@
 import { mockPhotographers, mockServices, mockReviews, mockWorks, mockEvents, tags, timeSlots } from '@/data/mock'
-import type { Photographer, Service, Review, Work, ComicEvent } from '@/types'
+import type { Photographer, Service, Review, Work, ComicEvent, HomeResponse } from '@/types'
 
-const BASE_URL = 'https://api.example.com'
+const BASE_URL = 'http://localhost:8080'
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -114,4 +114,49 @@ export async function getComicEvents(params?: {
     list = list.filter(e => e.status === params.status)
   }
   return list.sort((a, b) => a.startDate - b.startDate)
+}
+
+export async function getHomeData(): Promise<HomeResponse> {
+  await delay(300)
+  return {
+    banners: mockEvents.slice(0, 3).map((e, i) => ({
+      id: i + 1,
+      imageUrl: e.cover,
+      title: e.name,
+      linkType: 'event',
+      linkId: null,
+    })),
+    upcomingEvents: mockEvents.map((e, i) => ({
+      id: i + 1,
+      name: e.name,
+      location: e.location,
+      venue: e.venue,
+      startDate: new Date(e.startDate).toISOString(),
+      endDate: new Date(e.endDate).toISOString(),
+      coverUrl: e.cover,
+      tags: e.tags,
+      status: e.status,
+      typeName: '漫展',
+    })),
+    hotTags: tags.map((t, i) => ({
+      name: t,
+      usageCount: (i + 1) * 10 + Math.floor(Math.random() * 50),
+    })),
+    recommendedPhotographers: mockPhotographers.map((p, i) => ({
+      id: i + 1,
+      name: p.name,
+      avatar: p.avatar,
+      location: p.location || '',
+      rating: p.rating,
+      reviewCount: p.reviewCount,
+      orderCount: p.orderCount,
+      tags: p.tags,
+    })),
+    featuredWorks: mockWorks.map((w, i) => ({
+      id: i + 1,
+      title: w.title,
+      images: w.images,
+      photographerName: '',
+    })),
+  }
 }

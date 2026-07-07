@@ -102,8 +102,7 @@
 import { ref, onMounted } from 'vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import WorkCard from '@/components/WorkCard.vue'
-import { getPhotographers, getWorks, getTags, getComicEvents } from '@/api/index'
-import type { Photographer, Work, ComicEvent } from '@/types'
+import type { Photographer, Work, ComicEvent, HomeResponse } from '@/types'
 
 const statusBarHeight = ref(44)
 const photographers = ref<Photographer[]>([])
@@ -118,23 +117,62 @@ onMounted(() => {
   loadData()
 })
 
+const BASE_URL = ''
+
 async function loadData() {
   uni.showLoading({ title: '加载中...' })
   try {
-    const [pRes, wRes, tRes, eRes] = await Promise.all([
-      getPhotographers({ page: 1, size: 4 }),
-      getWorks(),
-      getTags(),
-      getComicEvents()
-    ])
-    photographers.value = pRes.list
-    works.value = wRes.slice(0, 4)
-    tags.value = tRes.slice(0, 8)
-    events.value = eRes.slice(0, 5)
-    bannerList.value = eRes.slice(0, 3).map(e => ({
-      image: e.cover,
-      title: e.name
+    const res = await uni.request({
+      url: `${BASE_URL}/api/v1/home`,
+      method: 'GET'
+    })
+    const data = res.data as HomeResponse
+
+    photographers.value = data.recommendedPhotographers.map(p => ({
+      id: String(p.id),
+      name: p.name,
+      avatar: p.avatar || '',
+      role: 'photographer' as const,
+      description: '',
+      rating: p.rating,
+      reviewCount: p.reviewCount,
+      orderCount: p.orderCount,
+      location: p.location,
+      tags: p.tags,
+      works: [],
+      services: [],
+      reviews: [],
+      createdAt: Date.now(),
     }))
+    works.value = data.featuredWorks.slice(0, 4).map(w => ({
+      id: String(w.id),
+      photographerId: '',
+      title: w.title,
+      images: w.images,
+      description: '',
+      tags: [],
+      createdAt: Date.now(),
+    }))
+    tags.value = data.hotTags.map(t => t.name).slice(0, 8)
+    events.value = data.upcomingEvents.slice(0, 5).map(e => ({
+      id: String(e.id),
+      name: e.name,
+      location: e.location,
+      venue: e.venue,
+      startDate: new Date(e.startDate).getTime(),
+      endDate: new Date(e.endDate).getTime(),
+      cover: e.coverUrl,
+      tags: e.tags,
+      photographerCount: 0,
+      status: (e.status as ComicEvent['status']) || 'upcoming',
+    }))
+    bannerList.value = data.banners.slice(0, 3).map(b => ({
+      image: b.imageUrl,
+      title: b.title,
+    }))
+  } catch (e) {
+    console.error('Failed to load home data:', e)
+    uni.showToast({ title: '加载失败', icon: 'none' })
   } finally {
     uni.hideLoading()
   }

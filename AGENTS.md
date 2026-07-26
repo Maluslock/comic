@@ -1,23 +1,23 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-07-06
-**Updated:** 2026-07-06 (home page redesign, uview-plus setup, Vant Weapp, ComicEvent model)
-**Commit:** N/A (no git repo)
+**Updated:** 2026-07-24 (homepage redesign: dark neon theme, Pinia store, Go mock server, QuickActionBar, HomeSkeleton)
+**Commit:** N/A
 **Branch:** N/A
 
 ## OVERVIEW
-漫展摄影平台 — Uniapp mini-program connecting cosplayers with photographers at comic conventions. Vue 3 + TypeScript + Pinia + Vite, targeting WeChat MP (mp-weixin) and H5. Mock-data-driven, no backend wired. uview-plus CSS layer active; Vant Weapp available for mp-weixin.
+漫展摄影平台 — Uniapp mini-program connecting cosplayers with photographers at comic conventions. Vue 3 + TypeScript + Pinia + Vite, targeting WeChat MP (mp-weixin) and H5. Mock-data-driven with Go backend. Dark neon theme (purple #a855f7 + cyan #06b6d4) for homepage.
 
 ## STRUCTURE
 ```
 comic/
 ├── src/
 │   ├── api/index.ts        # Mock API (photographers, works, events, bookings)
-│   ├── components/          # 4 presentational components
+│   ├── components/          # 6 presentational components (incl. new)
 │   ├── data/mock.ts         # Mock data (photographers, works, events, tags)
 │   ├── pages/               # 10 page dirs, 12 .vue files
 │   ├── static/tab/          # TabBar icons (PNG: DiceBear + Material Symbols)
-│   ├── stores/              # Pinia stores (user, chat — not yet consumed)
+│   ├── stores/              # Pinia stores (user, chat, home)
 │   ├── styles/              # variables.scss + global.scss
 │   ├── types/index.ts       # All domain interfaces (incl. ComicEvent)
 │   ├── uni.scss             # uview-plus theme entry
@@ -25,6 +25,10 @@ comic/
 │   ├── main.ts              # SSR entry (Vue + Pinia + uviewPlus)
 │   ├── manifest.json        # Platform config (vueVersion: "3", mergeVirtualHostAttributes)
 │   └── pages.json           # Routes + tabBar + easycom config
+├── server/
+│   ├── cmd/api/main.go      # Go+Gin backend (PostgreSQL, gin, viper)
+│   ├── mock_server.go        # Standalone Go mock server (std lib, port 8081)
+│   └── internal/            # handler, service, repository, model, config
 ├── vite.config.ts           # @dcloudio/vite-plugin-uni + SCSS variable injection
 ├── tsconfig.json            # strict: true, @/* alias
 ├── index.html               # H5 entry
@@ -53,6 +57,7 @@ comic/
 | `createApp` | fn | `src/main.ts` | SSR bootstrap — Vue + Pinia + uviewPlus |
 | `useUserStore` | store | `src/stores/user.ts` | Auth state; NOT yet consumed by any page |
 | `useChatStore` | store | `src/stores/chat.ts` | Chat state; NOT yet consumed by any page |
+| `useHomeStore` | store | `src/stores/home.ts` | Home data (loads /api/v1/home→mock fallback); consumed by index page |
 | `getPhotographers` | api fn | `src/api/index.ts` | Filterable photographer list (mock) |
 | `getComicEvents` | api fn | `src/api/index.ts` | Upcoming comic conventions (mock, 5 events) |
 | `getTags` | api fn | `src/api/index.ts` | Style tags (日系, 古风, etc.) |
@@ -67,6 +72,8 @@ comic/
 | `WorkCard` | component | `src/components/WorkCard.vue` | Image card with gradient overlay, shadow-sm |
 | `ServiceCard` | component | `src/components/ServiceCard.vue` | Service tier card with selection |
 | `ReviewCard` | component | `src/components/ReviewCard.vue` | Review with rating + avatar |
+| `QuickActionBar` | component | `src/components/QuickActionBar.vue` | 4-grid shortcut nav (neon border, dark bg) |
+| `HomeSkeleton` | component | `src/components/HomeSkeleton.vue` | Shimmer skeleton for homepage loading |
 | `mockEvents` | data | `src/data/mock.ts` | 5 mock comic events (CP30, CD28, 萤火虫, IDO42, CJ) |
 | `mockPhotographers` | data | `src/data/mock.ts` | 4 mock photographers |
 | `mockServices` | data | `src/data/mock.ts` | 4 service tiers (¥399-¥1299) |
@@ -119,10 +126,12 @@ WeChat DevTools → import `dist/build/mp-weixin`. No lint/test scripts yet. To 
 ## NOTES
 
 - **No `.gitignore` at root** — add before git init.
+- **Dark neon homepage** — uses `$dark-*` and `$neon-*` variables from variables.scss; other pages still use light theme
+- **Backend mock** — `server/mock_server.go` is a Go standard library mock (port 8081); `server/cmd/api/main.go` is the full Gin+PostgreSQL version
+- **Pinia stores** — `useHomeStore` handles homepage data with API→mock fallback; `useUserStore`/`useChatStore` exist but not yet consumed
 - **uview-plus CSS active, JS layer disabled on mp-weixin** — path conflict (`node-modules` vs `node_modules`). Native components (swiper, image) used instead. uview-plus theme/variables still working.
 - **Vant Weapp installed** (`@vant/weapp`) — ready for mp-weixin once npm build is configured in WeChat DevTools.
-- **Pinia stores not consumed** — `useUserStore`/`useChatStore` exist but no page imports them yet.
-- **All API is mock** — `api/index.ts` returns hardcoded data. Rewrite when connecting backend.
+- **All API is mock** — `api/index.ts` returns hardcoded data. `getHomeData()` provides mock fallback when backend unavailable.
 - **TabBar icons are 81×81 PNG** — generated from Material Symbols via sharp. Grey (inactive) / `#6366f1` (active).
 - **No subPackages** — all pages in main package. Split if app grows.
 - **No login/auth gate** — booking/chat/order pages have no auth check.

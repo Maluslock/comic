@@ -15,6 +15,13 @@
       }
     },
     {
+      "path": "pages/event/detail",
+      "style": {
+        "navigationBarTitleText": "漫展详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/search/search",
       "style": {
         "navigationBarTitleText": "搜索"

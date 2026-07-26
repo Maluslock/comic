@@ -46,3 +46,20 @@ $status-bar-height: 44px;
 $tab-bar-height: 50px;
 
 $safe-area-bottom: env(safe-area-inset-bottom);
+
+// === Dark Neon Theme (米拉漫展) ===
+$dark-bg-primary: #0a0a1a;
+$dark-bg-secondary: #12122a;
+$dark-bg-card: rgba(255, 255, 255, 0.05);
+$dark-bg-card-hover: rgba(255, 255, 255, 0.08);
+$dark-text-primary: #e2e8f0;
+$dark-text-secondary: #94a3b8;
+$dark-text-tertiary: #64748b;
+$dark-border: rgba(255, 255, 255, 0.08);
+$neon-purple: #a855f7;
+$neon-purple-glow: rgba(168, 85, 247, 0.3);
+$neon-purple-dim: rgba(168, 85, 247, 0.1);
+$neon-cyan: #06b6d4;
+$neon-cyan-glow: rgba(6, 182, 212, 0.3);
+$neon-pink: #ec4899;
+$neon-gradient: linear-gradient(135deg, $neon-purple, $neon-cyan);

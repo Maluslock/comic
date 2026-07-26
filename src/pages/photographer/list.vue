@@ -102,7 +102,7 @@ function setFilter(key: string) {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
 }
 
 .filter-bar {
@@ -110,9 +110,10 @@ function setFilter(key: string) {
   top: 0;
   left: 0;
   right: 0;
-  background: $bg-primary;
+  background: $dark-bg-secondary;
   z-index: 100;
   padding-top: env(safe-area-inset-top);
+  border-bottom: 1rpx solid $dark-border;
 }
 
 .filter-scroll {
@@ -121,21 +122,28 @@ function setFilter(key: string) {
 
 .filter-list {
   display: inline-flex;
-  padding: $spacing-md;
-  gap: $spacing-lg;
+  padding: $spacing-sm $spacing-md;
+  gap: $spacing-sm;
 }
 
 .filter-item {
   display: flex;
   align-items: center;
-  font-size: $font-size-base;
-  color: $text-secondary;
+  font-size: $font-size-sm;
+  color: $dark-text-secondary;
   padding: $spacing-xs $spacing-md;
-  border-radius: $border-radius-md;
-  
+  border-radius: $border-radius-xl;
+  border: 1rpx solid transparent;
+  transition: all 0.15s;
+
   &.active {
-    background: $primary-color;
-    color: #fff;
+    background: rgba($neon-purple, 0.15);
+    color: $neon-purple;
+    border-color: rgba($neon-purple, 0.3);
+  }
+
+  &:active {
+    background: $dark-bg-card-hover;
   }
 }
 
@@ -157,7 +165,7 @@ function setFilter(key: string) {
   text-align: center;
   padding: $spacing-md;
   font-size: $font-size-sm;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .bottom-space {

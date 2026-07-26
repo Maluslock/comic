@@ -34,3 +34,10 @@ unpackage/
 server/tmp/
 server/bin/
 server/*.exe
+
+# Database
+data/grounding.db*
+
+# Screenshots
+*.png
+*.jpg

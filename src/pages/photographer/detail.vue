@@ -64,7 +64,7 @@
               <text class="service-duration">{{ service.duration }}分钟</text>
             </view>
             <view class="service-price">
-              <text class="price">¥{{ service.price }}</text>
+              <text class="price">{{ formatPrice(service.price) }}</text>
               <text class="btn">选择</text>
             </view>
           </view>
@@ -135,7 +135,7 @@ import ReviewCard from '@/components/ReviewCard.vue'
 import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser } from '@/api/index'
-import { mapPhotographerItem, mapWorkItem, mapReviewItem } from '@/utils/mappers'
+import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice } from '@/utils/mappers'
 import type { Photographer, Service } from '@/types'
 
 interface PhotographerDetailResponse {
@@ -151,7 +151,7 @@ interface PhotographerDetailResponse {
   certified?: boolean
   tags: string[]
   description: string
-  services: Array<{ id: number; name: string; price: number; description: string; duration: number }>
+  services: Array<{ id: number; name: string; price: number | null; description: string; duration: number }>
   works: Array<{ id: number; title: string; images: string[]; photographerName?: string }>
   reviews: Array<{ id: number; rating: number; content: string; userName: string; userAvatar?: string; createdAt: string }>
 }

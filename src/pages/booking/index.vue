@@ -51,8 +51,11 @@
 
     <view class="footer">
       <view class="total">
-        <text class="total-label">合计</text>
-        <text class="total-price">¥{{ selectedService?.price || 0 }}</text>
+        <view class="total-row">
+          <text class="total-label">合计</text>
+          <text class="total-price">{{ selectedService?.price === null ? '面议' : formatPrice(selectedService?.price) }}</text>
+        </view>
+        <text v-if="selectedService?.price === null" class="quote-hint">面议套餐：提交后等待摄影师报价</text>
       </view>
       <view 
         class="btn-primary" 
@@ -72,6 +75,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import ServiceCard from '@/components/ServiceCard.vue'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { formatPrice } from '@/utils/mappers'
 import type { Service } from '@/types'
 
 const ALL_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
@@ -333,6 +337,12 @@ async function submitBooking() {
 
 .total {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.total-row {
+  display: flex;
   align-items: baseline;
 }
 
@@ -346,6 +356,12 @@ async function submitBooking() {
   font-weight: 600;
   color: $neon-purple;
   margin-left: $spacing-xs;
+}
+
+.quote-hint {
+  font-size: $font-size-xs;
+  color: $neon-cyan;
+  margin-top: 4rpx;
 }
 
 .btn-primary {

@@ -111,13 +111,21 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 	if got := createBookingArg(t, db, 8); got != "fixed" {
 		t.Errorf("CreateBooking PriceMode = %v, want fixed", got)
 	}
+	name, ok := createBookingArg(t, db, 10).(*string)
+	if !ok || name == nil || *name != "基础套餐" {
+		t.Errorf("CreateBooking ServiceName = %v, want 基础套餐", createBookingArg(t, db, 10))
+	}
+	duration, ok := createBookingArg(t, db, 11).(*int32)
+	if !ok || duration == nil || *duration != 120 {
+		t.Errorf("CreateBooking ServiceDuration = %v, want 120", createBookingArg(t, db, 11))
+	}
 }
 
 func TestCreateBooking_ServiceMissingReturnsInvalidReference(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
-		fakeRow{err: errors.New("service not found")},
+		fakeRow{err: pgx.ErrNoRows},
 	}}
 	svc := NewBookingService(repository.New(db))
 
@@ -133,12 +141,51 @@ func TestCreateBooking_ServiceMissingReturnsInvalidReference(t *testing.T) {
 	}
 }
 
+func TestCreateBooking_TransientDBErrorNotMasked(t *testing.T) {
+	transient := errors.New("db connection reset")
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{err: transient},
+	}}
+	svc := NewBookingService(repository.New(db))
+
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2,
+		CoserID:        5,
+		ServiceID:      99,
+		Date:           "2026-10-23",
+		Time:           "10:00",
+	})
+	if !errors.Is(err, transient) {
+		t.Fatalf("transient DB error = %v, want %v", err, transient)
+	}
+	if errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("transient DB error must not be masked as ErrInvalidReference")
+	}
+}
+
+func TestCreateBooking_TemplateServiceRejected(t *testing.T) {
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{values: []any{(*int64)(nil)}}, // 无主平台模板套餐
+	}}
+	svc := NewBookingService(repository.New(db))
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 1, Date: "2026-10-24", Time: "10:00",
+	})
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("want ErrInvalidReference for a template (ownerless) service, got %v", err)
+	}
+}
+
 func TestCreateBooking_NegotiableService(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},                                // 拉黑检查
 		fakeRow{values: []any{int64(0)}},                                                   // 冲突
-		fakeRow{values: []any{(*int64)(nil)}},                                              // GetServicePhotographerID -> NULL(模板,跳过归属校验用)
-		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60)}}, // GetServiceById
+		fakeRow{values: []any{int64(2)}},                                                   // GetServicePhotographerID -> 摄影师 2（本人）
+		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60)}}, // GetServiceById -> price NULL
 		fakeRow{values: bookingScanValues(11, "pending")},                                  // CreateBooking
 		fakeRow{err: errors.New("no photographer profile")},
 	}}

@@ -136,6 +136,12 @@ func main() {
 		// Photographers
 		photographerSvc := service.NewPhotographerService(queries)
 		photographerH := handler.NewPhotographerHandler(photographerSvc, redisCache, bookingSvc)
+		svcH := handler.NewPhotographerServiceHandler(photographerSvc)
+		router.GET("/api/v1/photographers/services/mine", middleware.AuthRequired(userRepo), svcH.MyServices)
+		router.POST("/api/v1/photographers/services", middleware.AuthRequired(userRepo), svcH.Create)
+		router.PUT("/api/v1/photographers/services/:id", middleware.AuthRequired(userRepo), svcH.Update)
+		router.DELETE("/api/v1/photographers/services/:id", middleware.AuthRequired(userRepo), svcH.Delete)
+		router.GET("/api/v1/services/templates", svcH.Templates)
 		router.GET("/api/v1/photographers", middleware.AuthOptional(userRepo), photographerH.List)
 		router.GET("/api/v1/photographers/:id", photographerH.Detail)
 		router.GET("/api/v1/photographers/:id/timeslots", photographerH.TimeSlots)

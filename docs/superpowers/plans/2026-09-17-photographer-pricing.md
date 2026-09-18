@@ -438,11 +438,8 @@ Expected: 全部 PASS（若 `TestSetOrderStatus_*` 报 scan 数量不符，回�
   - `type ServiceUpsertRequest struct { Name string; Price *int32; Description string; Duration int32; IsActive bool; SortOrder int32 }`
   - 哨兵：`ErrServiceNotFound`、`ErrServiceForbidden`、`ErrInvalidPrice`
 
-- [ ] **Step 1: 写失败测试**
+- [ ] **Step 0: 先读实测校正（动手前必读）**
 
-在 `photographer_service_test.go` 追加：
-
-```go
 > ⚠️ **实测校正**（初稿写错，已按真实代码改）：
 > - 既有 fake 名是 **`fakeWorksStore`**（不是 `fakeWorkStore`），其 `GetPhotographerByUserID` 返回 **`profile` / `profileErr`** 字段
 > - `newWorkTestSvc(store)` = `&PhotographerService{works: store}`（`queries` 为 nil）→ 需要 `queries` 的测试**必须直接构造结构体**
@@ -822,8 +819,8 @@ func TestCreateBooking_NegotiableService(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := createBookingArg(t, db, 6); got != nil {
-		t.Errorf("negotiable TotalPrice = %v, want nil", got)
+	if got := createBookingArg(t, db, 6); got != int32(0) {
+		t.Errorf("negotiable TotalPrice = %v, want 0 (占位；展示靠 price_status)", got)
 	}
 }
 
@@ -865,13 +862,15 @@ Expected: FAIL（`GetServicePhotographerID` 未被调用 / TotalPrice 仍写 0�
 		return nil, ErrInvalidReference
 	}
 
-	var pricePtr *int32
+	var totalPrice int32
 	priceMode := "fixed"
 	priceStatus := "agreed"
 	var snapName *string
 	var snapDuration *int32
 	if svc, err := s.queries.GetServiceById(ctx, serviceID64); err == nil {
-		pricePtr = svc.Price
+		if svc.Price != nil {
+			totalPrice = *svc.Price
+		}
 		snapDuration = &svc.Duration
 		name := svc.Name
 		snapName = &name
@@ -892,7 +891,9 @@ Expected: FAIL（`GetServicePhotographerID` 未被调用 / TotalPrice 仍写 0�
 		ServiceName:     snapName,
 		ServiceDuration: snapDuration,
 ```
-（`TotalPrice` 改为 `pricePtr`）
+
+> ⚠️ **`TotalPrice` 保持 `int32`（非指针）**：实测 `bookings.total_price` 是 **NOT NULL**、Go 字段为值类型 `int32`，且 `createBooking` 的 INSERT 必带该列——写 NULL 会**插入即失败**。
+> 因此：固定价写真实价；**互勉/面议写 `0` 作占位**，显示层靠 `price_mode`/`price_status` 区分（Task 8 的 `renderOrderPrice`）；coser 接受报价时由 `acceptBookingQuote` 把 `total_price = quote_price` 落定。`CreateBookingParams.TotalPrice` **不改为指针**。
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -919,21 +920,45 @@ Expected: PASS
 
 - [ ] **Step 1: 写失败测试**
 
+> 分工说明：`Quote` 的正常路径与**摄影师越权**需要 mock `GetPhotographerByUserID`，而其返回类型含 `pgtype.Numeric`（`assignScan` 难伪造）。
+> 因此**单测只覆盖不依赖该查询的路径**，正常路径/越权由 **Task 9 的真库冒烟**覆盖（真 HTTP + 真数据，证据更强）。
+
 ```go
-func TestQuote_NotNegotiable(t *testing.T) {
-	// GetBookingByID 返回 price_mode=fixed → 应拒绝
+func TestQuote_InvalidPrice(t *testing.T) {
+	svc := NewBookingService(repository.New(&fakeDBTX{}))
+	if _, err := svc.Quote(context.Background(), 1, 100, 0); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 0, got %v", err)
+	}
+	if _, err := svc.Quote(context.Background(), 1, 100, 100000); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 100000, got %v", err)
+	}
 }
 
-func TestQuote_OK(t *testing.T) {
-	// 摄影师身份匹配 + price_status=awaiting_quote → RowsAffected=1 → 返回更新后的 item
+func TestRespondQuote_Forbidden(t *testing.T) {
+	// bookingScanValues 的 coser_id = 2；用外人 999 响应 → 403
+	svc := NewBookingService(repository.New(&fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(9, "pending")},
+	}}))
+	_, err := svc.RespondQuote(context.Background(), 9, 999, true)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want ErrForbidden, got %v", err)
+	}
 }
 
-func TestRespondQuote_Accept(t *testing.T) {
-	// coser + price_status=quoted + accept=true → status=confirmed, total_price=quote_price
+func TestRespondQuote_NotAllowed(t *testing.T) {
+	// 归属匹配但 UPDATE 命中 0 行（price_status 非 quoted）→ 409
+	svc := NewBookingService(repository.New(&fakeDBTX{
+		execRows: 0,
+		rows:     []pgx.Row{fakeRow{values: bookingScanValues(9, "pending")}},
+	}))
+	_, err := svc.RespondQuote(context.Background(), 9, 2, true)
+	if !errors.Is(err, ErrQuoteNotAllowed) {
+		t.Fatalf("want ErrQuoteNotAllowed, got %v", err)
+	}
 }
 ```
 
-（每个测试用 `fakeDBTX` 按真实调用顺序给行：`GetBookingByID` → `GetPhotographerByUserID`(摄影师时) → `QuoteBooking`/`RespondBookingQuote` → `GetBookingByID`）
+> `fakeDBTX` 需带 `execRows` 字段（Task 3 已加）。`bookingScanValues` 在 Task 2 Step 7 已扩到 16 字段。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -1306,7 +1331,7 @@ QB=$(curl -s -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_CO
   -d "{\"photographerId\":$PID,\"serviceId\":$SVC_ID,\"date\":\"2027-02-01\",\"time\":\"10:00\",\"remarks\":\"SMOKE-nego\"}")
 QBID=$(echo "$QB" | jq -r '.id // empty')
 expect_true "面议下单 price_status=awaiting_quote" "$(echo "$QB" | jq -r '.priceStatus')" "awaiting_quote"
-expect_true "面议下单 totalPrice=null" "$(echo "$QB" | jq -r '.totalPrice // "null"')" "null"
+expect_true "面议下单 totalPrice=0（占位）" "$(echo "$QB" | jq -r '.totalPrice')" "0"
 # 报价
 expect 200 "摄影师报价" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
   -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":888}'

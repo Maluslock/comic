@@ -47,12 +47,12 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		&i.TotalPrice,
 		&i.Remarks,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 		&i.PriceMode,
 		&i.QuotePrice,
 		&i.PriceStatus,
 		&i.ServiceName,
 		&i.ServiceDuration,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -84,12 +84,12 @@ func (q *Queries) GetBookingsByUser(ctx context.Context, coserID int32) ([]Booki
 			&i.TotalPrice,
 			&i.Remarks,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 			&i.PriceMode,
 			&i.QuotePrice,
 			&i.PriceStatus,
 			&i.ServiceName,
 			&i.ServiceDuration,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -109,7 +109,7 @@ FROM bookings WHERE id = $1
 func (q *Queries) GetBookingByID(ctx context.Context, id int64) (Booking, error) {
 	row := q.db.QueryRow(ctx, getBookingByID, id)
 	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt)
+	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration)
 	return i, err
 }
 
@@ -155,7 +155,7 @@ RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_p
 func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error) {
 	row := q.db.QueryRow(ctx, updateBookingStatus, id, status)
 	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt)
+	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration)
 	return i, err
 }
 
@@ -179,7 +179,7 @@ func (q *Queries) GetBookingsByUserWithDetails(ctx context.Context, coserID int3
 	var items []BookingWithDetails
 	for rows.Next() {
 		var i BookingWithDetails
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt, &i.PhotographerName, &i.PhotographerAvatar, &i.PhotographerUserID, &i.ServiceName, &i.ServicePrice); err != nil {
+		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.Booking.ServiceName, &i.ServiceDuration, &i.PhotographerName, &i.PhotographerAvatar, &i.PhotographerUserID, &i.ServiceName, &i.ServicePrice); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -212,7 +212,7 @@ func (q *Queries) GetBookingsByPhotographer(ctx context.Context, photographerID 
 	var items []BookingWithCoser
 	for rows.Next() {
 		var i BookingWithCoser
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt, &i.CoserName, &i.CoserAvatar, &i.CoserPhone); err != nil {
+		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.CoserName, &i.CoserAvatar, &i.CoserPhone); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

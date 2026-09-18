@@ -147,8 +147,8 @@ func bookingScanValues(id int64, status string) []any {
 		"14:00", status, int32(999),
 		(*string)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
-		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 	}
 }
 

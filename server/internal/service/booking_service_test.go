@@ -233,6 +233,39 @@ func TestCreateBooking_MutualService(t *testing.T) {
 	}
 }
 
+func TestQuote_InvalidPrice(t *testing.T) {
+	svc := NewBookingService(repository.New(&fakeDBTX{}))
+	if _, err := svc.Quote(context.Background(), 1, 100, 0); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 0, got %v", err)
+	}
+	if _, err := svc.Quote(context.Background(), 1, 100, 100000); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 100000, got %v", err)
+	}
+}
+
+func TestRespondQuote_Forbidden(t *testing.T) {
+	// bookingScanValues 的 coser_id = 2；用外人 999 响应 → 403
+	svc := NewBookingService(repository.New(&fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(9, "pending")},
+	}}))
+	_, err := svc.RespondQuote(context.Background(), 9, 999, true)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want ErrForbidden, got %v", err)
+	}
+}
+
+func TestRespondQuote_NotAllowed(t *testing.T) {
+	// 归属匹配但 UPDATE 命中 0 行（price_status 非 quoted）→ 409
+	svc := NewBookingService(repository.New(&fakeDBTX{
+		execRows: 0,
+		rows:     []pgx.Row{fakeRow{values: bookingScanValues(9, "pending")}},
+	}))
+	_, err := svc.RespondQuote(context.Background(), 9, 2, true)
+	if !errors.Is(err, ErrQuoteNotAllowed) {
+		t.Fatalf("want ErrQuoteNotAllowed, got %v", err)
+	}
+}
+
 func TestCreateBooking_ServiceNotOwnedByPhotographer(t *testing.T) {
 	other := int64(42)
 	db := &bookingRecorder{rows: []pgx.Row{

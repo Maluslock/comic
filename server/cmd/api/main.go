@@ -167,6 +167,8 @@ func main() {
 		bookingH := handler.NewBookingHandler(bookingSvc)
 		router.POST("/api/v1/bookings", middleware.AuthRequired(userRepo), bookingH.Create)
 		router.PUT("/api/v1/bookings/:id/status", middleware.AuthRequired(userRepo), bookingH.UpdateStatus)
+	router.POST("/api/v1/bookings/:id/quote", middleware.AuthRequired(userRepo), bookingH.Quote)
+	router.POST("/api/v1/bookings/:id/quote/respond", middleware.AuthRequired(userRepo), bookingH.RespondQuote)
 		router.GET("/api/v1/bookings/:userId", middleware.AuthRequired(userRepo), bookingH.ListByUser)
 		router.GET("/api/v1/bookings/photographer/:photographerId", middleware.AuthRequired(userRepo), bookingH.ListByPhotographer)
 

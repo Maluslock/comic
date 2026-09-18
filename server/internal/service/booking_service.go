@@ -30,6 +30,7 @@ type BookingItem struct {
 	Status             string `json:"status"`
 	TotalPrice         int32  `json:"totalPrice"`
 	PriceMode          string `json:"priceMode"`
+	QuotePrice         *int32 `json:"quotePrice"`
 	PriceStatus        string `json:"priceStatus"`
 	Remarks            string `json:"remarks"`
 	CreatedAt          string `json:"createdAt"`
@@ -59,6 +60,7 @@ var (
 	ErrInvalidTransition = errors.New("invalid status transition")
 	ErrBookingNotFound   = errors.New("booking not found")
 	ErrForbidden         = errors.New("forbidden")
+	ErrQuoteNotAllowed   = errors.New("quote not allowed in current state")
 )
 
 func canTransition(from, to string) bool {
@@ -83,6 +85,7 @@ func bookingToItem(b repository.Booking) *BookingItem {
 		Status:         b.Status,
 		TotalPrice:     b.TotalPrice,
 		PriceMode:      b.PriceMode,
+		QuotePrice:     b.QuotePrice,
 		PriceStatus:    b.PriceStatus,
 		Remarks:        derefString(b.Remarks),
 		CreatedAt:      b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -322,6 +325,66 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 	case "completed":
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
 		s.notifyPhotographer(ctx, b.PhotographerID, "success", "拍摄已完成", "该预约已标记完成。", b.ID)
+	}
+	return bookingToItem(updated), nil
+}
+
+// Quote records a single-round price offer from the booking's own photographer.
+// Allowed only while price_mode='negotiable' AND price_status='awaiting_quote';
+// the state guard lives in SQL and reports RowsAffected==0 for anything else.
+func (s *BookingService) Quote(ctx context.Context, bookingID int64, actorUserID int64, price int32) (*BookingItem, error) {
+	if price <= 0 || price > 99999 {
+		return nil, ErrInvalidPrice
+	}
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+		return nil, ErrForbidden
+	}
+	n, err := s.queries.QuoteBooking(ctx, bookingID, price, b.PhotographerID)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrQuoteNotAllowed
+	}
+	updated, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	return bookingToItem(updated), nil
+}
+
+// RespondQuote lets the booking's own coser accept or reject a pending quote.
+// Accept sets total_price=quote_price, price_status='agreed', status='confirmed';
+// reject sets price_status='rejected', status='cancelled' (both atomically in SQL).
+func (s *BookingService) RespondQuote(ctx context.Context, bookingID int64, actorUserID int64, accept bool) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if int64(b.CoserID) != actorUserID {
+		return nil, ErrForbidden
+	}
+	n, err := s.queries.RespondBookingQuote(ctx, bookingID, b.CoserID, accept)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrQuoteNotAllowed
+	}
+	updated, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
 	}
 	return bookingToItem(updated), nil
 }

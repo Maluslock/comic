@@ -6,10 +6,12 @@ import (
 	"context"
 )
 
+// getServices returns platform templates (photographer_id IS NULL) only, not per-photographer services.
 const getServices = `-- name: GetServices :many
 SELECT id, name, price, description, duration
 FROM services
-ORDER BY price ASC
+WHERE photographer_id IS NULL
+ORDER BY sort_order ASC, id ASC
 `
 
 func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {

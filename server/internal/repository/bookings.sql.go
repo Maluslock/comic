@@ -8,20 +8,24 @@ import (
 )
 
 const createBooking = `-- name: CreateBooking :one
-INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks, price_mode, price_status, service_name, service_duration)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
 `
 
 type CreateBookingParams struct {
-	PhotographerID int32     `json:"photographer_id"`
-	CoserID        int32     `json:"coser_id"`
-	ServiceID      int32     `json:"service_id"`
-	Date           time.Time `json:"date"`
-	Time           string    `json:"time"`
-	Status         string    `json:"status"`
-	TotalPrice     int32     `json:"total_price"`
-	Remarks        *string   `json:"remarks"`
+	PhotographerID  int32     `json:"photographer_id"`
+	CoserID         int32     `json:"coser_id"`
+	ServiceID       int32     `json:"service_id"`
+	Date            time.Time `json:"date"`
+	Time            string    `json:"time"`
+	Status          string    `json:"status"`
+	TotalPrice      int32     `json:"total_price"`
+	Remarks         *string   `json:"remarks"`
+	PriceMode       string    `json:"price_mode"`
+	PriceStatus     string    `json:"price_status"`
+	ServiceName     *string   `json:"service_name"`
+	ServiceDuration *int32    `json:"service_duration"`
 }
 
 func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error) {
@@ -34,6 +38,10 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		arg.Status,
 		arg.TotalPrice,
 		arg.Remarks,
+		arg.PriceMode,
+		arg.PriceStatus,
+		arg.ServiceName,
+		arg.ServiceDuration,
 	)
 	var i Booking
 	err := row.Scan(

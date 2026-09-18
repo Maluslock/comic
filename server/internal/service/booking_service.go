@@ -29,6 +29,8 @@ type BookingItem struct {
 	Time               string `json:"time"`
 	Status             string `json:"status"`
 	TotalPrice         int32  `json:"totalPrice"`
+	PriceMode          string `json:"priceMode"`
+	PriceStatus        string `json:"priceStatus"`
 	Remarks            string `json:"remarks"`
 	CreatedAt          string `json:"createdAt"`
 	PhotographerName   string `json:"photographerName"`
@@ -80,6 +82,8 @@ func bookingToItem(b repository.Booking) *BookingItem {
 		Time:           b.Time,
 		Status:         b.Status,
 		TotalPrice:     b.TotalPrice,
+		PriceMode:      b.PriceMode,
+		PriceStatus:    b.PriceStatus,
 		Remarks:        derefString(b.Remarks),
 		CreatedAt:      b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -136,21 +140,52 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		remarks = &req.Remarks
 	}
 
-	// 下单时按所选服务的真实价格写入订单金额；服务不存在时回退 0（不阻塞下单）。
+	// 套餐归属校验：所选套餐必须属于被预约的摄影师；套餐不存在同样视为无效引用。
+	serviceID64 := int64(req.ServiceID)
+	ownerID, err := s.queries.GetServicePhotographerID(ctx, serviceID64)
+	if err != nil {
+		return nil, ErrInvalidReference
+	}
+	if ownerID != nil && int64(req.PhotographerID) != *ownerID {
+		return nil, ErrInvalidReference
+	}
+
+	// 按套餐价格推导定价模式，并冻结名称/时长快照。
+	// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
+	// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
 	var totalPrice int32
-	if svc, err := s.queries.GetServiceById(ctx, int64(req.ServiceID)); err == nil && svc.Price != nil {
-		totalPrice = *svc.Price
+	priceMode := "fixed"
+	priceStatus := "agreed"
+	var snapName *string
+	var snapDuration *int32
+	if svc, err := s.queries.GetServiceById(ctx, serviceID64); err == nil {
+		if svc.Price != nil {
+			totalPrice = *svc.Price
+		}
+		snapDuration = &svc.Duration
+		name := svc.Name
+		snapName = &name
+		switch {
+		case svc.Price == nil:
+			priceMode, priceStatus = "negotiable", "awaiting_quote"
+		case *svc.Price == 0:
+			priceMode = "mutual"
+		}
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{
-		PhotographerID: req.PhotographerID,
-		CoserID:        req.CoserID,
-		ServiceID:      req.ServiceID,
-		Date:           date,
-		Time:           req.Time,
-		Status:         "pending",
-		TotalPrice:     totalPrice,
-		Remarks:        remarks,
+		PhotographerID:  req.PhotographerID,
+		CoserID:         req.CoserID,
+		ServiceID:       req.ServiceID,
+		Date:            date,
+		Time:            req.Time,
+		Status:          "pending",
+		TotalPrice:      totalPrice,
+		Remarks:         remarks,
+		PriceMode:       priceMode,
+		PriceStatus:     priceStatus,
+		ServiceName:     snapName,
+		ServiceDuration: snapDuration,
 	})
 	if err != nil {
 		if isForeignKeyViolation(err) {

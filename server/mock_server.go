@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var mockEvents = []map[string]interface{}{
@@ -17,10 +18,10 @@ var mockEvents = []map[string]interface{}{
 }
 
 var mockPhotographers = []map[string]interface{}{
-	{"id": 1, "name": "光影行者", "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=photographer1&backgroundColor=b6e3f4", "location": "北京", "rating": 4.9, "reviewCount": 234, "orderCount": 567, "tags": []string{"日系", "古风", "科幻"}},
-	{"id": 2, "name": "樱花落", "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=photographer2&backgroundColor=ffd5dc", "location": "上海", "rating": 4.8, "reviewCount": 186, "orderCount": 423, "tags": []string{"日系", "清新", "少女"}},
-	{"id": 3, "name": "暗夜骑士", "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=photographer3&backgroundColor=c0aede", "location": "广州", "rating": 4.7, "reviewCount": 156, "orderCount": 312, "tags": []string{"暗黑", "赛博朋克", "哥特"}},
-	{"id": 4, "name": "古风公子", "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=photographer4&backgroundColor=d1d4f9", "location": "杭州", "rating": 4.9, "reviewCount": 298, "orderCount": 678, "tags": []string{"古风", "汉服", "仙侠"}},
+	{"id": 1, "name": "光影行者", "avatar": "https://picsum.photos/seed?seed=photographer1&backgroundColor=b6e3f4", "location": "北京", "rating": 4.9, "reviewCount": 234, "orderCount": 567, "tags": []string{"日系", "古风", "科幻"}},
+	{"id": 2, "name": "樱花落", "avatar": "https://picsum.photos/seed?seed=photographer2&backgroundColor=ffd5dc", "location": "上海", "rating": 4.8, "reviewCount": 186, "orderCount": 423, "tags": []string{"日系", "清新", "少女"}},
+	{"id": 3, "name": "暗夜骑士", "avatar": "https://picsum.photos/seed?seed=photographer3&backgroundColor=c0aede", "location": "广州", "rating": 4.7, "reviewCount": 156, "orderCount": 312, "tags": []string{"暗黑", "赛博朋克", "哥特"}},
+	{"id": 4, "name": "古风公子", "avatar": "https://picsum.photos/seed?seed=photographer4&backgroundColor=d1d4f9", "location": "杭州", "rating": 4.9, "reviewCount": 298, "orderCount": 678, "tags": []string{"古风", "汉服", "仙侠"}},
 }
 
 var mockWorks = []map[string]interface{}{
@@ -29,6 +30,11 @@ var mockWorks = []map[string]interface{}{
 	{"id": 3, "title": "魔卡少女樱", "images": []string{"https://picsum.photos/seed/coswork4/600/450"}, "photographerName": "樱花落"},
 	{"id": 4, "title": "古风仙侠", "images": []string{"https://picsum.photos/seed/coswork5/600/450"}, "photographerName": "古风公子"},
 }
+
+var followsStore = struct {
+	mu   sync.RWMutex
+	data map[string]map[string]bool
+}{data: make(map[string]map[string]bool)}
 
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +73,48 @@ func main() {
 			},
 			"recommendedPhotographers": mockPhotographers,
 			"featuredWorks":            mockWorks,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		status := r.URL.Query().Get("status")
+		pageStr := r.URL.Query().Get("page")
+		sizeStr := r.URL.Query().Get("size")
+
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
+		}
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil || size < 1 {
+			size = 10
+		}
+
+		list := []map[string]interface{}{}
+		for _, e := range mockEvents {
+			if status == "" || e["status"] == status {
+				list = append(list, e)
+			}
+		}
+		total := len(list)
+
+		start := (page - 1) * size
+		if start < 0 {
+			start = 0
+		}
+		if start > total {
+			start = total
+		}
+		end := start + size
+		if end > total {
+			end = total
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"list":  list[start:end],
+			"total": total,
 		})
 	})
 
@@ -117,6 +165,67 @@ func main() {
 			"photographers": mockPhotographers,
 			"featuredWorks": mockWorks,
 		})
+	})
+
+	mux.HandleFunc("/api/v1/follows", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			UserID  string `json:"userId"`
+			EventID string `json:"eventId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid body"})
+			return
+		}
+		followsStore.mu.Lock()
+		if followsStore.data[payload.UserID] == nil {
+			followsStore.data[payload.UserID] = make(map[string]bool)
+		}
+		followsStore.data[payload.UserID][payload.EventID] = true
+		followsStore.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	mux.HandleFunc("/api/v1/follows/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/follows/"), "/")
+		if len(parts) < 1 || parts[0] == "" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
+			return
+		}
+		userID := parts[0]
+		if r.Method == "GET" {
+			followsStore.mu.RLock()
+			ids := []string{}
+			for id := range followsStore.data[userID] {
+				ids = append(ids, id)
+			}
+			followsStore.mu.RUnlock()
+			json.NewEncoder(w).Encode(ids)
+			return
+		}
+		if r.Method == "DELETE" {
+			if len(parts) != 2 {
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
+				return
+			}
+			eventID := parts[1]
+			followsStore.mu.Lock()
+			if followsStore.data[userID] != nil {
+				delete(followsStore.data[userID], eventID)
+			}
+			followsStore.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	})
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

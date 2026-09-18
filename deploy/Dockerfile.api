@@ -1,0 +1,11 @@
+FROM alpine:latest
+
+WORKDIR /app
+
+COPY server/build/comic-api ./comic-api
+COPY server/static ./static
+
+ENV TZ=Asia/Shanghai
+EXPOSE 8080
+
+ENTRYPOINT ["./comic-api"]

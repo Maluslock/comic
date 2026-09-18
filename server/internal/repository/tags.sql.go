@@ -32,3 +32,35 @@ func (q *Queries) GetHotTags(ctx context.Context, limit int32) ([]Tag, error) {
 	}
 	return items, nil
 }
+
+type TagRow struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	UsageCount *int32 `json:"usage_count"`
+}
+
+const getAllTags = `-- name: GetAllTags :many
+SELECT id, name, usage_count
+FROM tags
+ORDER BY name ASC
+`
+
+func (q *Queries) GetAllTags(ctx context.Context) ([]TagRow, error) {
+	rows, err := q.db.Query(ctx, getAllTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TagRow
+	for rows.Next() {
+		var i TagRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.UsageCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -1,0 +1,443 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"math"
+
+	"github.com/Maluslock/comic/server/internal/repository"
+	"github.com/jackc/pgx/v5"
+)
+
+type PhotographerListResponse struct {
+	List     []PhotographerItem `json:"list"`
+	Total    int                `json:"total"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"pageSize"`
+}
+
+type PhotographerDetail struct {
+	PhotographerItem
+	Description string        `json:"description"`
+	Services    []ServiceItem `json:"services"`
+	Works       []WorkItem    `json:"works"`
+	Reviews     []ReviewItem  `json:"reviews"`
+}
+
+type ServiceItem struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Price       int32  `json:"price"`
+	Description string `json:"description"`
+	Duration    int32  `json:"duration"`
+}
+
+type ReviewItem struct {
+	ID               int64    `json:"id"`
+	PhotographerID   int32    `json:"photographerId"`
+	PhotographerName string   `json:"photographerName,omitempty"`
+	UserID           int32    `json:"userId"`
+	UserName         string   `json:"userName"`
+	UserAvatar       string   `json:"userAvatar"`
+	Rating           int32    `json:"rating"`
+	Content          string   `json:"content"`
+	Images           []string `json:"images"`
+	CreatedAt        string   `json:"createdAt"`
+}
+
+type PhotographerService struct {
+	queries *repository.Queries
+	works   worksStore
+}
+
+// worksStore is the works-relevant subset of *repository.Queries; the
+// PhotographerService falls back to queries when works is nil. Tests inject
+// fakes through this seam without a database.
+type worksStore interface {
+	GetPhotographerByUserID(ctx context.Context, userID int64) (repository.PhotographerWithTags, error)
+	UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error
+	InsertWork(ctx context.Context, photographerID int64, title string, images []string, description string) (int64, error)
+	GetWorksByPhotographer(ctx context.Context, photographerID int32) ([]repository.Work, error)
+	GetAllWorksByPhotographer(ctx context.Context, photographerID int32) ([]repository.Work, error)
+	GetWorkPhotographerID(ctx context.Context, id int64) (int32, error)
+	DeleteWorkByID(ctx context.Context, id int64) error
+	DeleteWorkByIDAndPhotographer(ctx context.Context, id, photographerID int64) error
+	UpdateWorkByIDAndPhotographer(ctx context.Context, id, photographerID int64, title string, images []string, description string) error
+}
+
+func (s *PhotographerService) workStore() worksStore {
+	if s.works != nil {
+		return s.works
+	}
+	return s.queries
+}
+
+func NewPhotographerService(queries *repository.Queries) *PhotographerService {
+	return &PhotographerService{queries: queries}
+}
+
+var (
+	ErrAlreadyActivated = errors.New("photographer already activated")
+	ErrWorkNotFound     = errors.New("work not found")
+	ErrWorkForbidden    = errors.New("work belongs to another photographer")
+	ErrInvalidMode      = errors.New("invalid mode")
+	ErrProfileNotFound  = errors.New("photographer profile not found")
+)
+
+// ProfileUpdate is the self-service profile edit payload.
+type ProfileUpdate struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Location    string  `json:"location"`
+	Mode        string  `json:"mode"`
+	MutualIntro *string `json:"mutualIntro"`
+	Avatar      string  `json:"avatar"`
+}
+
+func (s *PhotographerService) Activate(ctx context.Context, userID int64, name string, mode string, intro string) (int64, error) {
+	existing, err := s.queries.GetPhotographerByUserID(ctx, userID)
+	if err == nil {
+		return int64(existing.ID), nil // idempotent
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+	var desc *string
+	if name != "" {
+		desc = &name
+	}
+	var introPtr *string
+	if intro != "" {
+		introPtr = &intro
+	}
+	p, err := s.queries.InsertPhotographer(ctx, repository.InsertPhotographerParams{
+		Name: name, Description: desc, Mode: mode, MutualIntro: introPtr, UserID: &userID,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return int64(p.ID), nil
+}
+
+func photographerItemFromRow(p repository.PhotographerWithTags) *PhotographerItem {
+	tags := p.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return &PhotographerItem{
+		ID:          int64(p.ID),
+		Name:        p.Name,
+		Avatar:      derefString(p.Avatar),
+		Location:    derefString(p.Location),
+		Description: derefString(p.Description),
+		Rating:      math.Round(numericToFloat64(p.Rating)*10) / 10,
+		ReviewCount: derefInt32(p.ReviewCount),
+		OrderCount:  derefInt32(p.OrderCount),
+		UserID:      derefInt64(p.UserID),
+		Mode:        p.Mode,
+		MutualIntro: derefString(p.MutualIntro),
+		Certified:   p.Certified,
+		Tags:        tags,
+	}
+}
+
+func (s *PhotographerService) GetByUser(ctx context.Context, userID int64) (*PhotographerItem, error) {
+	p, err := s.queries.GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return photographerItemFromRow(p), nil
+}
+
+// MyProfile returns the caller's own photographer profile; non-photographers get ErrNotPhotographer.
+func (s *PhotographerService) MyProfile(ctx context.Context, userID int64) (*PhotographerItem, error) {
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotPhotographer
+		}
+		return nil, err
+	}
+	return photographerItemFromRow(p), nil
+}
+
+func (s *PhotographerService) UpdateProfile(ctx context.Context, userID int64, req ProfileUpdate) error {
+	store := s.workStore()
+	profile, err := store.GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotPhotographer
+		}
+		return err
+	}
+	if req.Mode != "free" && req.Mode != "pay" && req.Mode != "both" {
+		return ErrInvalidMode
+	}
+	avatar := req.Avatar
+	if avatar == "" {
+		avatar = derefString(profile.Avatar)
+	}
+	if err := store.UpdatePhotographerProfile(ctx, int64(profile.ID), req.Name, req.Description, req.Location, req.Mode, req.MutualIntro, avatar); err != nil {
+		if errors.Is(err, repository.ErrProfileNotFound) {
+			return ErrProfileNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *PhotographerService) HiddenUserIDs(ctx context.Context, userID int64) ([]int64, error) {
+	return s.queries.ListHiddenUserIDs(ctx, userID)
+}
+
+func (s *PhotographerService) List(ctx context.Context, keyword, location, tag string, page, size int, excludeUserIDs []int64) (*PhotographerListResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 50 {
+		size = 10
+	}
+	offset := (page - 1) * size
+
+	var kw, loc, tg *string
+	if keyword != "" {
+		kw = &keyword
+	}
+	if location != "" {
+		loc = &location
+	}
+	if tag != "" {
+		tg = &tag
+	}
+	if excludeUserIDs == nil {
+		excludeUserIDs = []int64{}
+	}
+
+	// For search, fetch extra to estimate total (if fewer than limit returned, total is known)
+	photographers, err := s.queries.SearchPhotographers(ctx, repository.SearchPhotographersParams{
+		Keyword:        kw,
+		Location:       loc,
+		TagName:        tg,
+		Limit:          int32(size + 1),
+		Offset:         int32(offset),
+		ExcludeUserIDs: excludeUserIDs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	hasMore := len(photographers) > size
+	if hasMore {
+		photographers = photographers[:size]
+	}
+
+	items := mapPhotographers(photographers)
+
+	total := offset + len(photographers)
+	if hasMore {
+		total = offset + size + 1
+	}
+
+	return &PhotographerListResponse{
+		List:     items,
+		Total:    total,
+		Page:     page,
+		PageSize: size,
+	}, nil
+}
+
+func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*PhotographerDetail, error) {
+	p, err := s.queries.GetPhotographerById(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	services, err := s.queries.GetServices(ctx)
+	if err != nil {
+		services = []repository.Service{}
+	}
+
+	works, err := s.queries.GetWorksByPhotographer(ctx, id)
+	if err != nil {
+		works = []repository.Work{}
+	}
+
+	reviews, err := s.queries.GetReviewsByPhotographer(ctx, id)
+	if err != nil {
+		reviews = []repository.Review{}
+	}
+
+	tags := p.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	rating := numericToFloat64(p.Rating)
+
+	return &PhotographerDetail{
+		PhotographerItem: PhotographerItem{
+			ID:          int64(p.ID),
+			Name:        p.Name,
+			Avatar:      derefString(p.Avatar),
+			Location:    derefString(p.Location),
+			Rating:      math.Round(rating*10) / 10,
+			ReviewCount: derefInt32(p.ReviewCount),
+			OrderCount:  derefInt32(p.OrderCount),
+			UserID:      derefInt64(p.UserID),
+			Mode:        p.Mode,
+			MutualIntro: derefString(p.MutualIntro),
+			Certified:   p.Certified,
+			Tags:        tags,
+		},
+		Description: derefString(p.Description),
+		Services:    mapServiceItems(services),
+		Works:       mapWorkItems(works),
+		Reviews:     mapReviewItems(reviews),
+	}, nil
+}
+
+func mapServiceItems(services []repository.Service) []ServiceItem {
+	items := make([]ServiceItem, 0, len(services))
+	for _, s := range services {
+		items = append(items, ServiceItem{
+			ID:          s.ID,
+			Name:        s.Name,
+			Price:       s.Price,
+			Description: derefString(s.Description),
+			Duration:    s.Duration,
+		})
+	}
+	return items
+}
+
+func mapWorkItems(works []repository.Work) []WorkItem {
+	items := make([]WorkItem, 0, len(works))
+	for _, w := range works {
+		images := w.Images
+		if images == nil {
+			images = []string{}
+		}
+		items = append(items, WorkItem{
+			ID:               w.ID,
+			Title:            w.Title,
+			Images:           images,
+			PhotographerName: "",
+			Description:      derefString(w.Description),
+			Status:           w.Status,
+			CreatedAt:        w.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	return items
+}
+
+func mapReviewItems(reviews []repository.Review) []ReviewItem {
+	items := make([]ReviewItem, 0, len(reviews))
+	for _, r := range reviews {
+		images := r.Images
+		if images == nil {
+			images = []string{}
+		}
+		items = append(items, ReviewItem{
+			ID:               r.ID,
+			PhotographerID:   r.PhotographerID,
+			PhotographerName: r.PhotographerName,
+			UserID:           r.UserID,
+			UserName:       derefString(r.UserName),
+			UserAvatar:     derefString(r.UserAvatar),
+			Rating:         r.Rating,
+			Content:        derefString(r.Content),
+			Images:         images,
+			CreatedAt:      r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	return items
+}
+
+func (s *PhotographerService) CreateWork(ctx context.Context, userID int64, title string, images []string, description string) (int64, error) {
+	profile, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrNotPhotographer
+		}
+		return 0, err
+	}
+	return s.workStore().InsertWork(ctx, int64(profile.ID), title, images, description)
+}
+
+func (s *PhotographerService) UpdateWork(ctx context.Context, userID, workID int64, title string, images []string, description string) error {
+	profile, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotPhotographer
+		}
+		return err
+	}
+
+	err = s.workStore().UpdateWorkByIDAndPhotographer(ctx, workID, int64(profile.ID), title, images, description)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, repository.ErrWorkNotFound) {
+		return err
+	}
+
+	ownerID, ownerErr := s.workStore().GetWorkPhotographerID(ctx, workID)
+	if ownerErr != nil {
+		if errors.Is(ownerErr, pgx.ErrNoRows) {
+			return ErrWorkNotFound
+		}
+		return ownerErr
+	}
+	if int64(ownerID) != int64(profile.ID) {
+		return ErrWorkForbidden
+	}
+	return ErrWorkNotFound
+}
+
+func (s *PhotographerService) MyWorks(ctx context.Context, userID int64) ([]WorkItem, error) {
+	profile, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotPhotographer
+		}
+		return nil, err
+	}
+	// Own management list is unfiltered so downed works stay visible/recoverable.
+	works, err := s.workStore().GetAllWorksByPhotographer(ctx, profile.ID)
+	if err != nil {
+		return nil, err
+	}
+	return mapWorkItems(works), nil
+}
+
+func (s *PhotographerService) DeleteWork(ctx context.Context, userID, workID int64) error {
+	profile, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotPhotographer
+		}
+		return err
+	}
+	ownerID, err := s.workStore().GetWorkPhotographerID(ctx, workID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrWorkNotFound
+		}
+		return err
+	}
+	if int64(ownerID) != int64(profile.ID) {
+		return ErrWorkForbidden
+	}
+	if err := s.workStore().DeleteWorkByIDAndPhotographer(ctx, workID, int64(profile.ID)); err != nil {
+		if errors.Is(err, repository.ErrWorkNotFound) {
+			return ErrWorkNotFound
+		}
+		return err
+	}
+	return nil
+}

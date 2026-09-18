@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Photographer, Work, ComicEvent, HomeResponse } from '@/types'
 import { getHomeData } from '@/api/index'
+import { apiGet } from '@/api/client'
+import { mapBannerItem, mapEventItem, mapPhotographerItem, mapWorkItem } from '@/utils/mappers'
 
 export const useHomeStore = defineStore('home', () => {
   // --- State ---
@@ -9,7 +11,7 @@ export const useHomeStore = defineStore('home', () => {
   const refreshing = ref(false)
   const loaded = ref(false)
 
-  const banners = ref<{ id: number; image: string; title: string }[]>([])
+  const banners = ref<{ id: number; image: string; title: string; linkId?: number | null }[]>([])
   const events = ref<ComicEvent[]>([])
   const hotTags = ref<string[]>([])
   const photographers = ref<Photographer[]>([])
@@ -18,17 +20,32 @@ export const useHomeStore = defineStore('home', () => {
   const error = ref<string | null>(null)
 
   // --- Computed ---
-  /** B3: Sort by startDate ascending before slicing to guarantee 6 earliest events */
+  /** Dedupe by calendar day so 6 cards cover 6 distinct dates — same-day
+   *  events (nyato lists many per day) would otherwise fill all 6 slots. */
   const upcomingEvents = computed(() =>
     events.value
-      .filter(e => e.status === 'upcoming')
+      .filter(e => e.status === 'upcoming' && e.startDate > Date.now())
       .sort((a, b) => a.startDate - b.startDate)
+      .reduce<ComicEvent[]>((acc, e) => {
+        const day = new Date(e.startDate).toDateString()
+        if (!acc.some(x => new Date(x.startDate).toDateString() === day)) {
+          acc.push(e)
+        }
+        return acc
+      }, [])
       .slice(0, 6)
   )
 
   const ongoingEvents = computed(() =>
     events.value.filter(e => e.status === 'ongoing')
   )
+
+  /** Derived from event locations — always starts with '全部' */
+  const cityOptions = computed(() => {
+    const cities = new Set<string>(['全部'])
+    events.value.forEach(e => { if (e.location) cities.add(e.location) })
+    return Array.from(cities)
+  })
 
   // --- Actions ---
   async function fetchHomeData() {
@@ -37,23 +54,10 @@ export const useHomeStore = defineStore('home', () => {
     loaded.value = false
     error.value = null
 
-    const BASE_URL = 'http://localhost:8081'
-
     let data: HomeResponse
 
     try {
-      const res = await uni.request({
-        url: `${BASE_URL}/api/v1/home`,
-        method: 'GET',
-        timeout: 3000,
-      })
-
-      // B2: Check HTTP status before casting — uni.request does not throw on 4xx/5xx
-      if (res.statusCode === 200) {
-        data = res.data as HomeResponse
-      } else {
-        throw new Error(`Home API returned HTTP ${res.statusCode}`)
-      }
+      data = await apiGet<HomeResponse>('/v1/home')
     } catch (e) {
       // Fallback to mock data during development
       console.log('[HomeStore] Backend unavailable, using mock data')
@@ -71,57 +75,11 @@ export const useHomeStore = defineStore('home', () => {
 
     try {
       // Map banners
-      banners.value = (data.banners || []).map(b => ({
-        id: b.id,
-        image: b.imageUrl,
-        title: b.title,
-      }))
-
-      // Map events
-      events.value = (data.upcomingEvents || []).map(e => ({
-        id: String(e.id),
-        name: e.name,
-        location: e.location,
-        venue: e.venue,
-        startDate: new Date(e.startDate).getTime(),
-        endDate: new Date(e.endDate).getTime(),
-        cover: e.coverUrl,
-        tags: e.tags || [],
-        photographerCount: 0,
-        status: (e.status as ComicEvent['status']) || 'upcoming',
-      }))
-
-      // Map hot tags
+      banners.value = (data.banners || []).map(mapBannerItem)
+      events.value = (data.upcomingEvents || []).map(mapEventItem)
       hotTags.value = (data.hotTags || []).map(t => t.name).slice(0, 10)
-
-      // Map photographers
-      photographers.value = (data.recommendedPhotographers || []).map(p => ({
-        id: String(p.id),
-        name: p.name,
-        avatar: p.avatar || '',
-        role: 'photographer' as const,
-        description: '',
-        rating: p.rating,
-        reviewCount: p.reviewCount,
-        orderCount: p.orderCount,
-        location: p.location || '',
-        tags: p.tags || [],
-        works: [],
-        services: [],
-        reviews: [],
-        createdAt: Date.now(),
-      }))
-
-      // Map featured works
-      featuredWorks.value = (data.featuredWorks || []).map(w => ({
-        id: String(w.id),
-        photographerId: '',
-        title: w.title,
-        images: w.images || [],
-        description: '',
-        tags: [],
-        createdAt: Date.now(),
-      }))
+      photographers.value = (data.recommendedPhotographers || []).map(mapPhotographerItem)
+      featuredWorks.value = (data.featuredWorks || []).map(mapWorkItem)
 
       loaded.value = true
     } catch (e: unknown) {
@@ -164,6 +122,7 @@ export const useHomeStore = defineStore('home', () => {
     // computed
     upcomingEvents,
     ongoingEvents,
+    cityOptions,
     // actions
     fetchHomeData,
     refresh,

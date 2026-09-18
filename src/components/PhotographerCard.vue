@@ -79,6 +79,7 @@ function goDetail() {
 }
 
 .name {
+  display: block;
   font-size: $font-size-md;
   font-weight: 600;
   color: $dark-text-primary;

@@ -29,7 +29,7 @@
       </view>
 
       <view v-if="works.length === 0" class="empty">
-        <text class="empty-icon">📷</text>
+        <text class="empty-icon">◆</text>
         <text class="empty-text">暂无作品</text>
       </view>
     </view>
@@ -38,7 +38,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getWorks } from '@/api/index'
+import { apiGet } from '@/api/client'
+import { mapWorkItem } from '@/utils/mappers'
 import type { Work } from '@/types'
 
 const works = ref<Work[]>([])
@@ -50,7 +51,18 @@ onMounted(() => {
 async function loadData() {
   uni.showLoading({ title: '加载中...' })
   try {
-    works.value = await getWorks()
+    // 作品来自摄影师详情（首页推荐摄影师作品聚合展示）
+    const pages = getCurrentPages()
+    const currentPage = pages[pages.length - 1] as any
+    const pid = currentPage?.options?.photographerId as string | undefined
+    if (pid) {
+      const res = await apiGet<any>(`/v1/photographers/${pid}`)
+      works.value = (res.works || []).map(mapWorkItem)
+    } else {
+      // 无 pid：取首页推荐摄影师的作品聚合
+      const home = await apiGet<any>('/v1/home')
+      works.value = (home.featuredWorks || []).map(mapWorkItem)
+    }
   } finally {
     uni.hideLoading()
   }
@@ -68,7 +80,7 @@ function previewImage(index: number) {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
 }
 
 .gallery {
@@ -83,13 +95,28 @@ function previewImage(index: number) {
 }
 
 .gallery-title {
+  position: relative;
   font-size: $font-size-xl;
   font-weight: 600;
+  color: $dark-text-primary;
+  padding-left: 20rpx;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .gallery-count {
   font-size: $font-size-sm;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .gallery-grid {
@@ -100,9 +127,19 @@ function previewImage(index: number) {
 
 .gallery-item {
   position: relative;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.25);
   overflow: hidden;
-  
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.97);
+    border-color: $neon-purple-glow;
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
+
   &.full-width {
     grid-column: span 2;
   }
@@ -156,11 +193,12 @@ function previewImage(index: number) {
 
 .empty-icon {
   font-size: 80rpx;
+  color: $neon-purple;
   margin-bottom: $spacing-md;
 }
 
 .empty-text {
   font-size: $font-size-base;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 </style>

@@ -46,7 +46,7 @@ func TestHomeHandler_GetHome_Success(t *testing.T) {
 	queries := repository.New(&mockDBTX{})
 	homeRepo := repository.NewHomeRepository(queries)
 	homeSvc := service.NewHomeService(homeRepo)
-	handler := NewHomeHandler(homeSvc)
+	handler := NewHomeHandler(homeSvc, nil)
 
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
@@ -70,7 +70,7 @@ func TestHomeHandler_GetHome_Success(t *testing.T) {
 
 func TestNewHomeHandler(t *testing.T) {
 	svc := service.NewHomeService(nil)
-	h := NewHomeHandler(svc)
+	h := NewHomeHandler(svc, nil)
 	if h == nil {
 		t.Error("expected non-nil handler")
 	}

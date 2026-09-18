@@ -29,16 +29,18 @@ type BannerItem struct {
 }
 
 type EventItem struct {
-	ID        int64    `json:"id"`
-	Name      string   `json:"name"`
-	Location  string   `json:"location"`
-	Venue     string   `json:"venue"`
-	StartDate string   `json:"startDate"`
-	EndDate   string   `json:"endDate"`
-	CoverURL  string   `json:"coverUrl"`
-	Tags      []string `json:"tags"`
-	Status    string   `json:"status"`
-	TypeName  string   `json:"typeName"`
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Location     string   `json:"location"`
+	Venue        string   `json:"venue"`
+	Address      string   `json:"address,omitempty"`
+	StartDate    string   `json:"startDate"`
+	EndDate      string   `json:"endDate"`
+	CoverURL     string   `json:"coverUrl"`
+	Tags         []string `json:"tags"`
+	ImageGallery []string `json:"imageGallery,omitempty"`
+	Status       string   `json:"status"`
+	TypeName     string   `json:"typeName"`
 }
 
 type TagItem struct {
@@ -51,9 +53,14 @@ type PhotographerItem struct {
 	Name        string   `json:"name"`
 	Avatar      string   `json:"avatar"`
 	Location    string   `json:"location"`
+	Description string   `json:"description"`
 	Rating      float64  `json:"rating"`
 	ReviewCount int32    `json:"reviewCount"`
 	OrderCount  int32    `json:"orderCount"`
+	UserID      int64    `json:"userId"`
+	Mode        string   `json:"mode"`
+	MutualIntro string   `json:"mutualIntro"`
+	Certified   bool     `json:"certified"`
 	Tags        []string `json:"tags"`
 }
 
@@ -62,6 +69,9 @@ type WorkItem struct {
 	Title            string   `json:"title"`
 	Images           []string `json:"images"`
 	PhotographerName string   `json:"photographerName"`
+	Description      string   `json:"description"`
+	Status           string   `json:"status"`
+	CreatedAt        string   `json:"createdAt"`
 }
 
 // --- Service ---
@@ -83,9 +93,11 @@ func (s *HomeService) GetHomeData(ctx context.Context) (*HomeResponse, error) {
 		return nil, fmt.Errorf("home service: %w", err)
 	}
 
+	events := mapEvents(data.UpcomingEvents)
+
 	return &HomeResponse{
 		Banners:                  mapBanners(data.Banners),
-		UpcomingEvents:           mapEvents(data.UpcomingEvents),
+		UpcomingEvents:           events,
 		HotTags:                  mapTags(data.HotTags),
 		RecommendedPhotographers: mapPhotographers(data.RecommendedPhotographers),
 		FeaturedWorks:            mapWorks(data.FeaturedWorks),
@@ -176,16 +188,18 @@ func mapEvents(events []repository.ComicEvent) []EventItem {
 			tags = []string{}
 		}
 		items = append(items, EventItem{
-			ID:        e.ID,
-			Name:      e.Name,
-			Location:  derefString(e.Location),
-			Venue:     derefString(e.Venue),
-			StartDate: e.StartDate.Format("2006-01-02T15:04:05Z07:00"),
-			EndDate:   e.EndDate.Format("2006-01-02T15:04:05Z07:00"),
-			CoverURL:  derefString(e.CoverUrl),
-			Tags:      tags,
-			Status:    e.Status,
-			TypeName:  derefString(e.TypeName),
+			ID:           e.ID,
+			Name:         e.Name,
+			Location:     derefString(e.Location),
+			Venue:        derefString(e.Venue),
+			Address:      derefString(e.Address),
+			StartDate:    e.StartDate.Format("2006-01-02T15:04:05Z07:00"),
+			EndDate:      e.EndDate.Format("2006-01-02T15:04:05Z07:00"),
+			CoverURL:     derefString(e.CoverUrl),
+			Tags:         tags,
+			ImageGallery: ensureStringSlice(e.ImageGallery),
+			Status:       e.Status,
+			TypeName:     derefString(e.TypeName),
 		})
 	}
 	return items
@@ -215,9 +229,13 @@ func mapPhotographers(photographers []repository.PhotographerWithTags) []Photogr
 			Name:        p.Name,
 			Avatar:      derefString(p.Avatar),
 			Location:    derefString(p.Location),
+			Description: derefString(p.Description),
 			Rating:      rating,
 			ReviewCount: derefInt32(p.ReviewCount),
 			OrderCount:  derefInt32(p.OrderCount),
+			UserID:      derefInt64(p.UserID),
+			Mode:        p.Mode,
+			Certified:   p.Certified,
 			Tags:        tags,
 		})
 	}
@@ -236,6 +254,9 @@ func mapWorks(works []repository.FeaturedWork) []WorkItem {
 			Title:            w.Title,
 			Images:           images,
 			PhotographerName: w.PhotographerName,
+			Description:      derefString(w.Description),
+			Status:           w.Status,
+			CreatedAt:        w.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 	return items
@@ -250,7 +271,21 @@ func derefString(s *string) string {
 	return *s
 }
 
+func ensureStringSlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 func derefInt32(p *int32) int32 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func derefInt64(p *int64) int64 {
 	if p == nil {
 		return 0
 	}

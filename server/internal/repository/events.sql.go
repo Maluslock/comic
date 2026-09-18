@@ -8,9 +8,9 @@ import (
 )
 
 const getUpcomingEvents = `-- name: GetUpcomingEvents :many
-SELECT id, allcpp_id, name, location, venue, start_date, end_date, cover_url, tags, type_name, status
+SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
 FROM comic_events
-WHERE status = 'upcoming'
+WHERE status = 'upcoming' AND del_flag = false
 ORDER BY start_date ASC
 LIMIT $1
 `
@@ -30,10 +30,12 @@ func (q *Queries) GetUpcomingEvents(ctx context.Context, limit int32) ([]ComicEv
 			&i.Name,
 			&i.Location,
 			&i.Venue,
+			&i.Address,
 			&i.StartDate,
 			&i.EndDate,
 			&i.CoverUrl,
 			&i.Tags,
+			&i.ImageGallery,
 			&i.TypeName,
 			&i.Status,
 		); err != nil {
@@ -47,10 +49,37 @@ func (q *Queries) GetUpcomingEvents(ctx context.Context, limit int32) ([]ComicEv
 	return items, nil
 }
 
-const getEventByAllcppId = `-- name: GetEventByAllcppId :one
-SELECT id, allcpp_id, name, location, venue, start_date, end_date, cover_url, tags, type_name, status
+const getEventById = `-- name: GetEventById :one
+SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
 FROM comic_events
-WHERE allcpp_id = $1
+WHERE id = $1 AND del_flag = false
+`
+
+func (q *Queries) GetEventById(ctx context.Context, id int64) (ComicEvent, error) {
+	row := q.db.QueryRow(ctx, getEventById, id)
+	var i ComicEvent
+	err := row.Scan(
+		&i.ID,
+		&i.AllcppID,
+		&i.Name,
+		&i.Location,
+		&i.Venue,
+		&i.Address,
+		&i.StartDate,
+		&i.EndDate,
+		&i.CoverUrl,
+		&i.Tags,
+		&i.ImageGallery,
+		&i.TypeName,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getEventByAllcppId = `-- name: GetEventByAllcppId :one
+SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
+FROM comic_events
+WHERE allcpp_id = $1 AND del_flag = false
 `
 
 func (q *Queries) GetEventByAllcppId(ctx context.Context, allcppID int32) (ComicEvent, error) {
@@ -62,10 +91,12 @@ func (q *Queries) GetEventByAllcppId(ctx context.Context, allcppID int32) (Comic
 		&i.Name,
 		&i.Location,
 		&i.Venue,
+		&i.Address,
 		&i.StartDate,
 		&i.EndDate,
 		&i.CoverUrl,
 		&i.Tags,
+		&i.ImageGallery,
 		&i.TypeName,
 		&i.Status,
 	)
@@ -135,20 +166,23 @@ func (q *Queries) UpsertEvent(ctx context.Context, arg UpsertEventParams) (Upser
 
 type SearchEventsParams struct {
 	Query  *string `json:"query"`
+	Status *string `json:"status"`
 	Limit  int32   `json:"limit"`
 	Offset int32   `json:"offset"`
 }
 
 const searchEvents = `-- name: SearchEvents :many
-SELECT id, allcpp_id, name, location, venue, start_date, end_date, cover_url, tags, type_name, status
+SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
 FROM comic_events
 WHERE ($1::text IS NULL OR location ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR status = $2)
+  AND del_flag = false
 ORDER BY start_date ASC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $4
 `
 
 func (q *Queries) SearchEvents(ctx context.Context, arg SearchEventsParams) ([]ComicEvent, error) {
-	rows, err := q.db.Query(ctx, searchEvents, arg.Query, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, searchEvents, arg.Query, arg.Status, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -162,10 +196,106 @@ func (q *Queries) SearchEvents(ctx context.Context, arg SearchEventsParams) ([]C
 			&i.Name,
 			&i.Location,
 			&i.Venue,
+			&i.Address,
 			&i.StartDate,
 			&i.EndDate,
 			&i.CoverUrl,
 			&i.Tags,
+			&i.ImageGallery,
+			&i.TypeName,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllEvents = `-- name: GetAllEvents :many
+SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
+FROM comic_events
+WHERE del_flag = false
+ORDER BY start_date DESC
+LIMIT $1 OFFSET $2
+`
+
+type UpsertEventFromIngestParams struct {
+	AllcppID  int32     `json:"allcpp_id"`
+	Name      string    `json:"name"`
+	Location  *string   `json:"location"`
+	Venue     *string   `json:"venue"`
+	Address   *string   `json:"address"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	CoverUrl  *string   `json:"cover_url"`
+	Tags      []string  `json:"tags"`
+	TypeName  *string   `json:"type_name"`
+	SourceUrl *string   `json:"source_url"`
+}
+
+const upsertEventFromIngest = `-- name: UpsertEventFromIngest :one
+INSERT INTO comic_events (allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, type_name, status, source_url, synced_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'upcoming', $11, NOW())
+ON CONFLICT (allcpp_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  location = EXCLUDED.location,
+  venue = EXCLUDED.venue,
+  address = EXCLUDED.address,
+  start_date = EXCLUDED.start_date,
+  end_date = EXCLUDED.end_date,
+  cover_url = EXCLUDED.cover_url,
+  tags = EXCLUDED.tags,
+  type_name = EXCLUDED.type_name,
+  source_url = EXCLUDED.source_url,
+  synced_at = NOW(),
+  updated_at = NOW()
+RETURNING id
+`
+
+func (q *Queries) UpsertEventFromIngest(ctx context.Context, arg UpsertEventFromIngestParams) (int64, error) {
+	row := q.db.QueryRow(ctx, upsertEventFromIngest,
+		arg.AllcppID,
+		arg.Name,
+		arg.Location,
+		arg.Venue,
+		arg.Address,
+		arg.StartDate,
+		arg.EndDate,
+		arg.CoverUrl,
+		arg.Tags,
+		arg.TypeName,
+		arg.SourceUrl,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+func (q *Queries) GetAllEvents(ctx context.Context, limit, offset int32) ([]ComicEvent, error) {
+	rows, err := q.db.Query(ctx, getAllEvents, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ComicEvent
+	for rows.Next() {
+		var i ComicEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AllcppID,
+			&i.Name,
+			&i.Location,
+			&i.Venue,
+			&i.Address,
+			&i.StartDate,
+			&i.EndDate,
+			&i.CoverUrl,
+			&i.Tags,
+			&i.ImageGallery,
 			&i.TypeName,
 			&i.Status,
 		); err != nil {

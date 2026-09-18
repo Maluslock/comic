@@ -15,7 +15,7 @@
         }
     },
     "mp-weixin" : {
-        "appid" : "",
+        "appid" : "wx098fe8d3bdaf7531",
         "setting" : {
             "urlCheck" : false,
             "ignoreDevUnusedFiles" : false,

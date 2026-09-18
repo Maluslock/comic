@@ -1,5 +1,5 @@
 -- comic_events: synced from allcpp.cn
-CREATE TABLE comic_events (
+CREATE TABLE IF NOT EXISTS comic_events (
   id BIGSERIAL PRIMARY KEY,
   allcpp_id INTEGER UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
@@ -16,10 +16,10 @@ CREATE TABLE comic_events (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_events_status_date ON comic_events(status, start_date);
+CREATE INDEX IF NOT EXISTS idx_events_status_date ON comic_events(status, start_date);
 
 -- banners: manually managed carousel
-CREATE TABLE banners (
+CREATE TABLE IF NOT EXISTS banners (
   id BIGSERIAL PRIMARY KEY,
   image_url TEXT NOT NULL,
   title VARCHAR(255),
@@ -32,7 +32,7 @@ CREATE TABLE banners (
 );
 
 -- photographers
-CREATE TABLE photographers (
+CREATE TABLE IF NOT EXISTS photographers (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   avatar TEXT,
@@ -44,10 +44,10 @@ CREATE TABLE photographers (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_photographers_rating ON photographers(rating DESC);
+CREATE INDEX IF NOT EXISTS idx_photographers_rating ON photographers(rating DESC);
 
 -- works
-CREATE TABLE works (
+CREATE TABLE IF NOT EXISTS works (
   id BIGSERIAL PRIMARY KEY,
   photographer_id INTEGER NOT NULL REFERENCES photographers(id),
   title VARCHAR(255) NOT NULL,
@@ -56,24 +56,24 @@ CREATE TABLE works (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_works_photographer ON works(photographer_id);
+CREATE INDEX IF NOT EXISTS idx_works_photographer ON works(photographer_id);
 
 -- tags
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(50) UNIQUE NOT NULL,
   usage_count INTEGER DEFAULT 0
 );
 
 -- photographer_tags junction
-CREATE TABLE photographer_tags (
+CREATE TABLE IF NOT EXISTS photographer_tags (
   photographer_id INTEGER NOT NULL REFERENCES photographers(id),
   tag_id INTEGER NOT NULL REFERENCES tags(id),
   PRIMARY KEY (photographer_id, tag_id)
 );
 
 -- services (global catalog, not per-photographer for now)
-CREATE TABLE services (
+CREATE TABLE IF NOT EXISTS services (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   price INTEGER NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE services (
 );
 
 -- reviews
-CREATE TABLE reviews (
+CREATE TABLE IF NOT EXISTS reviews (
   id BIGSERIAL PRIMARY KEY,
   photographer_id INTEGER NOT NULL REFERENCES photographers(id),
   user_id INTEGER NOT NULL,
@@ -94,10 +94,10 @@ CREATE TABLE reviews (
   images TEXT[] DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_reviews_photographer ON reviews(photographer_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_photographer ON reviews(photographer_id);
 
 -- bookings (schema only, no endpoints in this phase)
-CREATE TABLE bookings (
+CREATE TABLE IF NOT EXISTS bookings (
   id BIGSERIAL PRIMARY KEY,
   photographer_id INTEGER NOT NULL REFERENCES photographers(id),
   coser_id INTEGER NOT NULL,

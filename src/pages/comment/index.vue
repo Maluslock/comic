@@ -3,7 +3,7 @@
     <view class="section">
       <view class="section-title">我的评价</view>
       <view v-if="myReviews.length === 0" class="empty">
-        <text class="empty-icon">✍️</text>
+        <text class="empty-icon">暂无</text>
         <text class="empty-text">暂无评价</text>
       </view>
       <view v-else class="review-list">
@@ -15,7 +15,7 @@
       </view>
     </view>
 
-    <view class="section">
+    <view v-if="pid" class="section">
       <view class="section-title">评价摄影师</view>
       <view class="photographer-select">
         <view v-for="p in photographers" :key="p.id" class="photographer-option">
@@ -71,56 +71,45 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import ReviewCard from '@/components/ReviewCard.vue'
+import { apiGet, apiPost } from '@/api/client'
+import { getMyReviews } from '@/api/index'
+import { useUserStore } from '@/stores/user'
+import { mapPhotographerItem, mapReviewItem } from '@/utils/mappers'
 import type { Photographer } from '@/types'
 
-const myReviews = ref<any[]>([
-  {
-    id: 'r1',
-    userId: 'u1',
-    userName: '小狐狸',
-    userAvatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=anime%20girl%20avatar%20fox%20ears%20cute&image_size=square',
-    photographerId: '1',
-    rating: 5,
-    content: '摄影师非常专业，拍出来的效果超出预期！沟通也很顺畅，下次还会合作~',
-    createdAt: Date.now() - 86400000
-  }
-])
+const userStore = useUserStore()
 
-const photographers = ref<Photographer[]>([
-  {
-    id: '2',
-    name: '古风公子',
-    avatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=chinese%20ancient%20style%20photographer%20avatar%20elegant&image_size=square',
-    role: 'photographer',
-    description: '',
-    tags: [],
-    location: '',
-    rating: 0,
-    reviewCount: 0,
-    orderCount: 0,
-    createdAt: Date.now(),
-    works: [],
-    services: [],
-    reviews: []
-  },
-  {
-    id: '3',
-    name: '樱花落',
-    avatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=female%20photographer%20avatar%20pink%20hair%20cute%20style&image_size=square',
-    role: 'photographer',
-    description: '',
-    tags: [],
-    location: '',
-    rating: 0,
-    reviewCount: 0,
-    orderCount: 0,
-    createdAt: Date.now(),
-    works: [],
-    services: [],
-    reviews: []
+const myReviews = ref<any[]>([])
+const photographers = ref<Photographer[]>([])
+
+let pid = ''
+
+onLoad((options) => {
+  pid = options?.photographerId || ''
+  loadData()
+})
+
+async function loadData() {
+  uni.showLoading({ title: '加载中...' })
+  try {
+    const mine = await getMyReviews()
+    myReviews.value = (mine || []).map(mapReviewItem)
+
+    if (pid) {
+      const res = await apiGet<any>(`/v1/photographers/${pid}`)
+      photographers.value = [mapPhotographerItem(res)]
+    } else {
+      photographers.value = []
+    }
+  } catch {
+    myReviews.value = []
+    photographers.value = []
+  } finally {
+    uni.hideLoading()
   }
-])
+}
 
 const showWriteModal = ref(false)
 const rating = ref(0)
@@ -140,38 +129,62 @@ function setRating(r: number) {
   rating.value = r
 }
 
-function submitReview() {
-  if (rating.value === 0) {
-    uni.showToast({ title: '请选择评分', icon: 'none' })
-    return
+async function submitReview() {
+  if (!userStore.isLoggedIn) { uni.showToast({ title: '请先登录', icon: 'none' }); return }
+  if (!rating.value || !reviewContent.value.trim()) {
+    uni.showToast({ title: '请打分并填写内容', icon: 'none' }); return
   }
-  if (!reviewContent.value.trim()) {
-    uni.showToast({ title: '请输入评价内容', icon: 'none' })
-    return
+  try {
+    await apiPost('/v1/reviews', {
+      photographerId: Number(pid),
+      userId: Number(userStore.user?.id),
+      userName: userStore.user?.name || '',
+      rating: rating.value,
+      content: reviewContent.value.trim(),
+    })
+    uni.showToast({ title: '评价成功', icon: 'success' })
+    closeModal()
+    loadData()
+  } catch {
+    uni.showToast({ title: '提交失败', icon: 'none' })
   }
-  
-  uni.showToast({ title: '评价成功', icon: 'success' })
-  closeModal()
 }
 </script>
 
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
   padding-top: env(safe-area-inset-top);
 }
 
 .section {
-  background: $bg-primary;
+  background: $dark-bg-card;
   margin-top: $spacing-md;
   padding: $spacing-md;
+  border: 1rpx solid $dark-border;
+  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.15);
 }
 
 .section-title {
+  position: relative;
+  padding-left: 20rpx;
   font-size: $font-size-lg;
   font-weight: 600;
+  color: $dark-text-primary;
   margin-bottom: $spacing-md;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .empty {
@@ -182,13 +195,14 @@ function submitReview() {
 }
 
 .empty-icon {
-  font-size: 80rpx;
+  font-size: 48rpx;
   margin-bottom: $spacing-md;
+  color: $dark-text-tertiary;
 }
 
 .empty-text {
   font-size: $font-size-base;
-  color: $text-tertiary;
+  color: $dark-text-secondary;
 }
 
 .review-list {
@@ -205,14 +219,20 @@ function submitReview() {
   display: flex;
   align-items: center;
   padding: $spacing-md;
-  background: $bg-secondary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
+
+  &:active {
+    background: $dark-bg-card-hover;
+  }
 }
 
 .avatar {
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
+  border: 2rpx solid $dark-border;
 }
 
 .info {
@@ -224,19 +244,25 @@ function submitReview() {
   font-size: $font-size-base;
   font-weight: 500;
   display: block;
+  color: $dark-text-primary;
 }
 
 .hint {
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .btn-outline {
   padding: $spacing-xs $spacing-md;
-  border: 2rpx solid $primary-color;
-  color: $primary-color;
+  border: 2rpx solid $neon-purple;
+  color: $neon-purple;
   border-radius: $border-radius-md;
   font-size: $font-size-sm;
+
+  &:active {
+    background: $neon-purple-dim;
+    border-color: $neon-purple-glow;
+  }
 }
 
 .modal-mask {
@@ -245,7 +271,7 @@ function submitReview() {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -254,9 +280,11 @@ function submitReview() {
 
 .modal-content {
   width: 90%;
-  background: $bg-primary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-xl;
   padding: $spacing-lg;
+  box-shadow: 0 8rpx 40rpx rgba(0, 0, 0, 0.5);
 }
 
 .modal-header {
@@ -269,11 +297,17 @@ function submitReview() {
 .modal-title {
   font-size: $font-size-xl;
   font-weight: 600;
+  color: $dark-text-primary;
 }
 
 .modal-close {
   font-size: $font-size-xl;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
+  padding: $spacing-xs;
+
+  &:active {
+    opacity: 0.6;
+  }
 }
 
 .rating-section {
@@ -284,6 +318,7 @@ function submitReview() {
   font-size: $font-size-base;
   font-weight: 500;
   display: block;
+  color: $dark-text-primary;
   margin-bottom: $spacing-sm;
 }
 
@@ -294,8 +329,8 @@ function submitReview() {
 
 .star {
   font-size: 60rpx;
-  color: #ddd;
-  
+  color: $dark-text-tertiary;
+
   &.active {
     color: $warning-color;
   }
@@ -309,6 +344,7 @@ function submitReview() {
   font-size: $font-size-base;
   font-weight: 500;
   display: block;
+  color: $dark-text-primary;
   margin-bottom: $spacing-sm;
 }
 
@@ -316,16 +352,22 @@ function submitReview() {
   width: 100%;
   height: 240rpx;
   padding: $spacing-md;
-  background: $bg-secondary;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
   font-size: $font-size-base;
+  color: $dark-text-primary;
+
+  &::placeholder {
+    color: $dark-text-tertiary;
+  }
 }
 
 .input-count {
   display: block;
   text-align: right;
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
   margin-top: $spacing-xs;
 }
 
@@ -337,9 +379,14 @@ function submitReview() {
 
 .btn-primary {
   padding: $spacing-sm $spacing-xl;
-  background: $primary-color;
+  background: $neon-gradient;
   color: #fff;
   border-radius: $border-radius-lg;
   font-size: $font-size-base;
+  box-shadow: 0 4rpx 16rpx $neon-purple-glow;
+
+  &:active {
+    opacity: 0.85;
+  }
 }
 </style>

@@ -14,6 +14,8 @@ type Config struct {
 	DBUser        string `mapstructure:"DB_USER"`
 	DBPassword    string `mapstructure:"DB_PASSWORD"`
 	DBName        string `mapstructure:"DB_NAME"`
+	RedisHost     string `mapstructure:"REDIS_HOST"`
+	RedisPort     string `mapstructure:"REDIS_PORT"`
 	ServerPort    string `mapstructure:"SERVER_PORT"`
 	AllcppBaseURL string `mapstructure:"ALLCPP_BASE_URL"`
 }
@@ -24,6 +26,11 @@ func (c *Config) DSN() string {
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName,
 	)
+}
+
+// RedisAddr returns the Redis address string.
+func (c *Config) RedisAddr() string {
+	return fmt.Sprintf("%s:%s", c.RedisHost, c.RedisPort)
 }
 
 // Load reads configuration from .env file and environment variables.
@@ -41,6 +48,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("DB_USER", "comic")
 	viper.SetDefault("DB_PASSWORD", "comic123")
 	viper.SetDefault("DB_NAME", "comic")
+	viper.SetDefault("REDIS_HOST", "localhost")
+	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("SERVER_PORT", "8080")
 	viper.SetDefault("ALLCPP_BASE_URL", "https://www.allcpp.cn")
 

@@ -39,7 +39,7 @@ func TestHomeHandlerIntegration(t *testing.T) {
 	queries := repository.New(pool)
 	homeRepo := repository.NewHomeRepository(queries)
 	homeSvc := service.NewHomeService(homeRepo)
-	handler := NewHomeHandler(homeSvc)
+	handler := NewHomeHandler(homeSvc, nil)
 
 	gin.SetMode(gin.TestMode)
 

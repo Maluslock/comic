@@ -33,11 +33,20 @@ unpackage/
 # Server build (Go)
 server/tmp/
 server/bin/
+server/build/
+server/static/uploads/
+server/static/remote/
 server/*.exe
 
 # Database
 data/grounding.db*
 
-# Screenshots
-*.png
-*.jpg
+# Screenshots (root-level only — keep static assets under src/ and server/ tracked)
+/*.png
+/*.jpg
+server/ingest
+
+# SDD skill workspace (scratch) + local snapshots + playwright artifacts
+.superpowers/
+.snapshots/
+.playwright-mcp/

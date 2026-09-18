@@ -1,0 +1,2 @@
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link_type VARCHAR(20);
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link_id BIGINT;

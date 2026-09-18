@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -9,13 +7,25 @@ services:
       POSTGRES_PASSWORD: comic123
       POSTGRES_DB: comic
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U comic"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: comic-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   api:
@@ -28,12 +38,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_USER: comic
       DB_PASSWORD: comic123
       DB_NAME: comic
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       SERVER_PORT: "8080"
       ALLCPP_BASE_URL: https://www.allcpp.cn
 

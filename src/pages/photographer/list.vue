@@ -46,8 +46,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
-import { getPhotographers } from '@/api/index'
+import { apiGet } from '@/api/client'
+import { mapPhotographerItem } from '@/utils/mappers'
 import type { Photographer } from '@/types'
+
+interface PhotographerListResponse {
+  list: Array<{
+    id: number
+    name: string
+    avatar: string
+    location: string
+    rating: number
+    reviewCount: number
+    orderCount: number
+    tags: string[]
+  }>
+  total: number
+}
 
 const photographers = ref<Photographer[]>([])
 const currentPage = ref(1)
@@ -70,17 +85,16 @@ onMounted(() => {
 async function loadData(page = 1) {
   loading.value = true
   try {
-    const res = await getPhotographers({
-      page,
-      size: 10
+    const res = await apiGet<PhotographerListResponse>('/v1/photographers', {
+      page: String(page),
+      size: '10',
     })
-    if (page === 1) {
-      photographers.value = res.list
-    } else {
-      photographers.value = [...photographers.value, ...res.list]
-    }
+    const mapped = (res.list || []).map(mapPhotographerItem)
+    photographers.value = page === 1 ? mapped : [...photographers.value, ...mapped]
     total.value = res.total
     currentPage.value = page
+  } catch (e) {
+    uni.showToast({ title: '加载失败', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -106,13 +120,10 @@ function setFilter(key: string) {
 }
 
 .filter-bar {
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
-  background: $dark-bg-secondary;
   z-index: 100;
-  padding-top: env(safe-area-inset-top);
+  background: $dark-bg-secondary;
   border-bottom: 1rpx solid $dark-border;
 }
 
@@ -154,7 +165,6 @@ function setFilter(key: string) {
 
 .content {
   height: 100vh;
-  padding-top: calc(env(safe-area-inset-top) + 80rpx);
 }
 
 .photographer-list {

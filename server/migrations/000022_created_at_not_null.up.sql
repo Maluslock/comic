@@ -1,0 +1,3 @@
+ALTER TABLE chat_messages ALTER COLUMN created_at SET NOT NULL;
+ALTER TABLE notifications ALTER COLUMN created_at SET NOT NULL;
+ALTER TABLE reviews ALTER COLUMN created_at SET NOT NULL;

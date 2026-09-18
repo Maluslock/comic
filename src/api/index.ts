@@ -1,131 +1,184 @@
-import { mockPhotographers, mockServices, mockReviews, mockWorks, mockEvents, tags, timeSlots } from '@/data/mock'
-import type { Photographer, Service, Review, Work, ComicEvent, HomeResponse } from '@/types'
+import { mockPhotographers, mockWorks, mockEvents, tags } from '@/data/mock'
+import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
+import type { HomeResponse } from '@/types'
 
-const BASE_URL = 'http://localhost:8080'
+const BASE_URL = '/api'
 
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+async function uploadFile(filePath: string): Promise<string> {
+  const token = uni.getStorageSync('token') as string
+
+  return new Promise<string>((resolve, reject) => {
+    uni.uploadFile({
+      url: `${BASE_URL}/v1/upload`,
+      filePath,
+      name: 'file',
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      success: (res) => {
+        if (res.statusCode !== 200 && res.statusCode !== 201) {
+          reject(new Error('upload failed'))
+          return
+        }
+        try {
+          resolve((JSON.parse(res.data) as { url: string }).url)
+        } catch (e) {
+          reject(e)
+        }
+      },
+      fail: reject
+    })
+  })
 }
 
-export async function getPhotographers(params?: {
-  keyword?: string
-  tags?: string[]
-  location?: string
-  page?: number
-  size?: number
-}): Promise<{ list: Photographer[]; total: number }> {
-  await delay(500)
-  let list = [...mockPhotographers]
-  
-  if (params?.keyword) {
-    const kw = params.keyword.toLowerCase()
-    list = list.filter(p => 
-      p.name.toLowerCase().includes(kw) || 
-      p.description?.toLowerCase().includes(kw)
-    )
-  }
-  
-  if (params?.tags?.length) {
-    list = list.filter(p => 
-      p.tags.some(t => params!.tags!.includes(t))
-    )
-  }
-  
-  if (params?.location) {
-    list = list.filter(p => p.location === params.location)
-  }
-  
-  return {
-    list: list.slice((params?.page || 1) - 1, (params?.page || 1) * (params?.size || 10)),
-    total: list.length
-  }
+export function pickAndUploadImages(count = 1): Promise<string[]> {
+  return new Promise<string[]>((resolve, reject) => {
+    uni.chooseImage({
+      count,
+      success: async (res) => {
+        try {
+          const urls: string[] = []
+          for (const path of res.tempFilePaths) urls.push(await uploadFile(path as string))
+          resolve(urls)
+        } catch (e) {
+          reject(e)
+        }
+      },
+      fail: reject
+    })
+  })
 }
 
-export async function getPhotographerById(id: string): Promise<Photographer> {
-  await delay(300)
-  const photographer = mockPhotographers.find(p => p.id === id)
-  if (!photographer) {
-    throw new Error('摄影师不存在')
-  }
-  
-  return {
-    ...photographer,
-    services: mockServices,
-    reviews: mockReviews.filter(r => r.photographerId === id),
-    works: mockWorks.filter(w => w.photographerId === id)
-  }
+export interface CertApplication {
+  id: number
+  status: string
+  reviewReason?: string | null
+  createdAt: string
 }
 
-export async function getWorks(photographerId?: string): Promise<Work[]> {
-  await delay(300)
-  if (photographerId) {
-    return mockWorks.filter(w => w.photographerId === photographerId)
-  }
-  return mockWorks
+export function applyCertification(evidenceImages: string[], evidenceDesc: string) {
+  return apiPost<{ id: number }>('/v1/photographers/cert-apply', { evidenceImages, evidenceDesc })
 }
 
-export async function getServices(photographerId?: string): Promise<Service[]> {
-  await delay(300)
-  return mockServices
+export function getMyCertApplication() {
+  return apiGet<{ application: null | CertApplication }>('/v1/photographers/cert-application')
 }
 
-export async function getReviews(photographerId: string): Promise<Review[]> {
-  await delay(300)
-  return mockReviews.filter(r => r.photographerId === photographerId)
+export function getMyCertApplications() {
+  return apiGet<{ list: CertApplication[] }>('/v1/photographers/cert-applications')
 }
 
-export async function getTags(): Promise<string[]> {
-  await delay(200)
-  return tags
+export function updateUserProfile(payload: { name: string; avatar: string; bio?: string }) {
+  return apiPut<{ ok: boolean }>('/v1/me/profile', payload)
 }
 
-export async function getTimeSlots(date: string): Promise<string[]> {
-  await delay(200)
-  return timeSlots
+export function logoutAllDevices() {
+  return apiPost<{ ok: boolean }>('/v1/me/logout-all', {})
 }
 
-export async function createBooking(data: {
-  photographerId: string
-  coserId: string
-  serviceId: string
-  date: string
-  time: string
-  remarks?: string
-}): Promise<{ id: string }> {
-  await delay(500)
-  return { id: `booking_${Date.now()}` }
+export interface BlockedUser {
+  userId: number
+  name: string
+  avatar: string
+  createdAt: string
 }
 
-export async function getBookings(userId: string, status?: string): Promise<any[]> {
-  await delay(500)
-  return []
+export function getBlocks() {
+  return apiGet<{ list: BlockedUser[] }>('/v1/blocks')
 }
 
-export async function getComicEvents(params?: {
-  location?: string
+export function blockUser(blockedUserId: number) {
+  return apiPost<{ ok: boolean }>('/v1/blocks', { blockedUserId })
+}
+
+export function unblockUser(blockedUserId: number) {
+  return apiDelete<{ ok: boolean }>(`/v1/blocks/${blockedUserId}`)
+}
+
+export function markNotificationRead(id: string | number) {
+  return apiPost<{ ok: boolean }>(`/v1/notifications/${id}/read`, {})
+}
+
+export function markChatSessionRead(sessionId: number | string) {
+  return apiPost<{ ok: boolean }>(`/v1/chat/sessions/${sessionId}/read`, {})
+}
+
+export interface MyReview {
+  id: number
+  photographerId: number
+  photographerName?: string
+  rating: number
+  content: string
+  images?: string[]
+  createdAt: string
+}
+
+export function getMyReviews() {
+  return apiGet<MyReview[]>('/v1/reviews/mine')
+}
+
+export interface MyPhotographerProfile {
+  id: number
+  name: string
+  avatar: string
+  location: string
+  description: string
+  mode: string
+  mutualIntro: string
+  certified: boolean
+  rating: number
+  reviewCount: number
+  orderCount: number
+}
+
+export function getMyPhotographerProfile() {
+  return apiGet<MyPhotographerProfile>('/v1/photographers/profile/mine')
+}
+
+export function updatePhotographerProfile(payload: {
+  name: string
+  description: string
+  location: string
+  mode: string
+  mutualIntro: string
+  avatar: string
+}) {
+  return apiPut<{ ok: boolean }>('/v1/photographers/profile', payload)
+}
+
+export interface MyWork {
+  id: number
+  title: string
+  images: string[]
+  description?: string | null
+  /** backend mine endpoint omits status (DB default 'active'); admin can down it */
   status?: string
-}): Promise<ComicEvent[]> {
-  await delay(300)
-  let list = [...mockEvents]
-  if (params?.location) {
-    list = list.filter(e => e.location === params.location)
-  }
-  if (params?.status) {
-    list = list.filter(e => e.status === params.status)
-  }
-  return list.sort((a, b) => a.startDate - b.startDate)
+  /** backend mine endpoint returns created_at (snake_case); createdAt kept for future camelCase */
+  created_at?: string
+  createdAt?: string
+}
+
+export function uploadWork(payload: { title: string; images: string[]; description?: string }) {
+  return apiPost<{ id: number }>('/v1/photographers/works', payload)
+}
+
+export function updateWork(id: number, payload: { title: string; images: string[]; description?: string }) {
+  return apiPut<{ ok: boolean }>(`/v1/photographers/works/${id}`, payload)
+}
+
+export function getMyWorks() {
+  return apiGet<MyWork[]>('/v1/photographers/works/mine')
+}
+
+export function deleteWork(id: number) {
+  return apiDelete<{ ok: boolean }>(`/v1/photographers/works/${id}`)
 }
 
 export async function getHomeData(): Promise<HomeResponse> {
-  await delay(300)
   return {
-    banners: mockEvents.slice(0, 3).map((e, i) => ({
-      id: i + 1,
-      imageUrl: e.cover,
-      title: e.name,
-      linkType: 'event',
-      linkId: null,
-    })),
+    banners: [
+      { id: 1, imageUrl: '/static/img/banner-1.jpg', title: 'ChinaJoy 2026', linkType: 'event', linkId: 1 },
+      { id: 2, imageUrl: '/static/img/banner-2.jpg', title: '第40届萤火虫漫展', linkType: 'event', linkId: 2 },
+      { id: 3, imageUrl: '/static/img/banner-3.jpg', title: 'CP33 综合同人展', linkType: 'event', linkId: 3 },
+    ],
     upcomingEvents: mockEvents.map((e, i) => ({
       id: i + 1,
       name: e.name,

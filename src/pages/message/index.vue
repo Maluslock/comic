@@ -31,11 +31,11 @@
           class="chat-item"
           @click="goChat(session)"
         >
-          <image :src="session.userAvatar" class="avatar" mode="aspectFill" />
+          <image :src="session.userAvatar" class="avatar" mode="aspectFill" @error="onSessionAvatarError(session)" />
           <view class="chat-info">
             <view class="chat-header">
               <text class="chat-name">{{ session.userName }}</text>
-              <text class="chat-time">{{ session.time }}</text>
+              <text class="chat-time">{{ session.updatedAt }}</text>
             </view>
             <text class="chat-last">{{ session.lastMessage }}</text>
           </view>
@@ -49,88 +49,139 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { apiGet } from '@/api/client'
+import { markNotificationRead } from '@/api/index'
+import { updateMessageBadge } from '@/utils/badge'
+import { useUserStore } from '@/stores/user'
 
-const notifications = ref<any[]>([
-  {
-    id: 'n1',
-    type: 'success',
-    icon: '✓',
-    title: '预约成功',
-    content: '您预约的「光影行者」拍摄服务已确认',
-    time: '今天 14:30',
-    read: false
-  },
-  {
-    id: 'n2',
-    type: 'info',
-    icon: 'ℹ',
-    title: '新消息',
-    content: '摄影师「古风公子」给您发来了消息',
-    time: '今天 10:20',
-    read: true
-  },
-  {
-    id: 'n3',
-    type: 'warning',
-    icon: '⚠',
-    title: '订单提醒',
-    content: '您的订单「BK20240101002」即将开始',
-    time: '昨天 18:00',
-    read: true
-  }
-])
+const userStore = useUserStore()
 
-const sessions = ref<any[]>([
-  {
-    id: 's1',
-    userName: '光影行者',
-    userAvatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=professional%20photographer%20avatar%20portrait%20studio%20lighting&image_size=square',
-    lastMessage: '好的，那我帮您确认一下档期',
-    time: '14:30',
-    unreadCount: 2
-  },
-  {
-    id: 's2',
-    userName: '古风公子',
-    userAvatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=chinese%20ancient%20style%20photographer%20avatar%20elegant&image_size=square',
-    lastMessage: '您看这个时间可以吗？',
-    time: '昨天',
-    unreadCount: 0
-  },
-  {
-    id: 's3',
-    userName: '樱花落',
-    userAvatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=female%20photographer%20avatar%20pink%20hair%20cute%20style&image_size=square',
-    lastMessage: '收到，期待合作~',
-    time: '周一',
-    unreadCount: 0
-  }
-])
+const notifications = ref<any[]>([])
 
-onMounted(() => {
+const sessions = ref<any[]>([])
+
+onShow(() => {
+  loadSessions()
+  loadNotifications()
 })
 
-function readNotification(item: any) {
-  item.read = true
+async function loadNotifications() {
+  if (!userStore.isLoggedIn || !userStore.user) {
+    notifications.value = []
+    return
+  }
+  try {
+    const res = await apiGet<any[]>(`/v1/notifications/${userStore.user.id}`)
+    notifications.value = (res || []).map((n: any) => ({
+      id: String(n.id),
+      type: n.type,
+      icon: notifyIcon(n.type),
+      title: n.title,
+      content: n.content,
+      read: n.read,
+      linkType: n.linkType || '',
+      linkId: n.linkId != null ? String(n.linkId) : '',
+      time: formatNotifyTime(n.createdAt)
+    }))
+  } catch {
+    notifications.value = []
+  }
+}
+
+function notifyIcon(type: string): string {
+  if (type === 'success') return '\u2713'
+  if (type === 'warning') return '\u26A0'
+  return '\u2139'
+}
+
+function formatNotifyTime(iso: string): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    const MM = (d.getMonth() + 1).toString().padStart(2, '0')
+    const DD = d.getDate().toString().padStart(2, '0')
+    const HH = d.getHours().toString().padStart(2, '0')
+    const mm = d.getMinutes().toString().padStart(2, '0')
+    return `${MM}/${DD} ${HH}:${mm}`
+  } catch { return '' }
+}
+
+async function loadSessions() {
+  if (!userStore.isLoggedIn || !userStore.user) {
+    sessions.value = []
+    return
+  }
+  try {
+    const res = await apiGet<any[]>(`/v1/chat/sessions/${userStore.user.id}`)
+    sessions.value = (res || []).map((s: any) => ({
+      id: String(s.id),
+      userId: String(s.peerId),
+      userName: s.peerName,
+      userAvatar: s.peerAvatar,
+      lastMessage: s.lastMessage,
+      unreadCount: s.unreadCount || 0,
+      updatedAt: formatSessionTime(s.lastTime)
+    }))
+  } catch {
+    sessions.value = []
+  }
+  updateMessageBadge(sessions.value.reduce((n, s) => n + (s.unreadCount || 0), 0))
+}
+
+function formatSessionTime(iso: string): string {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    const MM = (d.getMonth() + 1).toString().padStart(2, '0')
+    const DD = d.getDate().toString().padStart(2, '0')
+    const HH = d.getHours().toString().padStart(2, '0')
+    const mm = d.getMinutes().toString().padStart(2, '0')
+    return `${MM}/${DD} ${HH}:${mm}`
+  } catch { return '' }
+}
+
+async function readNotification(item: any) {
+  try {
+    await markNotificationRead(item.id)
+    item.read = true
+  } catch {
+    item.read = false
+  }
+  if (item.linkType === 'order' && item.linkId) {
+    uni.navigateTo({ url: `/pages/order/detail?id=${item.linkId}` })
+    return
+  }
+  if (item.linkType === 'photographer_orders') {
+    uni.navigateTo({ url: '/pages/photographer/orders' })
+    return
+  }
   uni.showToast({ title: item.title, icon: 'none' })
 }
 
+function onSessionAvatarError(session: any) {
+  session.userAvatar = '/static/img/avatar-user.svg'
+}
+
 function goChat(session: any) {
-  session.unreadCount = 0
-  uni.navigateTo({ url: '/pages/chat/index' })
+  uni.navigateTo({ url: `/pages/chat/index?sessionId=${session.id}&peerName=${encodeURIComponent(session.userName)}&peerAvatar=${encodeURIComponent(session.userAvatar)}` })
 }
 </script>
 
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
-  padding-top: env(safe-area-inset-top);
+  background: $dark-bg-primary;
+  padding-top: $spacing-md;
 }
 
 .section {
-  background: $bg-primary;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.15);
   margin-top: $spacing-md;
   padding: $spacing-md;
 }
@@ -138,7 +189,22 @@ function goChat(session: any) {
 .section-title {
   font-size: $font-size-lg;
   font-weight: 600;
+  color: $dark-text-primary;
   margin-bottom: $spacing-md;
+  position: relative;
+  padding-left: 20rpx;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .notification-list {
@@ -150,9 +216,15 @@ function goChat(session: any) {
   display: flex;
   align-items: flex-start;
   padding: $spacing-md 0;
-  
+
   &:not(:last-child) {
-    border-bottom: 1rpx solid $border-color;
+    border-bottom: 1rpx solid $dark-border;
+  }
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.97);
+    box-shadow: 0 0 12rpx $neon-purple-glow;
   }
 }
 
@@ -165,20 +237,20 @@ function goChat(session: any) {
   justify-content: center;
   font-size: $font-size-sm;
   flex-shrink: 0;
-  
+
   &.success {
-    background: rgba($success-color, 0.1);
-    color: $success-color;
+    background: $neon-purple-dim;
+    color: $neon-purple;
   }
-  
+
   &.info {
-    background: rgba($info-color, 0.1);
-    color: $info-color;
+    background: rgba($neon-cyan, 0.15);
+    color: $neon-cyan;
   }
-  
+
   &.warning {
-    background: rgba($warning-color, 0.1);
-    color: $warning-color;
+    background: rgba($neon-pink, 0.15);
+    color: $neon-pink;
   }
 }
 
@@ -190,12 +262,13 @@ function goChat(session: any) {
 .notification-title {
   font-size: $font-size-base;
   font-weight: 500;
+  color: $dark-text-primary;
   display: block;
 }
 
 .notification-content {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
   display: block;
   margin-top: 4rpx;
   overflow: hidden;
@@ -205,7 +278,7 @@ function goChat(session: any) {
 
 .notification-time {
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
   display: block;
   margin-top: 4rpx;
 }
@@ -213,9 +286,10 @@ function goChat(session: any) {
 .unread-dot {
   width: 16rpx;
   height: 16rpx;
-  background: $error-color;
+  background: $neon-pink;
   border-radius: 50%;
   margin-top: $spacing-sm;
+  box-shadow: 0 0 8rpx rgba($neon-pink, 0.5);
 }
 
 .chat-list {
@@ -227,9 +301,15 @@ function goChat(session: any) {
   display: flex;
   align-items: center;
   padding: $spacing-md 0;
-  
+
   &:not(:last-child) {
-    border-bottom: 1rpx solid $border-color;
+    border-bottom: 1rpx solid $dark-border;
+  }
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.97);
+    box-shadow: 0 0 12rpx $neon-purple-glow;
   }
 }
 
@@ -237,6 +317,7 @@ function goChat(session: any) {
   width: 100rpx;
   height: 100rpx;
   border-radius: 50%;
+  border: 2rpx solid $dark-border;
 }
 
 .chat-info {
@@ -253,16 +334,17 @@ function goChat(session: any) {
 .chat-name {
   font-size: $font-size-base;
   font-weight: 500;
+  color: $dark-text-primary;
 }
 
 .chat-time {
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .chat-last {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
   margin-top: 4rpx;
   display: block;
   overflow: hidden;
@@ -271,7 +353,7 @@ function goChat(session: any) {
 }
 
 .unread-count {
-  background: $error-color;
+  background: $neon-pink;
   color: #fff;
   font-size: $font-size-xs;
   min-width: 36rpx;
@@ -281,5 +363,6 @@ function goChat(session: any) {
   align-items: center;
   justify-content: center;
   padding: 0 8rpx;
+  box-shadow: 0 0 8rpx rgba($neon-pink, 0.3);
 }
 </style>

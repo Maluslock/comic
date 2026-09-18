@@ -9,37 +9,39 @@ import (
 )
 
 type Banner struct {
-	ID        int64     `json:"id"`
-	ImageUrl  string    `json:"image_url"`
-	Title     *string   `json:"title"`
-	LinkType  *string   `json:"link_type"`
-	LinkID    *int32    `json:"link_id"`
-	SortOrder *int32    `json:"sort_order"`
+	ID        int64   `json:"id"`
+	ImageUrl  string  `json:"image_url"`
+	Title     *string `json:"title"`
+	LinkType  *string `json:"link_type"`
+	LinkID    *int32  `json:"link_id"`
+	SortOrder *int32  `json:"sort_order"`
 }
 
 type ComicEvent struct {
-	ID        int64     `json:"id"`
-	AllcppID  int32     `json:"allcpp_id"`
-	Name      string    `json:"name"`
-	Location  *string   `json:"location"`
-	Venue     *string   `json:"venue"`
-	StartDate time.Time `json:"start_date"`
-	EndDate   time.Time `json:"end_date"`
-	CoverUrl  *string   `json:"cover_url"`
-	Tags      []string  `json:"tags"`
-	TypeName  *string   `json:"type_name"`
-	Status    string    `json:"status"`
+	ID           int64     `json:"id"`
+	AllcppID     int32     `json:"allcpp_id"`
+	Name         string    `json:"name"`
+	Location     *string   `json:"location"`
+	Venue        *string   `json:"venue"`
+	Address      *string   `json:"address"`
+	StartDate    time.Time `json:"start_date"`
+	EndDate      time.Time `json:"end_date"`
+	CoverUrl     *string   `json:"cover_url"`
+	Tags         []string  `json:"tags"`
+	ImageGallery []string  `json:"image_gallery"`
+	TypeName     *string   `json:"type_name"`
+	Status       string    `json:"status"`
 }
 
 type Photographer struct {
-	ID          int32            `json:"id"`
-	Name        string           `json:"name"`
-	Avatar      *string          `json:"avatar"`
-	Description *string          `json:"description"`
-	Location    *string          `json:"location"`
-	Rating      pgtype.Numeric   `json:"rating"`
-	ReviewCount *int32           `json:"review_count"`
-	OrderCount  *int32           `json:"order_count"`
+	ID          int32          `json:"id"`
+	Name        string         `json:"name"`
+	Avatar      *string        `json:"avatar"`
+	Description *string        `json:"description"`
+	Location    *string        `json:"location"`
+	Rating      pgtype.Numeric `json:"rating"`
+	ReviewCount *int32         `json:"review_count"`
+	OrderCount  *int32         `json:"order_count"`
 }
 
 type Tag struct {
@@ -53,15 +55,16 @@ type Work struct {
 	Title          string    `json:"title"`
 	Images         []string  `json:"images"`
 	Description    *string   `json:"description"`
+	Status         string    `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
 type Service struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Price       int32  `json:"price"`
+	ID          int64   `json:"id"`
+	Name        string  `json:"name"`
+	Price       int32   `json:"price"`
 	Description *string `json:"description"`
-	Duration    int32  `json:"duration"`
+	Duration    int32   `json:"duration"`
 }
 
 type Review struct {
@@ -74,19 +77,24 @@ type Review struct {
 	Content        *string   `json:"content"`
 	Images         []string  `json:"images"`
 	CreatedAt      time.Time `json:"created_at"`
+	PhotographerName string  `json:"photographer_name,omitempty"`
 }
 
 // PhotographerWithTags is the result of GetRecommendedPhotographers / GetPhotographerById.
 type PhotographerWithTags struct {
-	ID          int32            `json:"id"`
-	Name        string           `json:"name"`
-	Avatar      *string          `json:"avatar"`
-	Description *string          `json:"description"`
-	Location    *string          `json:"location"`
-	Rating      pgtype.Numeric   `json:"rating"`
-	ReviewCount *int32           `json:"review_count"`
-	OrderCount  *int32           `json:"order_count"`
-	Tags        []string         `json:"tags"`
+	ID          int32          `json:"id"`
+	Name        string         `json:"name"`
+	Avatar      *string        `json:"avatar"`
+	Description *string        `json:"description"`
+	Location    *string        `json:"location"`
+	Rating      pgtype.Numeric `json:"rating"`
+	ReviewCount *int32         `json:"review_count"`
+	OrderCount  *int32         `json:"order_count"`
+	UserID      *int64         `json:"user_id"`
+	Mode        string         `json:"mode"`
+	MutualIntro *string        `json:"mutual_intro"`
+	Certified   bool           `json:"certified"`
+	Tags        []string       `json:"tags"`
 }
 
 // FeaturedWork is the result of GetFeaturedWorks.
@@ -96,6 +104,63 @@ type FeaturedWork struct {
 	Title            string    `json:"title"`
 	Images           []string  `json:"images"`
 	Description      *string   `json:"description"`
+	Status           string    `json:"status"`
 	CreatedAt        time.Time `json:"created_at"`
 	PhotographerName string    `json:"photographer_name"`
+}
+
+// Booking represents a booking record.
+type Booking struct {
+	ID             int64     `json:"id"`
+	PhotographerID int32     `json:"photographer_id"`
+	CoserID        int32     `json:"coser_id"`
+	ServiceID      int32     `json:"service_id"`
+	Date           time.Time `json:"date"`
+	Time           string    `json:"time"`
+	Status         string    `json:"status"`
+	TotalPrice     int32     `json:"total_price"`
+	Remarks        *string   `json:"remarks"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// BookingWithDetails embeds Booking and adds joined photographer/service fields.
+type BookingWithDetails struct {
+	Booking
+	PhotographerName   string `json:"photographer_name"`
+	PhotographerAvatar string `json:"photographer_avatar"`
+	PhotographerUserID *int64 `json:"photographer_user_id"`
+	ServiceName        string `json:"service_name"`
+	ServicePrice       int32  `json:"service_price"`
+}
+
+// FollowRow represents a row in the event_follows table.
+type FollowRow struct {
+	ID        int64     `json:"id"`
+	UserID    string    `json:"user_id"`
+	EventID   int64     `json:"event_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// FollowItemRow is the joined result of ListFollows.
+type FollowItemRow struct {
+	ID        int64     `json:"id"`
+	EventID   int64     `json:"event_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Name      string    `json:"name"`
+	Location  *string   `json:"location"`
+	Venue     *string   `json:"venue"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	CoverUrl  *string   `json:"cover_url"`
+	Status    string    `json:"status"`
+}
+
+// SubscriptionRow represents a row in the event_subscriptions table.
+type SubscriptionRow struct {
+	ID         int64  `json:"id"`
+	UserID     string `json:"user_id"`
+	EventID    int64  `json:"event_id"`
+	TemplateID string `json:"template_id"`
+	Status     string `json:"status"`
 }

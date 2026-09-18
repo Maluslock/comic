@@ -12,7 +12,10 @@
       <template v-else-if="event">
         <!-- Cover -->
         <view class="event-cover-wrap">
-          <image :src="event.cover" class="event-cover" mode="aspectFill" />
+          <view
+            class="event-cover"
+            :style="{ backgroundImage: 'url(' + event.cover + ')' }"
+          />
           <view class="cover-overlay" />
           <view class="back-btn" @click="goBack">
             <text class="back-arrow">‹</text>
@@ -22,6 +25,13 @@
             <view class="cover-status" v-if="statusText">
               <text class="status-dot" :class="event.status" />
               <text>{{ statusText }}</text>
+            </view>
+            <view
+              class="follow-btn"
+              :class="{ followed: isFollowed }"
+              @click.stop="onToggleFollow"
+            >
+              <text>{{ isFollowed ? '已关注' : '＋ 关注' }}</text>
             </view>
           </view>
         </view>
@@ -37,6 +47,10 @@
               <text class="info-label">地点</text>
               <text class="info-value">{{ event.location }} · {{ event.venue }}</text>
             </view>
+            <view v-if="event.address" class="info-row">
+              <text class="info-label">地址</text>
+              <text class="info-value">{{ event.address }}</text>
+            </view>
             <view v-if="event.description" class="info-row">
               <text class="info-label">简介</text>
               <text class="info-value desc-text">{{ event.description }}</text>
@@ -46,6 +60,26 @@
           <!-- Tags -->
           <view v-if="event.tags.length" class="tags-section">
             <view v-for="tag in event.tags" :key="tag" class="tag-item">{{ tag }}</view>
+          </view>
+
+          <!-- Image Gallery -->
+          <view v-if="event.imageGallery && event.imageGallery.length" class="gallery-section">
+            <swiper
+              class="gallery-swiper"
+              :indicator-dots="true"
+              :circular="false"
+              :autoplay="false"
+              :current="0"
+            >
+              <swiper-item
+                v-for="(img, idx) in event.imageGallery.slice(0, 3)"
+                :key="idx"
+              >
+                <view class="gallery-item">
+                  <image :src="img" class="gallery-img" mode="aspectFill" @error="onGalleryImgError(idx)" />
+                </view>
+              </swiper-item>
+            </swiper>
           </view>
 
           <!-- Countdown -->
@@ -117,16 +151,22 @@
 import { ref, onMounted } from 'vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import type { ComicEvent, Photographer, Work } from '@/types'
+import { apiGet } from '@/api/client'
+import { mapEventItem, mapPhotographerItem, mapWorkItem } from '@/utils/mappers'
+import { loadFollowedIds, toggleFollow } from '@/utils/follow'
+import { useUserStore } from '@/stores/user'
 
 interface EventDetailResponse {
   id: number
   name: string
   location: string
   venue: string
+  address?: string
   startDate: string
   endDate: string
   coverUrl: string
   tags: string[]
+  imageGallery?: string[]
   status: string
   typeName: string
   description: string
@@ -159,75 +199,33 @@ const featuredWorks = ref<Work[]>([])
 const statusText = ref('')
 const countdownDays = ref(0)
 
+const userStore = useUserStore()
+const isFollowed = ref(false)
+let id = ''   // 路由 eventId（string），onMounted 中赋值
+
 onMounted(async () => {
   const sysInfo = uni.getSystemInfoSync()
   statusBarHeight.value = sysInfo.statusBarHeight || 44
 
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
-  const eventId = currentPage?.options?.id as string
+  id = (currentPage?.options?.id as string) || ''
 
-  if (!eventId) { error.value = '缺少漫展ID'; loading.value = false; return }
+  if (!id) { error.value = '缺少漫展ID'; loading.value = false; return }
 
-  await loadEvent(eventId)
+  await loadEvent(id)
+  if (event.value) await initFollowState()
 })
 
 async function loadEvent(id: string) {
   try {
-    const res = await uni.request({
-      url: `http://localhost:8081/api/v1/events/${id}`,
-      method: 'GET',
-      timeout: 5000,
-    })
+    const d = await apiGet<EventDetailResponse>(`/v1/events/${id}`)
 
-    if (res.statusCode !== 200) {
-      throw new Error(`HTTP ${res.statusCode}`)
-    }
+    event.value = mapEventItem(d)
 
-    const d = res.data as EventDetailResponse
+    photographers.value = (d.photographers || []).map(mapPhotographerItem)
 
-    event.value = {
-      id: String(d.id),
-      name: d.name,
-      location: d.location,
-      venue: d.venue,
-      startDate: new Date(d.startDate).getTime(),
-      endDate: new Date(d.endDate).getTime(),
-      cover: d.coverUrl,
-      tags: d.tags,
-      photographerCount: d.photographers?.length || 0,
-      status: (d.status as ComicEvent['status']) || 'upcoming',
-    }
-
-    const desc = (d as any).description
-    if (desc) (event.value as any).description = desc
-
-    photographers.value = (d.photographers || []).map(p => ({
-      id: String(p.id),
-      name: p.name,
-      avatar: p.avatar,
-      role: 'photographer' as const,
-      description: '',
-      rating: p.rating,
-      reviewCount: p.reviewCount,
-      orderCount: p.orderCount,
-      location: p.location,
-      tags: p.tags,
-      works: [],
-      services: [],
-      reviews: [],
-      createdAt: Date.now(),
-    }))
-
-    featuredWorks.value = (d.featuredWorks || []).map(w => ({
-      id: String(w.id),
-      photographerId: '',
-      title: w.title,
-      images: w.images,
-      description: '',
-      tags: [],
-      createdAt: Date.now(),
-    }))
+    featuredWorks.value = (d.featuredWorks || []).map(mapWorkItem)
 
     if (event.value.status === 'ongoing') statusText.value = '进行中'
     else if (event.value.status === 'ended') statusText.value = '已结束'
@@ -237,9 +235,44 @@ async function loadEvent(id: string) {
     }
   } catch (e: unknown) {
     console.error('Load event detail failed:', e)
-    error.value = e instanceof Error ? e.message : '加载失败'
+    // Fallback: try mock data from store
+    const store = (await import('@/stores/home')).useHomeStore()
+    if (store.events.length === 0) {
+      await store.fetchHomeData()
+    }
+    const found = store.events.find(ev => String(ev.id) === id)
+    if (found) {
+      event.value = found
+      photographers.value = store.photographers
+      featuredWorks.value = store.featuredWorks
+      countdownDays.value = Math.max(0, Math.ceil((found.startDate - Date.now()) / 86400000))
+      statusText.value = found.status === 'ongoing' ? '进行中' : found.status === 'ended' ? '已结束' : ''
+    } else {
+      error.value = e instanceof Error ? e.message : '加载失败'
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function initFollowState() {
+  if (!userStore.user) { isFollowed.value = false; return }
+  const set = await loadFollowedIds(userStore.user.id)
+  isFollowed.value = set.has(id)   // id 是路由 eventId（string）
+}
+
+async function onToggleFollow() {
+  if (!userStore.user) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/event/detail?id=' + id }), 800)
+    return
+  }
+  try {
+    const newState = await toggleFollow(userStore.user.id, id, isFollowed.value)
+    isFollowed.value = newState
+    uni.showToast({ title: newState ? '关注成功' : '已取消关注', icon: 'none' })
+  } catch {
+    uni.showToast({ title: '操作失败，请重试', icon: 'none' })
   }
 }
 
@@ -250,6 +283,11 @@ function formatFullDate(ts: number): string {
 
 function goBack() {
   uni.navigateBack()
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function onGalleryImgError(_idx: number) {
+  // Silently ignore broken gallery images
 }
 </script>
 
@@ -282,6 +320,9 @@ function goBack() {
 .event-cover {
   width: 100%;
   height: 100%;
+  background-size: cover;
+  background-position: center top;
+  background-color: $dark-bg-secondary;
 }
 
 .cover-overlay {
@@ -341,6 +382,25 @@ function goBack() {
   &.upcoming { background: $neon-cyan; box-shadow: 0 0 8rpx $neon-cyan-glow; }
   &.ongoing { background: $success-color; box-shadow: 0 0 8rpx rgba($success-color, 0.5); }
   &.ended { background: $dark-text-tertiary; }
+}
+
+.follow-btn {
+  display: inline-flex;
+  align-items: center;
+  margin-top: $spacing-sm;
+  padding: 8rpx 28rpx;
+  font-size: 24rpx;
+  color: #fff;
+  background: rgba(168, 85, 247, 0.25);
+  border: 1rpx solid $neon-purple;
+  border-radius: $border-radius-xl;
+  transition: all 0.2s;
+
+  &.followed {
+    background: $neon-gradient;
+    border-color: transparent;
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
 }
 
 // Body
@@ -403,6 +463,29 @@ function goBack() {
   background: $neon-purple-dim;
   border: 1rpx solid rgba($neon-purple, 0.3);
   border-radius: $border-radius-xl;
+}
+
+// Gallery
+.gallery-section {
+  margin-top: $spacing-md;
+}
+
+.gallery-swiper {
+  height: 240rpx;
+  border-radius: $border-radius-md;
+  overflow: hidden;
+  border: 1rpx solid $dark-border;
+}
+
+.gallery-item {
+  width: 100%;
+  height: 100%;
+  background: $dark-bg-secondary;
+}
+
+.gallery-img {
+  width: 100%;
+  height: 100%;
 }
 
 // Countdown

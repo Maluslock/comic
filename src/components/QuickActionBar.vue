@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{
   items?: QuickAction[]
 }>(), {
   items: () => [
-    { icon: '◇', label: '漫展日历', url: '/pages/search/search' },
+    { icon: '◇', label: '漫展日历', url: '/pages/calendar/index' },
     { icon: '○', label: '摄影师', url: '/pages/photographer/list' },
     { icon: '△', label: '风格标签', url: '/pages/search/search' },
     { icon: '□', label: '我的预约', url: '/pages/order/list' },

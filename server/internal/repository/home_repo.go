@@ -36,7 +36,7 @@ func (r *HomeRepository) GetHomeData(ctx context.Context) (*HomeData, error) {
 	data.Banners = banners
 
 	// Fetch upcoming events
-	events, err := r.queries.GetUpcomingEvents(ctx, 5)
+	events, err := r.queries.GetUpcomingEvents(ctx, 50)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}

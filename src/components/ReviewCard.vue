@@ -51,10 +51,12 @@ function formatTime(timestamp: number): string {
 
 <style lang="scss" scoped>
 .review-card {
-  background: $bg-primary;
+  background: $dark-bg-card;
   border-radius: $border-radius-md;
   padding: $spacing-md;
   margin-bottom: $spacing-md;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.25);
+  border: 1rpx solid $dark-border;
 }
 
 .header {
@@ -76,6 +78,7 @@ function formatTime(timestamp: number): string {
 .user-name {
   font-size: $font-size-base;
   font-weight: 500;
+  color: $dark-text-primary;
 }
 
 .rating {
@@ -85,8 +88,8 @@ function formatTime(timestamp: number): string {
 
 .star {
   font-size: $font-size-sm;
-  color: #ddd;
-  
+  color: $dark-text-tertiary;
+
   &.active {
     color: $warning-color;
   }
@@ -94,12 +97,12 @@ function formatTime(timestamp: number): string {
 
 .time {
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .content {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
   margin-top: $spacing-sm;
   line-height: 1.6;
 }

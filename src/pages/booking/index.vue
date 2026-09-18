@@ -13,10 +13,12 @@
 
     <view class="section">
       <view class="section-title">选择日期</view>
-      <view class="date-picker" @click="pickDate">
-        <text class="date-value">{{ selectedDate || '请选择日期' }}</text>
-        <text class="date-arrow">›</text>
-      </view>
+      <picker mode="date" :value="selectedDate" @change="onDateChange">
+        <view class="date-picker">
+          <text class="date-value">{{ selectedDate || '请选择日期' }}</text>
+          <text class="date-arrow">›</text>
+        </view>
+      </picker>
     </view>
 
     <view class="section">
@@ -61,67 +63,94 @@
       </view>
     </view>
 
-    <picker mode="date" :value="selectedDate" @change="onDateChange">
-      <view class="picker-trigger"></view>
-    </picker>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import ServiceCard from '@/components/ServiceCard.vue'
-import { getServices, getTimeSlots } from '@/api/index'
+import { apiGet, apiPost, ApiError } from '@/api/client'
+import { useUserStore } from '@/stores/user'
 import type { Service } from '@/types'
+
+const ALL_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
+
+const userStore = useUserStore()
 
 const services = ref<Service[]>([])
 const selectedService = ref<Service | null>(null)
+const photographerId = ref('1')
+const photographerName = ref('摄影师')
+const photographerAvatar = ref('')
+const photographerLocation = ref('北京')
 const selectedDate = ref('')
 const selectedTime = ref('')
 const timeSlots = ref<string[]>([])
-const remark = ref('')
 const disabledTimes = ref<string[]>([])
+const remark = ref('')
 
 const canSubmit = computed(() => {
   return selectedService.value && selectedDate.value && selectedTime.value
 })
 
+onLoad((options: Record<string, string> | undefined) => {
+  const routePid = options?.photographerId
+  const storedPhotographerId = uni.getStorageSync('bookingPhotographerId')
+  photographerId.value = routePid || storedPhotographerId || '1'
+})
+
 onMounted(() => {
-  loadServices()
-  const today = new Date()
-  selectedDate.value = today.toISOString().split('T')[0]
-  loadTimeSlots(selectedDate.value)
-  
   const storedService = uni.getStorageSync('selectedService')
   if (storedService) {
     try {
       selectedService.value = JSON.parse(storedService)
     } catch {}
   }
+
+  loadServices()
+
+  const today = new Date()
+  selectedDate.value = today.toISOString().split('T')[0]
+  loadTimeSlots(selectedDate.value)
 })
 
 async function loadServices() {
-  services.value = await getServices()
-  if (!selectedService.value && services.value.length > 0) {
-    selectedService.value = services.value[0]
+  if (!photographerId.value) return
+  try {
+    const res = await apiGet<any>(`/v1/photographers/${photographerId.value}`)
+    services.value = (res.services || []).map((s: any) => ({
+      id: String(s.id), name: s.name, price: s.price,
+      description: s.description, duration: s.duration,
+    }))
+    photographerName.value = res.name || '摄影师'
+    photographerAvatar.value = res.avatar || ''
+    photographerLocation.value = res.location || '北京'
+    if (!selectedService.value && services.value.length) {
+      selectedService.value = services.value[0]
+    }
+  } catch {
+    uni.showToast({ title: '加载服务失败', icon: 'none' })
   }
 }
 
 async function loadTimeSlots(date: string) {
-  const slots = await getTimeSlots(date)
-  timeSlots.value = slots
-  disabledTimes.value = ['10:00', '15:00']
+  timeSlots.value = ALL_SLOTS
+  disabledTimes.value = []
+  if (!photographerId.value) return
+  try {
+    const res = await apiGet<{ occupied: string[] }>(`/v1/photographers/${photographerId.value}/timeslots`, { date })
+    disabledTimes.value = res.occupied || []
+  } catch {
+    // 后端不可达时不展示禁用状态（不阻塞预约提交——后端仍会做冲突兜底）
+  }
 }
 
 function selectService(service: Service) {
   selectedService.value = service
 }
 
-function pickDate() {
-  const picker = document.querySelector('.picker-trigger') as HTMLElement
-  picker?.click()
-}
-
-function onDateChange(e: any) {
+function onDateChange(e: { detail: { value: string } }) {
   selectedDate.value = e.detail.value
   selectedTime.value = ''
   loadTimeSlots(e.detail.value)
@@ -137,63 +166,72 @@ function selectTime(time: string) {
 }
 
 async function submitBooking() {
+  if (!userStore.isLoggedIn) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/booking/index' }), 800)
+    return
+  }
   if (!canSubmit.value) {
     uni.showToast({ title: '请完善预约信息', icon: 'none' })
     return
   }
-
   uni.showLoading({ title: '提交中...' })
   try {
-    await createBooking({
-      photographerId: '1',
-      coserId: 'user1',
-      serviceId: selectedService.value!.id,
+    await apiPost<{ id: number }>('/v1/bookings', {
+      photographerId: Number(photographerId.value),
+      coserId: Number(userStore.user?.id),
+      serviceId: Number(selectedService.value!.id),
       date: selectedDate.value,
       time: selectedTime.value,
-      remarks: remark.value
+      remarks: remark.value,
     })
-    
-    uni.hideLoading()
     uni.showToast({ title: '预约成功', icon: 'success' })
-    
-    setTimeout(() => {
-      uni.navigateTo({ url: '/pages/order/list' })
-    }, 1500)
-  } catch (error) {
+    setTimeout(() => uni.navigateTo({ url: '/pages/order/list' }), 800)
+  } catch (e) {
     uni.hideLoading()
-    uni.showToast({ title: '预约失败', icon: 'none' })
+    const code = e instanceof ApiError ? e.status : 0
+    uni.showToast({ title: code === 409 ? '该时段已被预约' : '预约失败', icon: 'none' })
+    return
+  } finally {
+    uni.hideLoading()
   }
-}
-
-async function createBooking(data: {
-  photographerId: string
-  coserId: string
-  serviceId: string
-  date: string
-  time: string
-  remarks?: string
-}) {
-  return new Promise(resolve => setTimeout(resolve, 1000))
 }
 </script>
 
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
   padding-bottom: 140rpx;
 }
 
 .section {
-  background: $bg-primary;
+  background: $dark-bg-card;
   margin-top: $spacing-md;
   padding: $spacing-md;
+  border: 1rpx solid $dark-border;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.2);
 }
 
 .section-title {
+  position: relative;
+  padding-left: 20rpx;
   font-size: $font-size-lg;
   font-weight: 600;
+  color: $dark-text-primary;
   margin-bottom: $spacing-md;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .date-picker {
@@ -201,18 +239,26 @@ async function createBooking(data: {
   justify-content: space-between;
   align-items: center;
   padding: $spacing-md;
-  background: $bg-secondary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.97);
+    border-color: $neon-purple-glow;
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
 }
 
 .date-value {
   font-size: $font-size-base;
-  color: $text-primary;
+  color: $dark-text-primary;
 }
 
 .date-arrow {
   font-size: $font-size-xl;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .time-slots {
@@ -223,36 +269,47 @@ async function createBooking(data: {
 
 .time-slot {
   padding: $spacing-sm $spacing-lg;
-  background: $bg-secondary;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
   font-size: $font-size-sm;
-  color: $text-secondary;
-  
+  color: $dark-text-secondary;
+
   &.active {
-    background: $primary-color;
+    background: $neon-purple;
     color: #fff;
+    border-color: $neon-purple;
+    box-shadow: 0 0 12rpx $neon-purple-glow;
   }
-  
+
   &.disabled {
-    background: #f0f0f0;
-    color: #ccc;
+    background: $dark-bg-card-hover;
+    color: $dark-text-tertiary;
+    opacity: 0.5;
   }
 }
 
 .remark-input {
   width: 100%;
+  box-sizing: border-box;
   height: 200rpx;
   padding: $spacing-md;
-  background: $bg-secondary;
+  background: $dark-bg-secondary;
+  color: $dark-text-primary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
   font-size: $font-size-base;
+
+  &::placeholder {
+    color: $dark-text-tertiary;
+  }
 }
 
 .remark-count {
   display: block;
   text-align: right;
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
   margin-top: $spacing-xs;
 }
 
@@ -269,8 +326,9 @@ async function createBooking(data: {
   align-items: center;
   padding: $spacing-md;
   padding-bottom: calc(#{$spacing-md} + env(safe-area-inset-bottom));
-  background: $bg-primary;
-  box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
+  background: $dark-bg-secondary;
+  border-top: 1rpx solid $dark-border;
+  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.3);
 }
 
 .total {
@@ -280,19 +338,19 @@ async function createBooking(data: {
 
 .total-label {
   font-size: $font-size-base;
-  color: $text-secondary;
+  color: $dark-text-secondary;
 }
 
 .total-price {
   font-size: $font-size-xxl;
   font-weight: 600;
-  color: $primary-color;
+  color: $neon-purple;
   margin-left: $spacing-xs;
 }
 
 .btn-primary {
   flex: 1;
-  background: $primary-color;
+  background: $neon-gradient;
   color: #fff;
   border-radius: $border-radius-lg;
   padding: $spacing-md;
@@ -300,9 +358,17 @@ async function createBooking(data: {
   font-size: $font-size-base;
   font-weight: 500;
   margin-left: $spacing-lg;
-  
+  box-shadow: 0 4rpx 16rpx $neon-purple-glow;
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
+
   &.disabled {
-    background: #ccc;
+    background: $dark-bg-card-hover;
+    color: $dark-text-tertiary;
+    box-shadow: none;
   }
 }
 

@@ -37,3 +37,22 @@ func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {
 	}
 	return items, nil
 }
+
+const getServiceById = `-- name: GetServiceById :one
+SELECT id, name, price, description, duration
+FROM services
+WHERE id = $1
+`
+
+func (q *Queries) GetServiceById(ctx context.Context, id int64) (Service, error) {
+	row := q.db.QueryRow(ctx, getServiceById, id)
+	var i Service
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Price,
+		&i.Description,
+		&i.Duration,
+	)
+	return i, err
+}

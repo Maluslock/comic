@@ -22,6 +22,18 @@
       }
     },
     {
+      "path": "pages/event/list",
+      "style": {
+        "navigationBarTitleText": "漫展列表"
+      }
+    },
+    {
+      "path": "pages/calendar/index",
+      "style": {
+        "navigationBarTitleText": "漫展日历"
+      }
+    },
+    {
       "path": "pages/search/search",
       "style": {
         "navigationBarTitleText": "搜索"
@@ -82,26 +94,105 @@
       }
     },
     {
+      "path": "pages/favorite/list",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/follow/list",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/photographer/activate",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/photographer/orders",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/photographer/cert-apply",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/photographer/works",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/photographer/profile-edit",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "个人中心"
       }
+    },
+    {
+      "path": "pages/profile/edit",
+      "style": {
+        "navigationBarTitleText": "编辑资料"
+      }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    },
+    {
+      "path": "pages/settings/doc",
+      "style": {
+        "navigationBarTitleText": "文档"
+      }
+    },
+    {
+      "path": "pages/settings/security",
+      "style": {
+        "navigationBarTitleText": "账号与安全"
+      }
+    },
+    {
+      "path": "pages/settings/blocks",
+      "style": {
+        "navigationBarTitleText": "黑名单管理"
+      }
+    },
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
     }
   ],
   "globalStyle": {
-    "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "漫展摄影",
-    "navigationBarBackgroundColor": "#ffffff",
-    "backgroundColor": "#f5f5f5",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "米拉漫展",
+    "navigationBarBackgroundColor": "#0a0a1a",
+    "backgroundColor": "#0a0a1a",
     "app-plus": {
-      "background": "#f5f5f5"
+      "background": "#0a0a1a"
     }
   },
   "tabBar": {
-    "color": "#999999",
-    "selectedColor": "#6366f1",
+    "color": "#64748b",
+    "selectedColor": "#a855f7",
     "borderStyle": "black",
-    "backgroundColor": "#ffffff",
+    "backgroundColor": "#12122a",
     "list": [
       {
         "pagePath": "pages/index/index",

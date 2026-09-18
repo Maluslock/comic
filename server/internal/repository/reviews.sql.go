@@ -42,3 +42,81 @@ func (q *Queries) GetReviewsByPhotographer(ctx context.Context, photographerID i
 	}
 	return items, nil
 }
+
+const listReviewsByUser = `-- name: ListReviewsByUser :many
+SELECT r.id, r.photographer_id, r.user_id, r.user_name, r.user_avatar, r.rating, r.content, r.images, r.created_at,
+       COALESCE(p.name, '')
+FROM reviews r
+LEFT JOIN photographers p ON p.id = r.photographer_id
+WHERE r.user_id = $1
+ORDER BY r.created_at DESC
+`
+
+func (q *Queries) ListReviewsByUser(ctx context.Context, userID int32) ([]Review, error) {
+	rows, err := q.db.Query(ctx, listReviewsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Review
+	for rows.Next() {
+		var i Review
+		if err := rows.Scan(
+			&i.ID,
+			&i.PhotographerID,
+			&i.UserID,
+			&i.UserName,
+			&i.UserAvatar,
+			&i.Rating,
+			&i.Content,
+			&i.Images,
+			&i.CreatedAt,
+			&i.PhotographerName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const createReview = `-- name: CreateReview :one
+INSERT INTO reviews (photographer_id, user_id, user_name, user_avatar, rating, content, images)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, photographer_id, user_id, user_name, user_avatar, rating, content, images, created_at
+`
+
+type CreateReviewParams struct {
+	PhotographerID int32    `json:"photographer_id"`
+	UserID         int32    `json:"user_id"`
+	UserName       *string  `json:"user_name"`
+	UserAvatar     *string  `json:"user_avatar"`
+	Rating         int32    `json:"rating"`
+	Content        *string  `json:"content"`
+	Images         []string `json:"images"`
+}
+
+func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error) {
+	row := q.db.QueryRow(ctx, createReview,
+		arg.PhotographerID,
+		arg.UserID,
+		arg.UserName,
+		arg.UserAvatar,
+		arg.Rating,
+		arg.Content,
+		arg.Images,
+	)
+	var i Review
+	err := row.Scan(
+		&i.ID,
+		&i.PhotographerID,
+		&i.UserID,
+		&i.UserName,
+		&i.UserAvatar,
+		&i.Rating,
+		&i.Content,
+		&i.Images,
+		&i.CreatedAt,
+	)
+	return i, err
+}

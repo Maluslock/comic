@@ -1,3 +1,7 @@
+DO $$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM tags) THEN
+
 -- Tags (13 from mock)
 INSERT INTO tags (name) VALUES
 ('日系'), ('古风'), ('暗黑'), ('清新'), ('科幻'), ('赛博朋克'),
@@ -39,8 +43,11 @@ INSERT INTO reviews (photographer_id, user_id, user_name, user_avatar, rating, c
 (1, 1, '小狐狸', 'https://api.dicebear.com/7.x/avataaars/svg?seed=coser1&backgroundColor=ffdfbf', 5, '摄影师非常专业，拍出来的效果超出预期！沟通也很顺畅，下次还会合作~'),
 (1, 2, '月华', 'https://api.dicebear.com/7.x/avataaars/svg?seed=coser2&backgroundColor=c9e9f6', 5, '光影处理太棒了，每张照片都像海报一样！强烈推荐！');
 
--- Banners (3 from event covers — seed for testing, real ones will be manually managed)
+-- Banners (3 from event covers — real images + SVG branded covers, verified 2026-08-05)
 INSERT INTO banners (image_url, title, link_type, link_id, sort_order) VALUES
-('https://picsum.photos/seed/comic1/750/360', '上海 CP30', 'event', 1, 0),
-('https://picsum.photos/seed/comic2/750/360', '成都 CD28', 'event', 2, 1),
-('https://picsum.photos/seed/comic3/750/360', '广州萤火虫', 'event', 3, 2);
+('https://cms3.chinajoy.net/157/upload/resources/image/103312.jpg', 'ChinaJoy 2026', 'event', 1, 0),
+('https://english.shanghai.gov.cn/cmsres/04/04acd83239cf4fa8a45c056e2b0f01c0/9c3f75159398444056f2b7e40b37e8ab.jpg', '2026 CCG EXPO', 'event', 2, 1),
+('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22750%22%20height%3D%22360%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23a855f7%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2306b6d4%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20fill%3D%22%230a0a1a%22%20width%3D%22750%22%20height%3D%22360%22%2F%3E%3Crect%20fill%3D%22url%28%23g%29%22%20x%3D%2240%22%20y%3D%22150%22%20width%3D%228%22%20height%3D%2244%22%20rx%3D%224%22%2F%3E%3Ctext%20fill%3D%22%23e2e8f0%22%20font-size%3D%2232%22%20font-family%3D%22system-ui%2Csans-serif%22%20font-weight%3D%22bold%22%20x%3D%2270%22%20y%3D%22182%22%3E%E7%AC%AC40%E5%B1%8A%E8%90%A4%E7%81%AB%E8%99%AB%E6%BC%AB%E5%B1%95%3C%2Ftext%3E%3Ctext%20fill%3D%22%2364748b%22%20font-size%3D%2216%22%20font-family%3D%22system-ui%2Csans-serif%22%20x%3D%2270%22%20y%3D%22218%22%3E%E5%B9%BF%E5%B7%9E%20%C2%B7%20%E4%BF%9D%E5%88%A9%E4%B8%96%E8%B4%B8%E5%8D%9A%E8%A7%88%E9%A6%86%3C%2Ftext%3E%3C%2Fsvg%3E', '第40届萤火虫漫展', 'event', 3, 2);
+
+END IF;
+END $$;

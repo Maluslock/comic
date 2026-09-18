@@ -48,10 +48,6 @@
               <text class="cta-marker">◆</text>
               <text>近期热门漫展</text>
             </view>
-            <view class="cta-btn cta-secondary" @click="goPhotographerList">
-              <text class="cta-marker">◇</text>
-              <text>浏览摄影师</text>
-            </view>
           </view>
         </view>
 
@@ -75,7 +71,10 @@
             indicator-color="rgba(255,255,255,0.2)"
           >
             <swiper-item v-for="(item, i) in store.banners" :key="i" @click="onBannerClick(i)">
-              <image :src="item.image" class="banner-image" mode="aspectFill" />
+              <view
+                class="banner-image"
+                :style="{ backgroundImage: 'url(' + item.image + ')' }"
+              />
               <view class="banner-overlay">
                 <text class="banner-title">{{ item.title }}</text>
               </view>
@@ -92,7 +91,7 @@
         <view class="section">
           <view class="section-header">
             <text class="section-title">近期漫展</text>
-            <text class="section-more" @click="goEventList">更多 ›</text>
+            <text class="section-more" @click="goEventMore">更多 ›</text>
           </view>
           <scroll-view scroll-x class="event-scroll" :show-scrollbar="false">
             <view class="event-list">
@@ -102,7 +101,10 @@
                 class="event-card"
                 @click="goEventDetail(event.id)"
               >
-                <image :src="event.cover" class="event-cover" mode="aspectFill" />
+                <view
+                  class="event-cover"
+                  :style="{ backgroundImage: 'url(' + event.cover + ')' }"
+                />
                 <view class="event-countdown-badge">
                   <text>{{ store.countdownDays(event.startDate) }}天后</text>
                 </view>
@@ -167,15 +169,15 @@
     </scroll-view>
 
     <!-- City Selector Popup -->
-    <view v-if="showCityPicker" class="city-popup-mask" @click="showCityPicker = false">
+    <view v-if="showCityPicker" class="city-popup-mask" @click="closeCityPicker">
       <view class="city-popup" @click.stop>
         <view class="city-popup-header">
           <text class="city-popup-title">选择城市</text>
-          <text class="city-popup-close" @click="showCityPicker = false">✕</text>
+          <text class="city-popup-close" @click="closeCityPicker">✕</text>
         </view>
         <view class="city-list">
           <view
-            v-for="city in cityList"
+            v-for="city in cityOptions"
             :key="city"
             class="city-option"
             :class="{ active: currentCity === city }"
@@ -192,18 +194,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
 import HomeSkeleton from '@/components/HomeSkeleton.vue'
 import { useHomeStore } from '@/stores/home'
 
 const store = useHomeStore()
+const { cityOptions } = storeToRefs(store)
 const statusBarHeight = ref(44)
-const currentCity = ref('上海')
+const currentCity = ref('全部')
 const unreadCount = ref(3)
 const showCityPicker = ref(false)
-
-const cityList = ['全部', '上海', '北京', '广州', '成都', '杭州']
 
 const nearestEvent = computed(() => {
   const upcoming = filteredEvents.value
@@ -239,7 +241,11 @@ function goPhotographerList() {
 }
 
 function goEventList() {
-  uni.navigateTo({ url: '/pages/search/search' })
+  uni.navigateTo({ url: '/pages/calendar/index' })
+}
+
+function goEventMore() {
+  uni.navigateTo({ url: '/pages/event/list' })
 }
 
 function goEventDetail(id: string) {
@@ -252,11 +258,26 @@ function goMessages() {
 
 function goCitySelect() {
   showCityPicker.value = true
+  lockPageScroll(true)
+}
+
+function closeCityPicker() {
+  showCityPicker.value = false
+  lockPageScroll(false)
 }
 
 function selectCity(city: string) {
   currentCity.value = city
-  showCityPicker.value = false
+  closeCityPicker()
+}
+
+function lockPageScroll(lock: boolean) {
+  // #ifdef H5
+  const pageEl = document.querySelector('.scroll-content') as HTMLElement | null
+  if (pageEl) {
+    pageEl.style.overflow = lock ? 'hidden' : ''
+  }
+  // #endif
 }
 
 const filteredEvents = computed(() => {
@@ -271,8 +292,11 @@ const filteredPhotographers = computed(() => {
 
 function onBannerClick(index: number) {
   const banner = store.banners[index]
-  if (banner && store.events[index]) {
-    goEventDetail(store.events[index].id)
+  if (banner && banner.linkId) {
+    const event = store.events.find(e => String(e.id) === String(banner.linkId))
+    if (event) {
+      goEventDetail(event.id)
+    }
   }
 }
 
@@ -518,6 +542,9 @@ function onQuickNav(_url: string) {}
 .banner-image {
   width: 100%;
   height: 100%;
+  background-size: cover;
+  background-position: center top;
+  background-color: $dark-bg-card;
 }
 
 .banner-overlay {
@@ -620,7 +647,9 @@ function onQuickNav(_url: string) {}
 .event-cover {
   width: 280rpx;
   height: 180rpx;
-  background: linear-gradient(135deg, $neon-purple-dim, rgba(6, 182, 212, 0.1));
+  background-size: cover;
+  background-position: center top;
+  background-color: $dark-bg-card;
 }
 
 .event-countdown-badge {
@@ -640,6 +669,10 @@ function onQuickNav(_url: string) {}
 }
 
 .event-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 26rpx;
   font-weight: 600;
   color: $dark-text-primary;
@@ -650,6 +683,7 @@ function onQuickNav(_url: string) {}
 }
 
 .event-location {
+  display: block;
   font-size: 22rpx;
   color: $dark-text-tertiary;
   overflow: hidden;
@@ -742,10 +776,15 @@ function onQuickNav(_url: string) {}
   z-index: 200;
   display: flex;
   align-items: flex-end;
+  padding-bottom: #{$tab-bar-height};
+  overscroll-behavior: contain;
 }
 
 .city-popup {
   width: 100%;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
   background: $dark-bg-secondary;
   border-radius: $border-radius-lg $border-radius-lg 0 0;
   padding-bottom: env(safe-area-inset-bottom);
@@ -772,6 +811,9 @@ function onQuickNav(_url: string) {}
 }
 
 .city-list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: $spacing-sm 0;
 }
 

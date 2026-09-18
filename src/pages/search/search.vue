@@ -2,11 +2,12 @@
   <view class="page">
     <view class="search-bar">
       <view class="search-input-wrap">
-        <text class="search-icon">🔍</text>
+        <image class="search-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
         <input 
           class="search-input" 
           v-model="keyword"
           placeholder="搜索摄影师、标签"
+          placeholder-class="search-placeholder"
           @confirm="handleSearch"
         />
         <text v-if="keyword" class="clear-btn" @click="clearKeyword">✕</text>
@@ -45,7 +46,7 @@
       </view>
     </view>
 
-    <view v-else class="search-result">
+    <view v-if="searched" class="search-result">
       <view class="result-header">
         <text class="result-count">找到 {{ photographers.length }} 位摄影师</text>
       </view>
@@ -57,7 +58,7 @@
         />
       </view>
       <view v-if="photographers.length === 0" class="empty">
-        <text class="empty-icon">📭</text>
+        <text class="empty-icon">暂无结果</text>
         <text class="empty-text">没有找到相关摄影师</text>
       </view>
     </view>
@@ -67,7 +68,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
-import { getPhotographers, getTags } from '@/api/index'
+import { apiGet } from '@/api/client'
+import { mapPhotographerItem } from '@/utils/mappers'
 import type { Photographer } from '@/types'
 
 const keyword = ref('')
@@ -76,6 +78,7 @@ const selectedTags = ref<string[]>([])
 const photographers = ref<Photographer[]>([])
 
 const hotKeywords = ['原神', '鬼灭之刃', '古风', '日系', '暗黑', '漫展跟拍']
+const searched = ref(false)
 
 onMounted(() => {
   const pages = getCurrentPages()
@@ -88,21 +91,30 @@ onMounted(() => {
 })
 
 async function loadTags() {
-  const res = await getTags()
-  tags.value = res
+  try {
+    const res = await apiGet<Array<{ id: number; name: string }>>('/v1/tags')
+    tags.value = (res || []).map(t => t.name)
+  } catch {
+    tags.value = []
+  }
 }
 
 async function handleSearch(kw?: string) {
-  const searchKeyword = kw || keyword.value
-  if (!searchKeyword && selectedTags.value.length === 0) return
-  
+  if (kw) keyword.value = kw
+  const searchKeyword = keyword.value
+  if (!searchKeyword && selectedTags.value.length === 0) {
+    searched.value = false
+    photographers.value = []
+    return
+  }
   uni.showLoading({ title: '搜索中...' })
   try {
-    const res = await getPhotographers({
-      keyword: searchKeyword,
-      tags: selectedTags.value.length > 0 ? selectedTags.value : undefined
-    })
-    photographers.value = res.list
+    const params: Record<string, string> = {}
+    if (searchKeyword) params.keyword = searchKeyword
+    if (selectedTags.value.length) params.tags = selectedTags.value.join(',')
+    const res = await apiGet<{ list: any[] }>('/v1/photographers', params)
+    photographers.value = (res.list || []).map(mapPhotographerItem)
+    searched.value = true
   } finally {
     uni.hideLoading()
   }
@@ -120,7 +132,9 @@ function toggleTag(tag: string) {
 
 function clearKeyword() {
   keyword.value = ''
+  selectedTags.value = []
   photographers.value = []
+  searched.value = false
 }
 
 function goBack() {
@@ -131,45 +145,56 @@ function goBack() {
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
 }
 
 .search-bar {
   display: flex;
   align-items: center;
   padding: $spacing-md;
-  background: $bg-primary;
+  background: $dark-bg-secondary;
 }
 
 .search-input-wrap {
   flex: 1;
   display: flex;
   align-items: center;
-  background: $bg-tertiary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-lg;
   padding: $spacing-sm $spacing-md;
 }
 
-.search-icon {
-  font-size: $font-size-base;
+.search-icon-svg {
+  width: 36rpx;
+  height: 36rpx;
   margin-right: $spacing-xs;
 }
 
 .search-input {
   flex: 1;
   font-size: $font-size-base;
+  color: $dark-text-primary;
+}
+
+.search-placeholder {
+  color: $dark-text-tertiary;
 }
 
 .clear-btn {
   font-size: $font-size-sm;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
   padding: $spacing-xs;
 }
 
 .cancel-btn {
   font-size: $font-size-base;
-  color: $text-secondary;
+  color: $neon-cyan;
   margin-left: $spacing-md;
+
+  &:active {
+    opacity: 0.6;
+  }
 }
 
 .hot-search {
@@ -181,8 +206,23 @@ function goBack() {
 }
 
 .section-title {
+  position: relative;
+  padding-left: 20rpx;
   font-size: $font-size-lg;
   font-weight: 600;
+  color: $dark-text-primary;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .hot-list {
@@ -193,14 +233,15 @@ function goBack() {
 
 .hot-item {
   padding: $spacing-sm $spacing-md;
-  background: $bg-primary;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-xl;
   font-size: $font-size-sm;
-  color: $text-secondary;
-  
+  color: $dark-text-secondary;
+
   &:active {
-    background: rgba($primary-color, 0.1);
-    color: $primary-color;
+    background: $neon-purple-dim;
+    color: $neon-purple;
   }
 }
 
@@ -212,16 +253,18 @@ function goBack() {
 
 .tag-item {
   padding: $spacing-sm $spacing-md;
-  background: $bg-primary;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-xl;
   font-size: $font-size-sm;
-  color: $text-secondary;
-  
+  color: $dark-text-secondary;
+
   &.active {
-    background: $primary-color;
+    background: $neon-purple;
     color: #fff;
+    border-color: $neon-purple;
   }
-  
+
   &:active {
     opacity: 0.8;
   }
@@ -237,10 +280,13 @@ function goBack() {
 
 .result-count {
   font-size: $font-size-sm;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .photographer-list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
   padding-bottom: $spacing-xl;
 }
 
@@ -254,10 +300,11 @@ function goBack() {
 .empty-icon {
   font-size: 80rpx;
   margin-bottom: $spacing-md;
+  color: $dark-text-tertiary;
 }
 
 .empty-text {
   font-size: $font-size-base;
-  color: $text-tertiary;
+  color: $dark-text-secondary;
 }
 </style>

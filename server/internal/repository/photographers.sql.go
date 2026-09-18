@@ -4,10 +4,11 @@ package repository
 
 import (
 	"context"
+	"errors"
 )
 
 const getRecommendedPhotographers = `-- name: GetRecommendedPhotographers :many
-SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count,
+SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count, p.user_id, p.mode, p.certified,
        array_agg(t.name) AS tags
 FROM photographers p
 LEFT JOIN photographer_tags pt ON p.id = pt.photographer_id
@@ -35,6 +36,9 @@ func (q *Queries) GetRecommendedPhotographers(ctx context.Context, limit int32) 
 			&i.Rating,
 			&i.ReviewCount,
 			&i.OrderCount,
+			&i.UserID,
+			&i.Mode,
+			&i.Certified,
 			&i.Tags,
 		); err != nil {
 			return nil, err
@@ -48,7 +52,7 @@ func (q *Queries) GetRecommendedPhotographers(ctx context.Context, limit int32) 
 }
 
 const getPhotographerById = `-- name: GetPhotographerById :one
-SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count,
+SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count, p.user_id, p.mode, p.certified, p.mutual_intro,
        array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL) AS tags
 FROM photographers p
 LEFT JOIN photographer_tags pt ON p.id = pt.photographer_id
@@ -69,7 +73,130 @@ func (q *Queries) GetPhotographerById(ctx context.Context, id int32) (Photograph
 		&i.Rating,
 		&i.ReviewCount,
 		&i.OrderCount,
+		&i.UserID,
+		&i.Mode,
+		&i.Certified,
+		&i.MutualIntro,
 		&i.Tags,
 	)
 	return i, err
+}
+
+const searchPhotographers = `-- name: SearchPhotographers :many
+SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count, p.user_id, p.mode, p.certified,
+       array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL) AS tags
+FROM photographers p
+LEFT JOIN photographer_tags pt ON p.id = pt.photographer_id
+LEFT JOIN tags t ON pt.tag_id = t.id
+WHERE ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.description ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR p.location ILIKE '%' || $2 || '%')
+  AND ($3::text IS NULL OR EXISTS (
+    SELECT 1 FROM photographer_tags pt2
+    JOIN tags t2 ON pt2.tag_id = t2.id
+    WHERE pt2.photographer_id = p.id AND t2.name = ANY(string_to_array($3, ','))
+  ))
+  AND (COALESCE(cardinality($6::bigint[]), 0) = 0 OR p.user_id IS NULL OR NOT (p.user_id = ANY($6::bigint[])))
+GROUP BY p.id
+ORDER BY p.rating DESC, p.order_count DESC
+LIMIT $4 OFFSET $5
+`
+
+type SearchPhotographersParams struct {
+	Keyword        *string `json:"keyword"`
+	Location       *string `json:"location"`
+	TagName        *string `json:"tag_name"`
+	Limit          int32   `json:"limit"`
+	Offset         int32   `json:"offset"`
+	ExcludeUserIDs []int64 `json:"exclude_user_ids"`
+}
+
+func (q *Queries) SearchPhotographers(ctx context.Context, arg SearchPhotographersParams) ([]PhotographerWithTags, error) {
+	rows, err := q.db.Query(ctx, searchPhotographers,
+		arg.Keyword,
+		arg.Location,
+		arg.TagName,
+		arg.Limit,
+		arg.Offset,
+		arg.ExcludeUserIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PhotographerWithTags
+	for rows.Next() {
+		var i PhotographerWithTags
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Avatar,
+			&i.Description,
+			&i.Location,
+			&i.Rating,
+			&i.ReviewCount,
+			&i.OrderCount,
+			&i.UserID,
+			&i.Mode,
+			&i.Certified,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertPhotographer = `-- name: InsertPhotographer :one
+INSERT INTO photographers (name, description, mode, mutual_intro, user_id, activated_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
+RETURNING id, name, avatar, description, location, rating, review_count, order_count, user_id
+`
+
+type InsertPhotographerParams struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Mode        string  `json:"mode"`
+	MutualIntro *string `json:"mutual_intro"`
+	UserID      *int64  `json:"user_id"`
+}
+
+func (q *Queries) InsertPhotographer(ctx context.Context, arg InsertPhotographerParams) (PhotographerWithTags, error) {
+	row := q.db.QueryRow(ctx, insertPhotographer, arg.Name, arg.Description, arg.Mode, arg.MutualIntro, arg.UserID)
+	var i PhotographerWithTags
+	err := row.Scan(&i.ID, &i.Name, &i.Avatar, &i.Description, &i.Location, &i.Rating, &i.ReviewCount, &i.OrderCount, &i.UserID)
+	return i, err
+}
+
+const getPhotographerByUserID = `-- name: GetPhotographerByUserID :one
+SELECT id, name, avatar, description, location, rating, review_count, order_count, user_id, mode, certified, mutual_intro
+FROM photographers WHERE user_id = $1
+`
+
+func (q *Queries) GetPhotographerByUserID(ctx context.Context, userID int64) (PhotographerWithTags, error) {
+	row := q.db.QueryRow(ctx, getPhotographerByUserID, userID)
+	var i PhotographerWithTags
+	err := row.Scan(&i.ID, &i.Name, &i.Avatar, &i.Description, &i.Location, &i.Rating, &i.ReviewCount, &i.OrderCount, &i.UserID, &i.Mode, &i.Certified, &i.MutualIntro)
+	return i, err
+}
+
+// ErrProfileNotFound is returned by UpdatePhotographerProfile when the UPDATE affects no rows.
+var ErrProfileNotFound = errors.New("photographer profile not found")
+
+const updatePhotographerProfile = `-- name: UpdatePhotographerProfile :exec
+UPDATE photographers SET name = $2, description = $3, location = $4, mode = $5, mutual_intro = $6, avatar = $7, updated_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error {
+	tag, err := q.db.Exec(ctx, updatePhotographerProfile, id, name, description, location, mode, mutualIntro, avatar)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrProfileNotFound
+	}
+	return nil
 }

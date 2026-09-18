@@ -4,13 +4,18 @@ package repository
 
 import (
 	"context"
+	"errors"
 )
 
+// ErrWorkNotFound is returned by DeleteWorkByID when the DELETE affects no rows.
+var ErrWorkNotFound = errors.New("work not found")
+
 const getFeaturedWorks = `-- name: GetFeaturedWorks :many
-SELECT w.id, w.photographer_id, w.title, w.images, w.description, w.created_at,
+SELECT w.id, w.photographer_id, w.title, w.images, w.description, w.status, w.created_at,
        p.name AS photographer_name
 FROM works w
 JOIN photographers p ON w.photographer_id = p.id
+WHERE w.status = 'active'
 ORDER BY w.created_at DESC
 LIMIT $1
 `
@@ -30,6 +35,7 @@ func (q *Queries) GetFeaturedWorks(ctx context.Context, limit int32) ([]Featured
 			&i.Title,
 			&i.Images,
 			&i.Description,
+			&i.Status,
 			&i.CreatedAt,
 			&i.PhotographerName,
 		); err != nil {
@@ -44,9 +50,9 @@ func (q *Queries) GetFeaturedWorks(ctx context.Context, limit int32) ([]Featured
 }
 
 const getWorksByPhotographer = `-- name: GetWorksByPhotographer :many
-SELECT id, photographer_id, title, images, description, created_at
+SELECT id, photographer_id, title, images, description, status, created_at
 FROM works
-WHERE photographer_id = $1
+WHERE photographer_id = $1 AND status = 'active'
 ORDER BY created_at DESC
 `
 
@@ -65,6 +71,7 @@ func (q *Queries) GetWorksByPhotographer(ctx context.Context, photographerID int
 			&i.Title,
 			&i.Images,
 			&i.Description,
+			&i.Status,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -75,4 +82,116 @@ func (q *Queries) GetWorksByPhotographer(ctx context.Context, photographerID int
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAllWorksByPhotographer = `-- name: GetAllWorksByPhotographer :many
+SELECT id, photographer_id, title, images, description, status, created_at
+FROM works
+WHERE photographer_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetAllWorksByPhotographer(ctx context.Context, photographerID int32) ([]Work, error) {
+	rows, err := q.db.Query(ctx, getAllWorksByPhotographer, photographerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Work
+	for rows.Next() {
+		var i Work
+		if err := rows.Scan(
+			&i.ID,
+			&i.PhotographerID,
+			&i.Title,
+			&i.Images,
+			&i.Description,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertWork = `-- name: InsertWork :one
+INSERT INTO works (photographer_id, title, images, description)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+func (q *Queries) InsertWork(ctx context.Context, photographerID int64, title string, images []string, description string) (int64, error) {
+	var id int64
+	err := q.db.QueryRow(ctx, insertWork, photographerID, title, images, &description).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+const updateWorkByIDAndPhotographer = `-- name: UpdateWorkByIDAndPhotographer :exec
+UPDATE works
+SET title = $3, images = $4, description = $5, updated_at = NOW()
+WHERE id = $1 AND photographer_id = $2
+`
+
+func (q *Queries) UpdateWorkByIDAndPhotographer(ctx context.Context, id, photographerID int64, title string, images []string, description string) error {
+	tag, err := q.db.Exec(ctx, updateWorkByIDAndPhotographer, id, photographerID, title, images, &description)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrWorkNotFound
+	}
+	return nil
+}
+
+const deleteWorkByID = `-- name: DeleteWorkByID :exec
+DELETE FROM works
+WHERE id = $1
+`
+
+func (q *Queries) DeleteWorkByID(ctx context.Context, id int64) error {
+	tag, err := q.db.Exec(ctx, deleteWorkByID, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrWorkNotFound
+	}
+	return nil
+}
+
+const deleteWorkByIDAndPhotographer = `-- name: DeleteWorkByIDAndPhotographer :exec
+DELETE FROM works
+WHERE id = $1 AND photographer_id = $2
+`
+
+func (q *Queries) DeleteWorkByIDAndPhotographer(ctx context.Context, id, photographerID int64) error {
+	tag, err := q.db.Exec(ctx, deleteWorkByIDAndPhotographer, id, photographerID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrWorkNotFound
+	}
+	return nil
+}
+
+const getWorkPhotographerID = `-- name: GetWorkPhotographerID :one
+SELECT photographer_id FROM works WHERE id = $1
+`
+
+func (q *Queries) GetWorkPhotographerID(ctx context.Context, id int64) (int32, error) {
+	var photographerID int32
+	err := q.db.QueryRow(ctx, getWorkPhotographerID, id).Scan(&photographerID)
+	if err != nil {
+		return 0, err
+	}
+	return photographerID, nil
 }

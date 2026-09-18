@@ -31,32 +31,34 @@ defineEmits<{
 .service-card {
   display: flex;
   align-items: flex-start;
-  background: $bg-primary;
+  background: $dark-bg-card;
   border-radius: $border-radius-md;
   padding: $spacing-md;
   margin-bottom: $spacing-sm;
   border: 2rpx solid transparent;
-  
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.2);
+
   &.active {
-    border-color: $primary-color;
-    background: rgba($primary-color, 0.05);
+    border-color: $neon-purple-glow;
+    background: $neon-purple-dim;
+    box-shadow: 0 0 16rpx $neon-purple-glow;
   }
 }
 
 .checkbox {
   width: 40rpx;
   height: 40rpx;
-  border: 2rpx solid $border-color;
+  border: 2rpx solid $dark-border;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-right: $spacing-md;
-  
+
   &.checked {
-    background: $primary-color;
-    border-color: $primary-color;
+    background: $neon-purple;
+    border-color: $neon-purple;
   }
 }
 
@@ -78,23 +80,24 @@ defineEmits<{
 .name {
   font-size: $font-size-base;
   font-weight: 600;
+  color: $dark-text-primary;
 }
 
 .price {
   font-size: $font-size-lg;
   font-weight: 600;
-  color: $primary-color;
+  color: $neon-purple;
 }
 
 .desc {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
   margin-top: $spacing-xs;
 }
 
 .duration {
   font-size: $font-size-xs;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
   margin-top: $spacing-xs;
 }
 </style>

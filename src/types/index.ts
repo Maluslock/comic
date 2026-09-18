@@ -3,7 +3,9 @@ export interface User {
   name: string
   avatar: string
   role: 'photographer' | 'coser'
+  photographerId?: number
   phone?: string
+  bio?: string
   description?: string
   tags: string[]
   location?: string
@@ -17,6 +19,7 @@ export interface Photographer extends User {
   rating: number
   reviewCount: number
   orderCount: number
+  userId?: number
 }
 
 export interface Work {
@@ -27,6 +30,7 @@ export interface Work {
   description?: string
   tags: string[]
   createdAt: number
+  photographerName?: string
 }
 
 export interface Service {
@@ -87,12 +91,15 @@ export interface ComicEvent {
   name: string
   location: string
   venue: string
+  address?: string
   startDate: number
   endDate: number
   cover: string
   tags: string[]
+  imageGallery?: string[]
   photographerCount: number
   status: 'upcoming' | 'ongoing' | 'ended'
+  description?: string
 }
 
 // Backend HomeResponse DTO types

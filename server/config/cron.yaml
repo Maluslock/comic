@@ -1,0 +1,33 @@
+# 定时任务配置 — 米拉漫展数据抓取调度
+# ingest 程序启动时读取本文件，注册 cron 任务，按 schedule 触发执行。
+# schedule 使用标准 5 段 cron 表达式: 分 时 日 月 周
+#   "0 3 * * *"  = 每天 03:00
+#   "30 2,14 * * *" = 每天 02:30 和 14:30
+tasks:
+  # nyato(喵特) 漫展列表同步 — 每天凌晨 3 点全量抓取 5 页
+  - name: nyato-daily-full
+    schedule: "0 3 * * *"
+    source: nyato
+    pages: 5
+    url: "https://www.nyato.com/manzhan"
+    enabled: true
+
+  # nyato 增量补充 — 每天 14:30 再抓 2 页，捕获白天新增的展会
+  - name: nyato-afternoon-incremental
+    schedule: "30 14 * * *"
+    source: nyato
+    pages: 2
+    url: "https://www.nyato.com/manzhan"
+    enabled: true
+
+  # 过期事件清理 — 每天 01:00 标记已结束展会 (del_flag)
+  - name: expire-cleanup
+    schedule: "0 1 * * *"
+    source: expire
+    enabled: true
+
+  # B站活动源 (best-effort, 目前返回空)
+  - name: bilibili-sync
+    schedule: "0 4 * * *"
+    source: bilibili
+    enabled: false

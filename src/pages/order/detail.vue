@@ -11,8 +11,8 @@
     </view>
 
     <scroll-view scroll-y class="content">
-      <view class="status-card">
-        <text class="status-icon">📅</text>
+      <view class="status-card" :class="order.status">
+        <text class="status-icon">◆</text>
         <text class="status-text">{{ getStatusText(order.status) }}</text>
         <text class="order-id">订单号：{{ order.id }}</text>
       </view>
@@ -23,7 +23,7 @@
           <image :src="order.photographerAvatar" class="avatar" mode="aspectFill" />
           <view class="info">
             <text class="name">{{ order.photographerName }}</text>
-            <text class="location">📍 {{ order.location }}</text>
+            <text class="location">{{ order.location }}</text>
           </view>
           <view class="btn-outline" @click="goChat">联系</view>
         </view>
@@ -79,7 +79,7 @@
 
     <view class="footer">
       <view 
-        v-if="order.status === 'pending'" 
+        v-if="order.status === 'pending' || order.status === 'confirmed'" 
         class="btn-outline"
         @click="cancelOrder"
       >
@@ -112,22 +112,100 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
+import { useUserStore } from '@/stores/user'
+
+interface OrderDetail {
+  id: string
+  photographerId?: string
+  photographerUserId?: number
+  photographerName: string
+  photographerAvatar: string
+  location: string
+  serviceId?: string
+  serviceName: string
+  duration: number
+  date: string
+  time: string
+  totalPrice: number
+  status: string
+  remark: string
+  createTime: string | number
+}
 
 const statusBarHeight = ref(44)
 
-const order = ref<any>({
-  id: 'BK20240101001',
-  photographerName: '光影行者',
-  photographerAvatar: 'https://neeko-copilot.bytedance.net/api/text_to_image?prompt=professional%20photographer%20avatar%20portrait%20studio%20lighting&image_size=square',
-  location: '北京',
-  serviceName: '进阶套餐',
-  duration: 240,
-  date: '2024-01-15',
-  time: '14:00',
-  remark: '希望能拍一些动感的动作',
-  totalPrice: 699,
+const defaultOrder: OrderDetail = {
+  id: '',
+  photographerName: '未知摄影师',
+  photographerAvatar: '',
+  location: '',
+  serviceName: '未知服务',
+  duration: 0,
+  date: '',
+  time: '',
+  remark: '',
+  totalPrice: 0,
   status: 'pending',
-  createTime: '2024-01-01 10:30:00'
+  createTime: ''
+}
+
+const order = ref<OrderDetail>({ ...defaultOrder })
+const userStore = useUserStore()
+
+onLoad(async (options: Record<string, string> | undefined) => {
+  const bookingId = options?.id
+  if (!bookingId) {
+    uni.showToast({ title: '订单不存在', icon: 'none' })
+    return
+  }
+
+  let found: OrderDetail | undefined
+
+  if (userStore.isLoggedIn && userStore.user) {
+    try {
+      const res = await apiGet<any[]>(`/v1/bookings/${userStore.user.id}`)
+      const serverOrder = (res || []).find((b: any) => String(b.id) === bookingId)
+      if (serverOrder) {
+        found = {
+          id: String(serverOrder.id),
+          photographerId: String(serverOrder.photographerId),
+          photographerUserId: serverOrder.photographerUserId,
+          photographerName: serverOrder.photographerName || `摄影师${serverOrder.photographerId}`,
+          photographerAvatar: serverOrder.photographerAvatar || '',
+          location: serverOrder.location || '',
+          serviceId: String(serverOrder.serviceId),
+          serviceName: serverOrder.serviceName || `服务${serverOrder.serviceId}`,
+          duration: serverOrder.duration || 0,
+          date: serverOrder.date,
+          time: serverOrder.time,
+          totalPrice: serverOrder.totalPrice || 0,
+          status: serverOrder.status || 'pending',
+          remark: serverOrder.remarks || '',
+          createTime: serverOrder.createdAt || Date.now()
+        }
+      }
+    } catch {
+      // Ignore API errors, fall through to storage
+    }
+  }
+
+  if (!found) {
+    try {
+      const storedJson = uni.getStorageSync('bookings') || '[]'
+      const storedBookings: OrderDetail[] = JSON.parse(storedJson)
+      found = storedBookings.find((b: OrderDetail) => String(b.id) === bookingId)
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  if (found) {
+    order.value = found
+  } else {
+    uni.showToast({ title: '订单不存在', icon: 'none' })
+  }
 })
 
 onMounted(() => {
@@ -149,22 +227,49 @@ function goBack() {
   uni.navigateBack()
 }
 
-function goChat() {
-  uni.navigateTo({ url: '/pages/chat/index' })
+async function goChat() {
+  if (!userStore.isLoggedIn || !userStore.user) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/order/list' }), 800)
+    return
+  }
+  if (!order.value.photographerId) {
+    uni.showToast({ title: '订单信息缺失', icon: 'none' })
+    return
+  }
+  try {
+    const res = await apiPost<{ id: number }>('/v1/chat/sessions', {
+      userId: Number(userStore.user.id),
+      otherUserId: Number(order.value.photographerUserId || order.value.photographerId)
+    })
+    uni.navigateTo({
+      url: `/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(order.value.photographerName)}&peerAvatar=${encodeURIComponent(order.value.photographerAvatar || '')}`
+    })
+  } catch {
+    uni.showToast({ title: '无法发起会话', icon: 'none' })
+  }
+}
+
+async function updateStatus(newStatus: 'confirmed' | 'completed' | 'cancelled') {
+  if (!order.value.id) return
+  uni.showLoading({ title: '提交中...' })
+  try {
+    await apiPut(`/v1/bookings/${order.value.id}/status`, { status: newStatus })
+    order.value = { ...order.value, status: newStatus }
+    uni.showToast({ title: '操作成功', icon: 'success' })
+  } catch (e) {
+    const code = e instanceof ApiError ? e.status : 0
+    uni.showToast({ title: code === 409 ? '操作不允许' : '操作失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
 }
 
 function cancelOrder() {
   uni.showModal({
     title: '确认取消',
     content: '确定要取消这个预约吗？',
-    success: (res) => {
-      if (res.confirm) {
-        uni.showToast({ title: '已取消', icon: 'success' })
-        setTimeout(() => {
-          uni.navigateBack()
-        }, 1500)
-      }
-    }
+    success: (res) => { if (res.confirm) updateStatus('cancelled') }
   })
 }
 
@@ -172,26 +277,19 @@ function confirmOrder() {
   uni.showModal({
     title: '确认完成',
     content: '确认拍摄已完成？',
-    success: (res) => {
-      if (res.confirm) {
-        uni.showToast({ title: '已确认', icon: 'success' })
-        setTimeout(() => {
-          uni.navigateBack()
-        }, 1500)
-      }
-    }
+    success: (res) => { if (res.confirm) updateStatus('completed') }
   })
 }
 
 function goReview() {
-  uni.navigateTo({ url: '/pages/comment/index' })
+  uni.navigateTo({ url: `/pages/comment/index?photographerId=${order.value.photographerId}` })
 }
 </script>
 
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $bg-page;
+  background: $dark-bg-primary;
 }
 
 .header {
@@ -199,7 +297,8 @@ function goReview() {
   align-items: center;
   justify-content: space-between;
   padding: $spacing-sm $spacing-md;
-  background: $bg-primary;
+  background: $dark-bg-secondary;
+  border-bottom: 1rpx solid $dark-border;
 }
 
 .back-btn {
@@ -212,12 +311,13 @@ function goReview() {
 
 .back-icon {
   font-size: 48rpx;
-  color: $text-primary;
+  color: $dark-text-primary;
 }
 
 .header-title {
   font-size: $font-size-lg;
   font-weight: 600;
+  color: $dark-text-primary;
 }
 
 .placeholder {
@@ -229,16 +329,33 @@ function goReview() {
 }
 
 .status-card {
-  background: $primary-color;
   padding: $spacing-lg;
   display: flex;
   flex-direction: column;
   align-items: center;
+
+  &.confirmed {
+    background: $neon-gradient;
+  }
+
+  &.pending {
+    background: $neon-cyan;
+  }
+
+  &.completed {
+    background: $success-color;
+  }
+
+  &.cancelled {
+    background: $dark-bg-secondary;
+    border-bottom: 1rpx solid $dark-border;
+  }
 }
 
 .status-icon {
   font-size: 80rpx;
   margin-bottom: $spacing-sm;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .status-text {
@@ -254,15 +371,33 @@ function goReview() {
 }
 
 .section {
-  background: $bg-primary;
-  margin-top: $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-lg;
+  margin: $spacing-md;
   padding: $spacing-md;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2);
 }
 
 .section-title {
   font-size: $font-size-base;
   font-weight: 600;
   margin-bottom: $spacing-md;
+  color: $dark-text-primary;
+  padding-left: 20rpx;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 28rpx;
+    background: $neon-gradient;
+    border-radius: 3rpx;
+  }
 }
 
 .photographer-info {
@@ -285,25 +420,34 @@ function goReview() {
   font-size: $font-size-lg;
   font-weight: 500;
   display: block;
+  color: $dark-text-primary;
 }
 
 .location {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
   display: block;
   margin-top: 4rpx;
 }
 
 .btn-outline {
   padding: $spacing-sm $spacing-md;
-  border: 2rpx solid $primary-color;
-  color: $primary-color;
+  border: 2rpx solid $neon-purple;
+  color: $neon-purple;
   border-radius: $border-radius-md;
   font-size: $font-size-sm;
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.97);
+    border-color: $neon-purple-glow;
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
 }
 
 .service-detail {
-  background: $bg-secondary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
   padding: $spacing-sm;
 }
@@ -312,24 +456,25 @@ function goReview() {
   display: flex;
   justify-content: space-between;
   padding: $spacing-sm;
-  
+
   &:not(:last-child) {
-    border-bottom: 1rpx solid $border-color;
+    border-bottom: 1rpx solid $dark-border;
   }
 }
 
 .detail-label {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
 }
 
 .detail-value {
   font-size: $font-size-sm;
-  color: $text-primary;
+  color: $dark-text-primary;
 }
 
 .price-detail {
-  background: $bg-secondary;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;
   padding: $spacing-sm;
 }
@@ -338,9 +483,9 @@ function goReview() {
   display: flex;
   justify-content: space-between;
   padding: $spacing-sm;
-  
+
   &.total {
-    border-top: 1rpx solid $border-color;
+    border-top: 1rpx solid $dark-border;
     margin-top: $spacing-sm;
     padding-top: $spacing-md;
   }
@@ -348,23 +493,23 @@ function goReview() {
 
 .price-label {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: $dark-text-secondary;
 }
 
 .price-value {
   font-size: $font-size-sm;
-  color: $text-primary;
-  
+  color: $dark-text-primary;
+
   .total & {
     font-size: $font-size-lg;
     font-weight: 600;
-    color: $primary-color;
+    color: $neon-purple;
   }
 }
 
 .order-time {
   font-size: $font-size-sm;
-  color: $text-tertiary;
+  color: $dark-text-tertiary;
 }
 
 .bottom-space {
@@ -381,15 +526,21 @@ function goReview() {
   gap: $spacing-md;
   padding: $spacing-md;
   padding-bottom: calc(#{$spacing-md} + env(safe-area-inset-bottom));
-  background: $bg-primary;
-  box-shadow: 0 -2rpx 10rpx rgba(0, 0, 0, 0.05);
+  background: $dark-bg-secondary;
+  border-top: 1rpx solid $dark-border;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary {
   padding: $spacing-sm $spacing-xl;
-  background: $primary-color;
+  background: $neon-gradient;
   color: #fff;
   border-radius: $border-radius-lg;
   font-size: $font-size-base;
+
+  &:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 12rpx $neon-purple-glow;
+  }
 }
 </style>

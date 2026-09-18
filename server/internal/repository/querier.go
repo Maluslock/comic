@@ -4,15 +4,19 @@ package repository
 
 import (
 	"context"
+	"time"
 )
 
 // Querier is the interface satisfied by *Queries and *Queries.WithTx(...).
 type Querier interface {
 	// Events
 	GetUpcomingEvents(ctx context.Context, limit int32) ([]ComicEvent, error)
+	GetEventById(ctx context.Context, id int64) (ComicEvent, error)
 	GetEventByAllcppId(ctx context.Context, allcppID int32) (ComicEvent, error)
 	UpsertEvent(ctx context.Context, arg UpsertEventParams) (UpsertEventRow, error)
+	UpsertEventFromIngest(ctx context.Context, arg UpsertEventFromIngestParams) (int64, error)
 	SearchEvents(ctx context.Context, arg SearchEventsParams) ([]ComicEvent, error)
+	GetAllEvents(ctx context.Context, limit, offset int32) ([]ComicEvent, error)
 
 	// Banners
 	GetActiveBanners(ctx context.Context, limit int32) ([]Banner, error)
@@ -20,19 +24,63 @@ type Querier interface {
 	// Photographers
 	GetRecommendedPhotographers(ctx context.Context, limit int32) ([]PhotographerWithTags, error)
 	GetPhotographerById(ctx context.Context, id int32) (PhotographerWithTags, error)
+	SearchPhotographers(ctx context.Context, arg SearchPhotographersParams) ([]PhotographerWithTags, error)
+
+	// Photographer activation
+	InsertPhotographer(ctx context.Context, arg InsertPhotographerParams) (PhotographerWithTags, error)
+	GetPhotographerByUserID(ctx context.Context, userID int64) (PhotographerWithTags, error)
+	UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error
+	GetBookingsByPhotographer(ctx context.Context, photographerID int32) ([]BookingWithCoser, error)
 
 	// Works
 	GetFeaturedWorks(ctx context.Context, limit int32) ([]FeaturedWork, error)
 	GetWorksByPhotographer(ctx context.Context, photographerID int32) ([]Work, error)
+	GetAllWorksByPhotographer(ctx context.Context, photographerID int32) ([]Work, error)
 
 	// Tags
 	GetHotTags(ctx context.Context, limit int32) ([]Tag, error)
+	GetAllTags(ctx context.Context) ([]TagRow, error)
 
 	// Services
 	GetServices(ctx context.Context) ([]Service, error)
 
 	// Reviews
 	GetReviewsByPhotographer(ctx context.Context, photographerID int32) ([]Review, error)
+	CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error)
+
+	// Bookings
+	CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error)
+	GetBookingsByUser(ctx context.Context, coserID int32) ([]Booking, error)
+	GetBookingByID(ctx context.Context, id int64) (Booking, error)
+	GetOccupiedTimesByPhotographerDate(ctx context.Context, photographerID int32, date time.Time) ([]string, error)
+	CountConflictBookings(ctx context.Context, photographerID int32, date time.Time, timeStr string) (int64, error)
+	UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error)
+	GetBookingsByUserWithDetails(ctx context.Context, coserID int32) ([]BookingWithDetails, error)
+
+	// Follows
+	InsertFollow(ctx context.Context, arg InsertFollowParams) (FollowRow, error)
+	DeleteFollow(ctx context.Context, arg DeleteFollowParams) error
+	ListFollows(ctx context.Context, arg ListFollowsParams) ([]FollowItemRow, error)
+
+	// Subscriptions
+	InsertSubscription(ctx context.Context, arg InsertSubscriptionParams) (SubscriptionRow, error)
+
+	// Favorites
+	InsertFavorite(ctx context.Context, userID int64, photographerID int32) error
+	DeleteFavorite(ctx context.Context, userID int64, photographerID int32) error
+	ListFavorites(ctx context.Context, userID int64) ([]FavoriteRow, error)
+
+	// Chat
+	UpsertSession(ctx context.Context, user1ID, user2ID int64) (int64, error)
+	ListSessions(ctx context.Context, userID int64) ([]SessionRow, error)
+	ListMessages(ctx context.Context, sessionID int64) ([]MessageRow, error)
+	InsertMessage(ctx context.Context, sessionID, senderID int64, content string) (int64, error)
+
+	// Notifications
+	InsertNotification(ctx context.Context, userID int64, typ, title, content string, linkType *string, linkID *int64) (int64, error)
+	InsertBroadcast(ctx context.Context, typ, title, content string) (int64, error)
+	ListNotifications(ctx context.Context, userID int64) ([]NotificationRow, error)
+	ListAllNotifications(ctx context.Context, limit, offset int) ([]NotificationRow, int64, error)
 }
 
 // Compile-time check that *Queries implements Querier.

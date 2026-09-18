@@ -60,26 +60,36 @@ func (f *bookingRecorder) Exec(context.Context, string, ...any) (pgconn.CommandT
 	return pgconn.CommandTag{}, errors.New("bookingRecorder: Exec not expected")
 }
 
-func createBookingTotalPriceArg(t *testing.T, db *bookingRecorder) int32 {
+func createBookingArg(t *testing.T, db *bookingRecorder, idx int) any {
 	t.Helper()
 	for _, a := range db.args {
-		if len(a) == 8 {
-			v, ok := a[6].(int32)
-			if !ok {
-				t.Fatalf("TotalPrice arg type = %T, want int32", a[6])
+		if len(a) == 12 {
+			if idx < 0 || idx >= len(a) {
+				t.Fatalf("createBookingArg: idx %d out of range for %d args", idx, len(a))
 			}
-			return v
+			return a[idx]
 		}
 	}
 	t.Fatalf("CreateBooking call not found among %d QueryRow calls", len(db.args))
-	return 0
+	return nil
+}
+
+func createBookingInt32Arg(t *testing.T, db *bookingRecorder, idx int) int32 {
+	t.Helper()
+	v, ok := createBookingArg(t, db, idx).(int32)
+	if !ok {
+		t.Fatalf("CreateBooking arg[%d] type = %T, want int32", idx, v)
+	}
+	return v
 }
 
 func TestCreateBooking_WritesServicePrice(t *testing.T) {
+	owner := int64(2)
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
-		fakeRow{values: []any{int64(1), "基础套餐", int32(399), (*string)(nil), int32(120)}},
+		fakeRow{values: []any{owner}}, // GetServicePhotographerID -> 摄影师 2（本人）
+		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120)}},
 		fakeRow{values: bookingScanValues(9, "pending")},
 		fakeRow{err: errors.New("no photographer profile")},
 	}}
@@ -95,32 +105,190 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 		t.Fatalf("Create unexpected error: %v", err)
 	}
 
-	if got := createBookingTotalPriceArg(t, db); got != 399 {
+	if got := createBookingInt32Arg(t, db, 6); got != 399 {
 		t.Errorf("CreateBooking TotalPrice = %d, want 399 (service price)", got)
+	}
+	if got := createBookingArg(t, db, 8); got != "fixed" {
+		t.Errorf("CreateBooking PriceMode = %v, want fixed", got)
+	}
+	name, ok := createBookingArg(t, db, 10).(*string)
+	if !ok || name == nil || *name != "基础套餐" {
+		t.Errorf("CreateBooking ServiceName = %v, want 基础套餐", createBookingArg(t, db, 10))
+	}
+	duration, ok := createBookingArg(t, db, 11).(*int32)
+	if !ok || duration == nil || *duration != 120 {
+		t.Errorf("CreateBooking ServiceDuration = %v, want 120", createBookingArg(t, db, 11))
 	}
 }
 
-func TestCreateBooking_ServiceLookupFailsFallsBackToZero(t *testing.T) {
+func TestCreateBooking_ServiceMissingReturnsInvalidReference(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
-		fakeRow{err: errors.New("service not found")},
-		fakeRow{values: bookingScanValues(10, "pending")},
-		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{err: pgx.ErrNoRows},
 	}}
 	svc := NewBookingService(repository.New(db))
 
-	if _, err := svc.Create(context.Background(), CreateBookingRequest{
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
 		PhotographerID: 2,
 		CoserID:        5,
 		ServiceID:      999,
 		Date:           "2026-10-21",
 		Time:           "11:00",
-	}); err != nil {
-		t.Fatalf("Create must not fail when the service row is missing, got %v", err)
+	})
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("want ErrInvalidReference for a missing service, got %v", err)
 	}
+}
 
-	if got := createBookingTotalPriceArg(t, db); got != 0 {
-		t.Errorf("CreateBooking TotalPrice = %d, want 0 fallback", got)
+func TestCreateBooking_TransientDBErrorNotMasked(t *testing.T) {
+	transient := errors.New("db connection reset")
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{err: transient},
+	}}
+	svc := NewBookingService(repository.New(db))
+
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2,
+		CoserID:        5,
+		ServiceID:      99,
+		Date:           "2026-10-23",
+		Time:           "10:00",
+	})
+	if !errors.Is(err, transient) {
+		t.Fatalf("transient DB error = %v, want %v", err, transient)
+	}
+	if errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("transient DB error must not be masked as ErrInvalidReference")
+	}
+}
+
+func TestCreateBooking_TemplateServiceRejected(t *testing.T) {
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{values: []any{(*int64)(nil)}}, // 无主平台模板套餐
+	}}
+	svc := NewBookingService(repository.New(db))
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 1, Date: "2026-10-24", Time: "10:00",
+	})
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("want ErrInvalidReference for a template (ownerless) service, got %v", err)
+	}
+}
+
+func TestCreateBooking_NegotiableService(t *testing.T) {
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},                                // 拉黑检查
+		fakeRow{values: []any{int64(0)}},                                                   // 冲突
+		fakeRow{values: []any{int64(2)}},                                                   // GetServicePhotographerID -> 摄影师 2（本人）
+		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60)}}, // GetServiceById -> price NULL
+		fakeRow{values: bookingScanValues(11, "pending")},                                  // CreateBooking
+		fakeRow{err: errors.New("no photographer profile")},
+	}}
+	svc := NewBookingService(repository.New(db))
+	if _, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: "2026-10-20", Time: "10:00",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := createBookingInt32Arg(t, db, 6); got != int32(0) {
+		t.Errorf("negotiable TotalPrice = %v, want 0 (占位；展示靠 price_status)", got)
+	}
+	if got := createBookingArg(t, db, 8); got != "negotiable" {
+		t.Errorf("negotiable PriceMode = %v, want negotiable", got)
+	}
+	if got := createBookingArg(t, db, 9); got != "awaiting_quote" {
+		t.Errorf("negotiable PriceStatus = %v, want awaiting_quote", got)
+	}
+}
+
+func TestCreateBooking_MutualService(t *testing.T) {
+	zero := int32(0)
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{values: []any{int64(2)}}, // 套餐属于摄影师 2（本人）
+		fakeRow{values: []any{int64(7), "互勉套餐", &zero, (*string)(nil), int32(45)}},
+		fakeRow{values: bookingScanValues(12, "pending")},
+		fakeRow{err: errors.New("no photographer profile")},
+	}}
+	svc := NewBookingService(repository.New(db))
+	if _, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 7, Date: "2026-10-22", Time: "09:00",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := createBookingInt32Arg(t, db, 6); got != int32(0) {
+		t.Errorf("mutual TotalPrice = %v, want 0 (占位)", got)
+	}
+	if got := createBookingArg(t, db, 8); got != "mutual" {
+		t.Errorf("mutual PriceMode = %v, want mutual", got)
+	}
+	if got := createBookingArg(t, db, 9); got != "agreed" {
+		t.Errorf("mutual PriceStatus = %v, want agreed", got)
+	}
+}
+
+func TestQuote_InvalidPrice(t *testing.T) {
+	svc := NewBookingService(repository.New(&fakeDBTX{}))
+	if _, err := svc.Quote(context.Background(), 1, 100, 0); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 0, got %v", err)
+	}
+	if _, err := svc.Quote(context.Background(), 1, 100, 100000); !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice for 100000, got %v", err)
+	}
+}
+
+func TestRespondQuote_Forbidden(t *testing.T) {
+	// bookingScanValues 的 coser_id = 2；用外人 999 响应 → 403
+	svc := NewBookingService(repository.New(&fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(9, "pending")},
+	}}))
+	_, err := svc.RespondQuote(context.Background(), 9, 999, true)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want ErrForbidden, got %v", err)
+	}
+}
+
+func TestRespondQuote_NotAllowed(t *testing.T) {
+	// 归属匹配但 UPDATE 命中 0 行（price_status 非 quoted）→ 409
+	svc := NewBookingService(repository.New(&fakeDBTX{
+		execRows: 0,
+		rows:     []pgx.Row{fakeRow{values: bookingScanValues(9, "pending")}},
+	}))
+	_, err := svc.RespondQuote(context.Background(), 9, 2, true)
+	if !errors.Is(err, ErrQuoteNotAllowed) {
+		t.Fatalf("want ErrQuoteNotAllowed, got %v", err)
+	}
+}
+
+func TestRespondQuote_CancelledBookingRejected(t *testing.T) {
+	// 已取消订单不得被接受复活：status guard 在 SQL 之前拦截 → 409
+	svc := NewBookingService(repository.New(&fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(9, "cancelled")},
+	}}))
+	_, err := svc.RespondQuote(context.Background(), 9, 2, true)
+	if !errors.Is(err, ErrQuoteNotAllowed) {
+		t.Fatalf("want ErrQuoteNotAllowed for a cancelled booking, got %v", err)
+	}
+}
+
+func TestCreateBooking_ServiceNotOwnedByPhotographer(t *testing.T) {
+	other := int64(42)
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{err: errors.New("no photographer profile")},
+		fakeRow{values: []any{int64(0)}},
+		fakeRow{values: []any{other}}, // 套餐属于摄影师 42
+	}}
+	svc := NewBookingService(repository.New(db))
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: "2026-10-20", Time: "10:00",
+	})
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("want ErrInvalidReference, got %v", err)
 	}
 }

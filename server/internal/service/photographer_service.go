@@ -27,7 +27,7 @@ type PhotographerDetail struct {
 type ServiceItem struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
-	Price       int32  `json:"price"`
+	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
 }
@@ -82,6 +82,9 @@ var (
 	ErrWorkForbidden    = errors.New("work belongs to another photographer")
 	ErrInvalidMode      = errors.New("invalid mode")
 	ErrProfileNotFound  = errors.New("photographer profile not found")
+	ErrServiceNotFound  = errors.New("service not found")
+	ErrServiceForbidden = errors.New("cannot modify another photographer's service")
+	ErrInvalidPrice     = errors.New("invalid price")
 )
 
 // ProfileUpdate is the self-service profile edit payload.
@@ -92,6 +95,15 @@ type ProfileUpdate struct {
 	Mode        string  `json:"mode"`
 	MutualIntro *string `json:"mutualIntro"`
 	Avatar      string  `json:"avatar"`
+}
+
+type ServiceUpsertRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Price       *int32 `json:"price"`
+	Description string `json:"description"`
+	Duration    int32  `json:"duration"`
+	IsActive    *bool  `json:"isActive"`
+	SortOrder   int32  `json:"sortOrder"`
 }
 
 func (s *PhotographerService) Activate(ctx context.Context, userID int64, name string, mode string, intro string) (int64, error) {
@@ -257,7 +269,7 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 		return nil, err
 	}
 
-	services, err := s.queries.GetServices(ctx)
+	services, err := s.queries.GetActiveServicesByPhotographer(ctx, id)
 	if err != nil {
 		services = []repository.Service{}
 	}
@@ -440,4 +452,99 @@ func (s *PhotographerService) DeleteWork(ctx context.Context, userID, workID int
 		return err
 	}
 	return nil
+}
+
+func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]ServiceItem, error) {
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return nil, ErrForbidden
+	}
+	rows, err := s.queries.GetAllServicesByPhotographer(ctx, int32(p.ID))
+	if err != nil {
+		return nil, err
+	}
+	return mapServiceItems(rows), nil
+}
+
+func (s *PhotographerService) CreateService(ctx context.Context, userID int64, req ServiceUpsertRequest) (int64, error) {
+	if req.Price != nil && *req.Price < 0 {
+		return 0, ErrInvalidPrice
+	}
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return 0, ErrForbidden
+	}
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	return s.queries.InsertService(ctx, repository.InsertServiceParams{
+		Name:           req.Name,
+		Price:          req.Price,
+		Description:    strPtr(req.Description),
+		Duration:       req.Duration,
+		PhotographerID: int64(p.ID),
+		IsActive:       active,
+		SortOrder:      req.SortOrder,
+	})
+}
+
+func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, serviceID int64, req ServiceUpsertRequest) error {
+	if req.Price != nil && *req.Price < 0 {
+		return ErrInvalidPrice
+	}
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return ErrForbidden
+	}
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	n, err := s.queries.UpdateService(ctx, repository.UpdateServiceParams{
+		ID:             serviceID,
+		PhotographerID: int64(p.ID),
+		Name:           req.Name,
+		Price:          req.Price,
+		Description:    strPtr(req.Description),
+		Duration:       req.Duration,
+		IsActive:       active,
+		SortOrder:      req.SortOrder,
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if pid, err := s.queries.GetServicePhotographerID(ctx, serviceID); err == nil && pid != nil {
+			return ErrServiceForbidden
+		}
+		return ErrServiceNotFound
+	}
+	return nil
+}
+
+func (s *PhotographerService) DeleteService(ctx context.Context, userID int64, serviceID int64) error {
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return ErrForbidden
+	}
+	n, err := s.queries.DeleteService(ctx, serviceID, int64(p.ID))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if pid, err := s.queries.GetServicePhotographerID(ctx, serviceID); err == nil && pid != nil {
+			return ErrServiceForbidden
+		}
+		return ErrServiceNotFound
+	}
+	return nil
+}
+
+func (s *PhotographerService) ListTemplates(ctx context.Context) ([]ServiceItem, error) {
+	rows, err := s.queries.GetServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapServiceItems(rows), nil
 }

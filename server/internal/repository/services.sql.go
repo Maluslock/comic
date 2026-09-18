@@ -6,10 +6,12 @@ import (
 	"context"
 )
 
+// getServices returns platform templates (photographer_id IS NULL) only, not per-photographer services.
 const getServices = `-- name: GetServices :many
 SELECT id, name, price, description, duration
 FROM services
-ORDER BY price ASC
+WHERE photographer_id IS NULL
+ORDER BY sort_order ASC, id ASC
 `
 
 func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {
@@ -55,4 +57,127 @@ func (q *Queries) GetServiceById(ctx context.Context, id int64) (Service, error)
 		&i.Duration,
 	)
 	return i, err
+}
+
+const getServicesByPhotographer = `-- name: GetServicesByPhotographer :many
+SELECT id, name, price, description, duration
+FROM services
+WHERE photographer_id = $1 AND is_active = true
+ORDER BY sort_order ASC, id ASC
+`
+
+func (q *Queries) GetActiveServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error) {
+	rows, err := q.db.Query(ctx, getServicesByPhotographer, photographerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Service, 0)
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const getAllServicesByPhotographer = `-- name: GetAllServicesByPhotographer :many
+SELECT id, name, price, description, duration
+FROM services
+WHERE photographer_id = $1
+ORDER BY sort_order ASC, id ASC
+`
+
+func (q *Queries) GetAllServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error) {
+	rows, err := q.db.Query(ctx, getAllServicesByPhotographer, photographerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Service, 0)
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const getServicePhotographerID = `-- name: GetServicePhotographerID :one
+SELECT photographer_id FROM services WHERE id = $1
+`
+
+func (q *Queries) GetServicePhotographerID(ctx context.Context, id int64) (*int64, error) {
+	var pid *int64
+	err := q.db.QueryRow(ctx, getServicePhotographerID, id).Scan(&pid)
+	return pid, err
+}
+
+const insertService = `-- name: InsertService :one
+INSERT INTO services (name, price, description, duration, photographer_id, is_active, sort_order)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id
+`
+
+type InsertServiceParams struct {
+	Name           string
+	Price          *int32
+	Description    *string
+	Duration       int32
+	PhotographerID int64
+	IsActive       bool
+	SortOrder      int32
+}
+
+func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (int64, error) {
+	var id int64
+	err := q.db.QueryRow(ctx, insertService,
+		arg.Name, arg.Price, arg.Description, arg.Duration,
+		arg.PhotographerID, arg.IsActive, arg.SortOrder,
+	).Scan(&id)
+	return id, err
+}
+
+const updateService = `-- name: UpdateService :execrows
+UPDATE services
+SET name = $3, price = $4, description = $5, duration = $6, is_active = $7, sort_order = $8
+WHERE id = $1 AND photographer_id = $2
+`
+
+type UpdateServiceParams struct {
+	ID             int64
+	PhotographerID int64
+	Name           string
+	Price          *int32
+	Description    *string
+	Duration       int32
+	IsActive       bool
+	SortOrder      int32
+}
+
+func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error) {
+	tag, err := q.db.Exec(ctx, updateService,
+		arg.ID, arg.PhotographerID, arg.Name, arg.Price,
+		arg.Description, arg.Duration, arg.IsActive, arg.SortOrder,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+const deleteService = `-- name: DeleteService :execrows
+DELETE FROM services WHERE id = $1 AND photographer_id = $2
+`
+
+func (q *Queries) DeleteService(ctx context.Context, id, photographerID int64) (int64, error) {
+	tag, err := q.db.Exec(ctx, deleteService, id, photographerID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

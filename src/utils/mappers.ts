@@ -1,5 +1,17 @@
 import type { ComicEvent, Photographer, Work, User, Review } from '@/types'
 
+/**
+ * Render a service price in its tri-state form:
+ *   null / undefined -> 面议 (negotiable)
+ *   0                -> 互勉 (mutual / free collaboration)
+ *   > 0              -> ¥<price>
+ */
+export function formatPrice(price: number | null | undefined): string {
+  if (price === null || price === undefined) return '面议'
+  if (price === 0) return '互勉'
+  return `¥${price}`
+}
+
 export interface LoginUserDTO {
   id: number
   name: string

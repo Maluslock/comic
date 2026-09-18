@@ -46,6 +46,16 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want int32 for %T", dest)
 		}
 		*d = v
+	case **int32:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.(*int32)
+		if !ok {
+			return fmt.Errorf("assignScan: want *int32 for %T", dest)
+		}
+		*d = v
 	case *string:
 		v, ok := val.(string)
 		if !ok {
@@ -62,6 +72,20 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want *string for %T", dest)
 		}
 		*d = v
+	case **int64:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		if v, ok := val.(*int64); ok {
+			*d = v
+			return nil
+		}
+		v, ok := val.(int64)
+		if !ok {
+			return fmt.Errorf("assignScan: want int64 or *int64 for %T", dest)
+		}
+		*d = &v
 	case *time.Time:
 		v, ok := val.(time.Time)
 		if !ok {
@@ -81,8 +105,9 @@ func assignScan(dest any, val any) error {
 }
 
 type fakeDBTX struct {
-	rows []pgx.Row
-	next int
+	rows     []pgx.Row
+	next     int
+	execRows int64
 }
 
 func (f *fakeDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
@@ -99,7 +124,7 @@ func (f *fakeDBTX) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error
 }
 
 func (f *fakeDBTX) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("fakeDBTX: Exec not expected")
+	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", f.execRows)), nil
 }
 
 type fakeManageStore struct {
@@ -138,6 +163,7 @@ func bookingScanValues(id int64, status string) []any {
 		(*string)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 	}
 }
 

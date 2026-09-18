@@ -82,6 +82,63 @@ func (h *BookingHandler) UpdateStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+func (h *BookingHandler) Quote(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	var req struct {
+		Price int32 `json:"price" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price is required"})
+		return
+	}
+	data, err := h.svc.Quote(c.Request.Context(), id, middleware.UserID(c), req.Price)
+	if err != nil {
+		h.mapQuoteErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *BookingHandler) RespondQuote(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	var req struct {
+		Accept *bool `json:"accept"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Accept == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "accept is required"})
+		return
+	}
+	data, err := h.svc.RespondQuote(c.Request.Context(), id, middleware.UserID(c), *req.Accept)
+	if err != nil {
+		h.mapQuoteErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (h *BookingHandler) mapQuoteErr(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrBookingNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "booking not found"})
+	case errors.Is(err, service.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+	case errors.Is(err, service.ErrQuoteNotAllowed):
+		c.JSON(http.StatusConflict, gin.H{"error": "quote not allowed in current state"})
+	case errors.Is(err, service.ErrInvalidPrice):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price must be between 1 and 99999"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
+}
+
 func (h *BookingHandler) ListByPhotographer(c *gin.Context) {
 	pid, err := strconv.Atoi(c.Param("photographerId"))
 	if err != nil {

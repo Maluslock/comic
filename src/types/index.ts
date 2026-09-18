@@ -36,7 +36,8 @@ export interface Work {
 export interface Service {
   id: string
   name: string
-  price: number
+  /** null = 面议/negotiable, 0 = 互勉/mutual, >0 = 固定价/fixed */
+  price: number | null
   description: string
   duration: number
 }

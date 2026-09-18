@@ -172,6 +172,45 @@ export function deleteWork(id: number) {
   return apiDelete<{ ok: boolean }>(`/v1/photographers/works/${id}`)
 }
 
+export interface MyService {
+  id: number
+  name: string
+  /** null = 面议, 0 = 互勉, >0 = 固定价 */
+  price: number | null
+  description: string
+  duration: number
+  /** backend `mine` endpoint does not return this yet; optional for forward-compat */
+  isActive?: boolean
+}
+
+export function getMyServices() {
+  return apiGet<{ list: MyService[] | null }>('/v1/photographers/services/mine')
+}
+
+export function getServiceTemplates() {
+  return apiGet<MyService[] | null>('/v1/services/templates')
+}
+
+export function createService(payload: {
+  name: string
+  price: number | null
+  description: string
+  duration: number
+}) {
+  return apiPost<{ id: number }>('/v1/photographers/services', payload)
+}
+
+export function updateService(
+  id: number,
+  payload: { name: string; price: number | null; description: string; duration: number }
+) {
+  return apiPut<{ ok: boolean }>(`/v1/photographers/services/${id}`, payload)
+}
+
+export function deleteService(id: number) {
+  return apiDelete<{ ok: boolean }>(`/v1/photographers/services/${id}`)
+}
+
 export async function getHomeData(): Promise<HomeResponse> {
   return {
     banners: [

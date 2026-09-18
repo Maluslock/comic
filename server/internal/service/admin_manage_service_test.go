@@ -46,6 +46,16 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want int32 for %T", dest)
 		}
 		*d = v
+	case **int32:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.(*int32)
+		if !ok {
+			return fmt.Errorf("assignScan: want *int32 for %T", dest)
+		}
+		*d = v
 	case *string:
 		v, ok := val.(string)
 		if !ok {
@@ -137,6 +147,7 @@ func bookingScanValues(id int64, status string) []any {
 		"14:00", status, int32(999),
 		(*string)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 	}
 }

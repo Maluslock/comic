@@ -43,6 +43,12 @@ type Querier interface {
 
 	// Services
 	GetServices(ctx context.Context) ([]Service, error)
+	GetActiveServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error)
+	GetAllServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error)
+	GetServicePhotographerID(ctx context.Context, id int64) (*int64, error)
+	InsertService(ctx context.Context, arg InsertServiceParams) (int64, error)
+	UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error)
+	DeleteService(ctx context.Context, id, photographerID int64) (int64, error)
 
 	// Reviews
 	GetReviewsByPhotographer(ctx context.Context, photographerID int32) ([]Review, error)
@@ -56,6 +62,8 @@ type Querier interface {
 	CountConflictBookings(ctx context.Context, photographerID int32, date time.Time, timeStr string) (int64, error)
 	UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error)
 	GetBookingsByUserWithDetails(ctx context.Context, coserID int32) ([]BookingWithDetails, error)
+	QuoteBooking(ctx context.Context, id int64, price int32, photographerID int32) (int64, error)
+	RespondBookingQuote(ctx context.Context, id int64, coserID int32, accept bool) (int64, error)
 
 	// Follows
 	InsertFollow(ctx context.Context, arg InsertFollowParams) (FollowRow, error)

@@ -304,10 +304,14 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 func mapServiceItems(services []repository.Service) []ServiceItem {
 	items := make([]ServiceItem, 0, len(services))
 	for _, s := range services {
+		price := int32(0)
+		if s.Price != nil {
+			price = *s.Price
+		}
 		items = append(items, ServiceItem{
 			ID:          s.ID,
 			Name:        s.Name,
-			Price:       s.Price,
+			Price:       price,
 			Description: derefString(s.Description),
 			Duration:    s.Duration,
 		})

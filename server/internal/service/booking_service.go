@@ -138,8 +138,8 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 
 	// 下单时按所选服务的真实价格写入订单金额；服务不存在时回退 0（不阻塞下单）。
 	var totalPrice int32
-	if svc, err := s.queries.GetServiceById(ctx, int64(req.ServiceID)); err == nil {
-		totalPrice = svc.Price
+	if svc, err := s.queries.GetServiceById(ctx, int64(req.ServiceID)); err == nil && svc.Price != nil {
+		totalPrice = *svc.Price
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{

@@ -10,7 +10,7 @@ import (
 const createBooking = `-- name: CreateBooking :one
 INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at
+RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
 `
 
 type CreateBookingParams struct {
@@ -47,13 +47,18 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		&i.TotalPrice,
 		&i.Remarks,
 		&i.CreatedAt,
+		&i.PriceMode,
+		&i.QuotePrice,
+		&i.PriceStatus,
+		&i.ServiceName,
+		&i.ServiceDuration,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getBookingsByUser = `-- name: GetBookingsByUser :many
-SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at
+SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
 FROM bookings
 WHERE coser_id = $1
 ORDER BY created_at DESC
@@ -79,6 +84,11 @@ func (q *Queries) GetBookingsByUser(ctx context.Context, coserID int32) ([]Booki
 			&i.TotalPrice,
 			&i.Remarks,
 			&i.CreatedAt,
+			&i.PriceMode,
+			&i.QuotePrice,
+			&i.PriceStatus,
+			&i.ServiceName,
+			&i.ServiceDuration,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -92,14 +102,14 @@ func (q *Queries) GetBookingsByUser(ctx context.Context, coserID int32) ([]Booki
 }
 
 const getBookingByID = `-- name: GetBookingByID :one
-SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at
+SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
 FROM bookings WHERE id = $1
 `
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int64) (Booking, error) {
 	row := q.db.QueryRow(ctx, getBookingByID, id)
 	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt)
+	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt)
 	return i, err
 }
 
@@ -139,18 +149,18 @@ func (q *Queries) CountConflictBookings(ctx context.Context, photographerID int3
 const updateBookingStatus = `-- name: UpdateBookingStatus :one
 UPDATE bookings SET status = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at
+RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
 `
 
 func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error) {
 	row := q.db.QueryRow(ctx, updateBookingStatus, id, status)
 	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt)
+	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt)
 	return i, err
 }
 
 const getBookingsByUserWithDetails = `-- name: GetBookingsByUserWithDetails :many
-SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at,
+SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, b.service_name, b.service_duration,
        p.name AS photographer_name, p.avatar AS photographer_avatar, p.user_id AS photographer_user_id,
        s.name AS service_name, COALESCE(s.price, 0) AS service_price
 FROM bookings b
@@ -169,7 +179,7 @@ func (q *Queries) GetBookingsByUserWithDetails(ctx context.Context, coserID int3
 	var items []BookingWithDetails
 	for rows.Next() {
 		var i BookingWithDetails
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PhotographerName, &i.PhotographerAvatar, &i.PhotographerUserID, &i.ServiceName, &i.ServicePrice); err != nil {
+		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt, &i.PhotographerName, &i.PhotographerAvatar, &i.PhotographerUserID, &i.ServiceName, &i.ServicePrice); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -185,7 +195,7 @@ type BookingWithCoser struct {
 }
 
 const getBookingsByPhotographer = `-- name: GetBookingsByPhotographer :many
-SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at,
+SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, b.service_name, b.service_duration,
        COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar, COALESCE(u.phone, '') AS coser_phone
 FROM bookings b
 LEFT JOIN users u ON u.id = b.coser_id
@@ -202,10 +212,45 @@ func (q *Queries) GetBookingsByPhotographer(ctx context.Context, photographerID 
 	var items []BookingWithCoser
 	for rows.Next() {
 		var i BookingWithCoser
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.CoserName, &i.CoserAvatar, &i.CoserPhone); err != nil {
+		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.UpdatedAt, &i.CoserName, &i.CoserAvatar, &i.CoserPhone); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
 	}
 	return items, rows.Err()
+}
+
+const quoteBooking = `-- name: QuoteBooking :execrows
+UPDATE bookings SET quote_price = $2, price_status = 'quoted', updated_at = NOW()
+WHERE id = $1 AND photographer_id = $3 AND price_mode = 'negotiable' AND price_status = 'awaiting_quote'
+`
+
+func (q *Queries) QuoteBooking(ctx context.Context, id int64, price int32, photographerID int32) (int64, error) {
+	tag, err := q.db.Exec(ctx, quoteBooking, id, price, photographerID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+const acceptBookingQuote = `-- name: AcceptBookingQuote :execrows
+UPDATE bookings SET total_price = quote_price, price_status = 'agreed', status = 'confirmed', updated_at = NOW()
+WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted'
+`
+
+const rejectBookingQuote = `-- name: RejectBookingQuote :execrows
+UPDATE bookings SET price_status = 'rejected', status = 'cancelled', updated_at = NOW()
+WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted'
+`
+
+func (q *Queries) RespondBookingQuote(ctx context.Context, id int64, coserID int32, accept bool) (int64, error) {
+	stmt := rejectBookingQuote
+	if accept {
+		stmt = acceptBookingQuote
+	}
+	tag, err := q.db.Exec(ctx, stmt, id, coserID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

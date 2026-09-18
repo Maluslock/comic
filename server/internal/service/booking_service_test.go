@@ -79,7 +79,7 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
-		fakeRow{values: []any{int64(1), "基础套餐", int32(399), (*string)(nil), int32(120)}},
+		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120)}},
 		fakeRow{values: bookingScanValues(9, "pending")},
 		fakeRow{err: errors.New("no photographer profile")},
 	}}

@@ -170,7 +170,7 @@ func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status stri
 const getBookingsByUserWithDetails = `-- name: GetBookingsByUserWithDetails :many
 SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, b.service_name, b.service_duration,
        p.name AS photographer_name, p.avatar AS photographer_avatar, p.user_id AS photographer_user_id,
-       s.name AS service_name, COALESCE(s.price, 0) AS service_price
+       COALESCE(s.name, '') AS service_name, COALESCE(s.price, 0) AS service_price
 FROM bookings b
 LEFT JOIN photographers p ON p.id = b.photographer_id
 LEFT JOIN services s ON s.id = b.service_id
@@ -203,10 +203,11 @@ type BookingWithCoser struct {
 }
 
 const getBookingsByPhotographer = `-- name: GetBookingsByPhotographer :many
-SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, b.service_name, b.service_duration,
+SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, COALESCE(b.service_name, s.name, '') AS service_name, b.service_duration,
        COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar, COALESCE(u.phone, '') AS coser_phone
 FROM bookings b
 LEFT JOIN users u ON u.id = b.coser_id
+LEFT JOIN services s ON s.id = b.service_id
 WHERE b.photographer_id = $1
 ORDER BY b.created_at DESC
 `

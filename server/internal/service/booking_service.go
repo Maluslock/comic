@@ -89,6 +89,7 @@ func bookingToItem(b repository.Booking) *BookingItem {
 		PriceStatus:    b.PriceStatus,
 		Remarks:        derefString(b.Remarks),
 		CreatedAt:      b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ServiceName:    derefString(b.ServiceName),
 	}
 }
 
@@ -165,19 +166,24 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 	priceStatus := "agreed"
 	var snapName *string
 	var snapDuration *int32
-	if svc, err := s.queries.GetServiceById(ctx, serviceID64); err == nil {
-		if svc.Price != nil {
-			totalPrice = *svc.Price
+	svc, err := s.queries.GetServiceById(ctx, serviceID64)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidReference
 		}
-		snapDuration = &svc.Duration
-		name := svc.Name
-		snapName = &name
-		switch {
-		case svc.Price == nil:
-			priceMode, priceStatus = "negotiable", "awaiting_quote"
-		case *svc.Price == 0:
-			priceMode = "mutual"
-		}
+		return nil, err
+	}
+	if svc.Price != nil {
+		totalPrice = *svc.Price
+	}
+	snapDuration = &svc.Duration
+	name := svc.Name
+	snapName = &name
+	switch {
+	case svc.Price == nil:
+		priceMode, priceStatus = "negotiable", "awaiting_quote"
+	case *svc.Price == 0:
+		priceMode = "mutual"
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{
@@ -219,7 +225,11 @@ func (s *BookingService) ListByUser(ctx context.Context, userID int32) ([]Bookin
 		item.PhotographerName = b.PhotographerName
 		item.PhotographerAvatar = b.PhotographerAvatar
 		item.PhotographerUserID = derefInt64(b.PhotographerUserID)
-		item.ServiceName = b.ServiceName
+		// 显示优先级：快照 b.service_name > 实时 join s.name（为快照回填前的旧行兜底）。
+		item.ServiceName = derefString(b.Booking.ServiceName)
+		if item.ServiceName == "" {
+			item.ServiceName = b.ServiceName
+		}
 		items = append(items, *item)
 	}
 	return items, nil
@@ -241,6 +251,11 @@ func (s *BookingService) ListByPhotographer(ctx context.Context, photographerID 
 	items := make([]BookingItemWithCoser, 0, len(rows))
 	for _, b := range rows {
 		item := bookingToItem(b.Booking)
+		// 显示优先级：快照 b.service_name > 实时 join s.name（为快照回填前的旧行兜底）。
+		item.ServiceName = derefString(b.Booking.ServiceName)
+		if item.ServiceName == "" {
+			item.ServiceName = derefString(b.ServiceName)
+		}
 		items = append(items, BookingItemWithCoser{
 			BookingItem: *item,
 			CoserName:   b.CoserName,
@@ -278,6 +293,11 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 	if !canTransition(b.Status, newStatus) {
 		return nil, ErrInvalidTransition
 	}
+	// 面议订单在价格达成一致前不得置为 confirmed：否则会跳过报价/响应流程
+	//（二者都要求 status='pending'），永远停在 total_price=0。
+	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
+		return nil, ErrInvalidTransition
+	}
 	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
 	if err != nil {
 		return nil, err
@@ -311,6 +331,10 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 	if !canTransition(b.Status, newStatus) {
 		return nil, ErrInvalidTransition
 	}
+	// 面议订单在价格达成一致前不得置为 confirmed（含管理端），否则会锁死报价流程。
+	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
+		return nil, ErrInvalidTransition
+	}
 	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
 	if err != nil {
 		return nil, err
@@ -330,8 +354,9 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 }
 
 // Quote records a single-round price offer from the booking's own photographer.
-// Allowed only while price_mode='negotiable' AND price_status='awaiting_quote';
-// the state guard lives in SQL and reports RowsAffected==0 for anything else.
+// Allowed only while the booking is still pending and price_mode='negotiable'
+// AND price_status='awaiting_quote'; the Go-level status guard rejects non-pending
+// bookings first, and the SQL state guard reports RowsAffected==0 for anything else.
 func (s *BookingService) Quote(ctx context.Context, bookingID int64, actorUserID int64, price int32) (*BookingItem, error) {
 	if price <= 0 || price > 99999 {
 		return nil, ErrInvalidPrice

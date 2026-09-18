@@ -66,8 +66,12 @@ cleanup() {
        DELETE FROM bookings WHERE remarks LIKE 'SMOKE%';
        DELETE FROM reviews WHERE content LIKE 'SMOKE%';
        DELETE FROM chat_messages WHERE content LIKE 'SMOKE%';
-       DELETE FROM user_blocks;
        DELETE FROM services WHERE name LIKE 'SMOKE-%';" >/dev/null 2>&1
+  # 仅清理本脚本用到的账号相关的拉黑行，避免在 prod 上全表删除。
+  local uid="${COSER_ID:-}"
+  if [ -n "$uid" ]; then
+    dbq "DELETE FROM user_blocks WHERE user_id = $uid OR blocked_user_id = $uid;" >/dev/null 2>&1
+  fi
 }
 trap 'cleanup; echo; [ "$FAIL" -eq 0 ] && echo "PASS=$PASS FAIL=0" || echo "PASS=$PASS FAIL=$FAIL"' EXIT
 
@@ -232,9 +236,12 @@ NEW_SVC=$(curl -s -X POST "$BASE_URL/api/v1/photographers/services" -H "Authoriz
   -H 'Content-Type: application/json' -d '{"name":"SMOKE-面议","price":null,"description":"","duration":60}')
 NEG_SVC=$(echo "$NEW_SVC" | jq -r '.id // empty')
 expect_true "建面议套餐（price=null）" "$([ -n "$NEG_SVC" ] && echo ok)" "ok"
-expect 403 "非本人改套餐" -X PUT "$BASE_URL/api/v1/photographers/services/$NEG_SVC" \
+expect 403 "非本人改套餐（coser）" -X PUT "$BASE_URL/api/v1/photographers/services/$NEG_SVC" \
   -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
   -d '{"name":"hack","price":1,"description":"","duration":60}'
+expect 403 "他摄影师改套餐（跨归属）" -X PUT "$BASE_URL/api/v1/photographers/services/$NEG_SVC" \
+  -H "Authorization: Bearer $T_P5" -H 'Content-Type: application/json' \
+  -d '{"name":"hack2","price":1,"description":"","duration":60}'
 QB=$(curl -s -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
   -d "{\"photographerId\":$PID,\"serviceId\":$NEG_SVC,\"date\":\"2027-02-01\",\"time\":\"10:00\",\"remarks\":\"SMOKE-nego\"}")
 QBID=$(echo "$QB" | jq -r '.id // empty')
@@ -242,8 +249,10 @@ expect_true "面议下单 priceStatus=awaiting_quote" "$(echo "$QB" | jq -r '.pr
 expect_true "面议下单 totalPrice=0（占位）" "$(echo "$QB" | jq -r '.totalPrice // "x"')" "0"
 expect 200 "摄影师报价 888" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
   -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":888}'
-expect 400 "报价越界（0）" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
-  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":0}'
+expect 400 "报价越界（100000）" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":100000}'
+expect 400 "报价越界（-1）" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":-1}'
 expect 403 "他摄影师报价" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
   -H "Authorization: Bearer $T_P5" -H 'Content-Type: application/json' -d '{"price":1}'
 QR=$(curl -s -X POST "$BASE_URL/api/v1/bookings/$QBID/quote/respond" -H "Authorization: Bearer $T_COSER" \

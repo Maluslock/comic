@@ -110,13 +110,13 @@ func (h *BookingHandler) RespondQuote(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Accept bool `json:"accept"`
+		Accept *bool `json:"accept"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+	if err := c.ShouldBindJSON(&req); err != nil || req.Accept == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "accept is required"})
 		return
 	}
-	data, err := h.svc.RespondQuote(c.Request.Context(), id, middleware.UserID(c), req.Accept)
+	data, err := h.svc.RespondQuote(c.Request.Context(), id, middleware.UserID(c), *req.Accept)
 	if err != nil {
 		h.mapQuoteErr(c, err)
 		return

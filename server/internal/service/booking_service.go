@@ -347,6 +347,9 @@ func (s *BookingService) Quote(ctx context.Context, bookingID int64, actorUserID
 	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
 		return nil, ErrForbidden
 	}
+	if b.Status != "pending" {
+		return nil, ErrQuoteNotAllowed
+	}
 	n, err := s.queries.QuoteBooking(ctx, bookingID, price, b.PhotographerID)
 	if err != nil {
 		return nil, err
@@ -374,6 +377,9 @@ func (s *BookingService) RespondQuote(ctx context.Context, bookingID int64, acto
 	}
 	if int64(b.CoserID) != actorUserID {
 		return nil, ErrForbidden
+	}
+	if b.Status != "pending" {
+		return nil, ErrQuoteNotAllowed
 	}
 	n, err := s.queries.RespondBookingQuote(ctx, bookingID, b.CoserID, accept)
 	if err != nil {

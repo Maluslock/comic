@@ -266,6 +266,17 @@ func TestRespondQuote_NotAllowed(t *testing.T) {
 	}
 }
 
+func TestRespondQuote_CancelledBookingRejected(t *testing.T) {
+	// 已取消订单不得被接受复活：status guard 在 SQL 之前拦截 → 409
+	svc := NewBookingService(repository.New(&fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(9, "cancelled")},
+	}}))
+	_, err := svc.RespondQuote(context.Background(), 9, 2, true)
+	if !errors.Is(err, ErrQuoteNotAllowed) {
+		t.Fatalf("want ErrQuoteNotAllowed for a cancelled booking, got %v", err)
+	}
+}
+
 func TestCreateBooking_ServiceNotOwnedByPhotographer(t *testing.T) {
 	other := int64(42)
 	db := &bookingRecorder{rows: []pgx.Row{

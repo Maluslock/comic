@@ -21,7 +21,8 @@
         <view v-else-if="services.length === 0" class="empty">
           <text class="empty-icon">◇</text>
           <text class="empty-text">暂无套餐</text>
-          <text class="empty-hint">点击「新增套餐」或「一键预填平台模板」开始定价</text>
+          <text class="empty-hint">点击下方按钮，或使用「一键预填平台模板」开始定价</text>
+          <view class="btn-add empty-cta" @click="openForm">＋ 新增套餐</view>
         </view>
 
         <view v-else class="service-list">
@@ -67,11 +68,14 @@
           <input
             v-model="form.price"
             class="field-input"
+            :class="{ 'has-error': priceError }"
             type="number"
             placeholder="留空 = 面议"
             placeholder-style="color: #64748b"
+            @input="priceError = ''"
           />
           <text class="field-hint">留空 = 面议，填 0 = 互勉，填正数 = 固定价格</text>
+          <text v-if="priceError" class="field-error">{{ priceError }}</text>
         </view>
 
         <view class="field">
@@ -80,7 +84,7 @@
             v-model="form.duration"
             class="field-input"
             type="number"
-            placeholder="例如：60"
+            placeholder="例如：60（分钟）"
             placeholder-style="color: #64748b"
           />
         </view>
@@ -130,6 +134,7 @@ const prefilling = ref(false)
 const services = ref<MyService[]>([])
 
 const form = reactive({ name: '', price: '', duration: '60', description: '' })
+const priceError = ref('')
 
 const canSubmit = computed(() => form.name.trim() !== '' && !submitting.value)
 
@@ -230,9 +235,11 @@ async function submit() {
   if (!canSubmit.value) return
   const price = normalizedPrice()
   if (price === undefined) {
+    priceError.value = '价格需为不小于 0 的数字'
     uni.showToast({ title: '价格需为不小于 0 的数字', icon: 'none' })
     return
   }
+  priceError.value = ''
   const id = editingId.value
   submitting.value = true
   uni.showLoading({ title: '保存中...' })
@@ -356,60 +363,63 @@ function goBack() {
 .body { padding: 100rpx 32rpx 48rpx; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; gap: 16rpx; }
-.toolbar-count { flex-shrink: 0; font-size: 24rpx; color: $dark-text-tertiary; }
+.toolbar-count { flex-shrink: 0; font-size: 24rpx; color: $dark-text-secondary; }
 .toolbar-actions { display: flex; align-items: center; gap: 16rpx; }
-.btn-tpl { padding: 12rpx 24rpx; background: rgba(6, 182, 212, 0.1); border: 2rpx solid $neon-cyan; color: $neon-cyan; border-radius: 28rpx; font-size: 22rpx;
+.btn-tpl { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 24rpx; background: rgba(6, 182, 212, 0.1); border: 2rpx solid $neon-cyan; color: $neon-cyan; border-radius: 28rpx; font-size: 24rpx;
   &:active { transform: scale(0.97); }
   &.disabled { opacity: 0.5; }
 }
-.btn-add { padding: 12rpx 28rpx; background: $neon-gradient; color: #fff; border-radius: 28rpx; font-size: 24rpx; box-shadow: 0 0 16rpx $neon-purple-glow;
+.btn-add { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; background: $neon-gradient; color: $dark-bg-primary; border-radius: 28rpx; font-size: 26rpx; font-weight: 600; box-shadow: 0 0 16rpx $neon-purple-glow;
   &:active { transform: scale(0.97); }
 }
 
-.loading-tip { text-align: center; padding: 80rpx 0; font-size: 26rpx; color: $dark-text-tertiary; }
+.loading-tip { text-align: center; padding: 80rpx 0; font-size: 26rpx; color: $dark-text-secondary; }
 
 .empty { display: flex; flex-direction: column; align-items: center; padding: 120rpx 0; }
 .empty-icon { font-size: 80rpx; color: $neon-purple; text-shadow: 0 0 24rpx $neon-purple-glow; }
 .empty-text { font-size: 30rpx; color: $dark-text-secondary; margin-top: 24rpx; }
-.empty-hint { font-size: 24rpx; color: $dark-text-tertiary; margin-top: 12rpx; }
+.empty-hint { font-size: 24rpx; color: $dark-text-secondary; margin-top: 12rpx; }
+.empty-cta { margin-top: 40rpx; }
 
 .service-list { display: flex; flex-direction: column; gap: 24rpx; }
 .service-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; padding: 28rpx; box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.25); }
 .service-head { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.service-name { flex: 1; min-width: 0; font-size: 30rpx; font-weight: 600; color: $dark-text-primary; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.price-tag { flex-shrink: 0; font-size: 26rpx; font-weight: 600; padding: 6rpx 20rpx; border-radius: 24rpx;
+.service-name { flex: 1; min-width: 0; font-size: 28rpx; font-weight: 600; color: $dark-text-primary; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.price-tag { flex-shrink: 0; font-size: 30rpx; font-weight: 700; padding: 6rpx 20rpx; border-radius: 24rpx;
   &.is-fixed { color: $neon-cyan; background: rgba(6, 182, 212, 0.12); border: 1rpx solid rgba(6, 182, 212, 0.4); }
   &.is-mutual { color: $success-color; background: rgba(34, 197, 94, 0.12); border: 1rpx solid rgba(34, 197, 94, 0.4); }
-  &.is-negotiable { color: $neon-purple; background: $neon-purple-dim; border: 1rpx solid rgba(168, 85, 247, 0.4); }
+  &.is-negotiable { color: $neon-purple-bright; background: $neon-purple-dim; border: 1rpx solid rgba(168, 85, 247, 0.4); }
 }
 .service-meta { display: flex; align-items: center; gap: 16rpx; margin-top: 16rpx; }
-.meta-item { font-size: 22rpx; color: $dark-text-tertiary; }
-.status-tag { flex-shrink: 0; font-size: 20rpx; padding: 4rpx 14rpx; border-radius: 20rpx;
+.meta-item { font-size: 24rpx; color: $dark-text-secondary; }
+.status-tag { flex-shrink: 0; font-size: 24rpx; padding: 4rpx 14rpx; border-radius: 20rpx;
   &.is-active { color: $success-color; background: rgba(34, 197, 94, 0.12); border: 1rpx solid rgba(34, 197, 94, 0.4); }
-  &.is-down { color: $dark-text-tertiary; background: rgba(100, 116, 139, 0.12); border: 1rpx solid rgba(100, 116, 139, 0.4); }
+  &.is-down { color: $dark-text-secondary; background: rgba(100, 116, 139, 0.12); border: 1rpx solid rgba(100, 116, 139, 0.4); }
 }
 .service-desc { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 14rpx; line-height: 1.5; }
 .service-actions { margin-top: 24rpx; display: flex; justify-content: flex-end; gap: 16rpx; }
-.btn-edit { padding: 8rpx 24rpx; font-size: 22rpx; color: $neon-cyan; background: rgba(6, 182, 212, 0.1); border: 1rpx solid rgba(6, 182, 212, 0.4); border-radius: 24rpx;
+.btn-edit { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $neon-cyan; background: rgba(6, 182, 212, 0.1); border: 1rpx solid rgba(6, 182, 212, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
-.btn-del { padding: 8rpx 24rpx; font-size: 22rpx; color: $error-color; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
+.btn-del { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $error-color; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
 
 .form-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 24rpx; padding: 40rpx 32rpx; box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.25); }
 .form-header { margin-bottom: 32rpx; }
 .form-title { display: block; font-size: 32rpx; font-weight: 600; color: $dark-text-primary; }
-.form-sub { display: block; font-size: 22rpx; color: $dark-text-tertiary; margin-top: 8rpx; }
+.form-sub { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 8rpx; }
 .field { margin-bottom: 32rpx; }
 .field-label { display: block; font-size: 26rpx; color: $dark-text-secondary; margin-bottom: 16rpx; }
 .field-input { height: 88rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; color: $dark-text-primary; box-sizing: border-box; }
 .field-textarea { width: 100%; height: 200rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 20rpx 24rpx; font-size: 28rpx; color: $dark-text-primary; box-sizing: border-box; }
-.field-hint { display: block; font-size: 22rpx; color: $dark-text-tertiary; margin-top: 12rpx; }
+.field-hint { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 12rpx; }
+.field-error { display: block; font-size: 24rpx; color: $error-color; margin-top: 12rpx; }
+.field-input.has-error { border-color: rgba(239, 68, 68, 0.6); }
 
-.btn-submit { margin-top: 40rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; color: #fff; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
+.btn-submit { margin-top: 40rpx; display: flex; align-items: center; justify-content: center; min-height: 96rpx; padding: 0; background: $neon-gradient; color: $dark-bg-primary; border-radius: 44rpx; font-size: 30rpx; font-weight: 700; box-shadow: 0 0 24rpx $neon-purple-glow;
   &:active { transform: scale(0.97); }
   &.disabled { opacity: 0.5; }
 }
-.btn-cancel { margin-top: 20rpx; text-align: center; padding: 20rpx 0; font-size: 26rpx; color: $dark-text-tertiary; }
+.btn-cancel { margin-top: 20rpx; display: flex; align-items: center; justify-content: center; min-height: 88rpx; font-size: 26rpx; color: $dark-text-secondary; }
 </style>

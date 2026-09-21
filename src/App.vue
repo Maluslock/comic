@@ -6,6 +6,11 @@ import { refreshMessageBadge } from '@/utils/badge'
 const userStore = useUserStore()
 
 onLaunch(() => {
+  try {
+    if (typeof uni.setLocale === 'function') uni.setLocale('zh-Hans')
+  } catch (e) {
+    // 部分平台不支持时忽略
+  }
   userStore.init()
   console.log('App Launch')
 })

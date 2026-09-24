@@ -233,7 +233,10 @@ func (s *PhotographerService) HiddenUserIDs(ctx context.Context, userID int64) (
 	return s.queries.ListHiddenUserIDs(ctx, userID)
 }
 
-func (s *PhotographerService) List(ctx context.Context, keyword, location, tag string, page, size int, excludeUserIDs []int64) (*PhotographerListResponse, error) {
+// List 返回摄影师列表。sort 是列表页筛选栏的排序键：
+// ""/"all" 默认（评分优先）、"hot" 热门（评价数）、"rating" 评分最高、
+// "order" 接单最多、"new" 最新入驻。未知值一律退回默认排序（不让调用方拼 SQL）。
+func (s *PhotographerService) List(ctx context.Context, keyword, location, tag string, page, size int, excludeUserIDs []int64, sort string) (*PhotographerListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -255,6 +258,11 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 	if excludeUserIDs == nil {
 		excludeUserIDs = []int64{}
 	}
+	var sortKey *string
+	switch sort {
+	case "hot", "rating", "order", "new":
+		sortKey = &sort
+	}
 
 	// For search, fetch extra to estimate total (if fewer than limit returned, total is known)
 	photographers, err := s.queries.SearchPhotographers(ctx, repository.SearchPhotographersParams{
@@ -264,6 +272,7 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		Limit:          int32(size + 1),
 		Offset:         int32(offset),
 		ExcludeUserIDs: excludeUserIDs,
+		Sort:           sortKey,
 	})
 	if err != nil {
 		return nil, err

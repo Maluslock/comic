@@ -12,6 +12,8 @@ command -v "$AB" >/dev/null 2>&1 || export PATH="/home/user/.nvm/versions/node/v
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD="$(cat "$SCRIPT_DIR/contrast-audit.js")"
 mkdir -p "$OUT_DIR"
+# 每次运行只保留本次页集：残留旧文件会污染后续对比（见 Ruling T7-1）
+rm -f "$OUT_DIR"/*.json "$OUT_DIR"/*.meta
 
 set_role() {  # $1=phone
   local resp token uid pid

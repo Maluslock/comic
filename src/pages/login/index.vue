@@ -325,7 +325,7 @@ async function onLogin() {
 .login-btn-text {
   font-size: $font-size-md;
   font-weight: 700;
-  color: $dark-text-primary;
+  @include on-neon-fill;
   letter-spacing: 8rpx;
 }
 

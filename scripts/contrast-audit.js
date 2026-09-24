@@ -10,6 +10,20 @@
     return false;
   }
 
+  // WCAG 2.1 SC 1.4.3 明确豁免「未激活的用户界面组件」的对比度要求。
+  // 禁用态在本项目用 class 里的 `disabled` 表达（如 .login-btn.disabled、.btn-submit.disabled）。
+  // 这类元素**不算缺陷**，但也不静默丢弃 —— 单独进 `exempt` 数组以便人看。
+  function isInactive(el) {
+    let n = el;
+    while (n && n.nodeType === 1) {
+      const cls = typeof n.className === 'string' ? n.className : '';
+      if (/(^|\s)disabled(\s|$)/.test(cls) || /(^|\s|-)is-disabled(\s|$)/.test(cls)) return true;
+      if (n.getAttribute && n.getAttribute('aria-disabled') === 'true') return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
   function parseColor(c) {
     if (!c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)') return null;
     const m = c.match(/rgba?\(([^)]+)\)/);
@@ -84,6 +98,7 @@
   }
 
   const results = [];
+  const exempt = [];
   for (const el of document.querySelectorAll('*')) {
     if (ignored(el)) continue;
     let text = '';
@@ -119,7 +134,7 @@
     const need = large ? 3 : 4.5;
     if (worst >= need) continue;
 
-    results.push({
+    const record = {
       sel: el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''),
       text: text.slice(0, 34),
       color: cs.color,
@@ -127,9 +142,20 @@
       ratio: Math.round(worst * 100) / 100,
       need: need,
       px: Math.round(size * 10) / 10
-    });
+    };
+    // 未激活组件（禁用态）按 WCAG 1.4.3 豁免：不计入 total，但保留在 exempt 里可见，
+    // 不静默丢弃 —— 豁免必须是可审计的。
+    if (isInactive(el)) { exempt.push(record); continue; }
+    results.push(record);
   }
 
   results.sort((a, b) => a.ratio - b.ratio);
-  return JSON.stringify({ url: location.hash || location.pathname, total: results.length, findings: results.slice(0, 24) });
+  exempt.sort((a, b) => a.ratio - b.ratio);
+  return JSON.stringify({
+    url: location.hash || location.pathname,
+    total: results.length,
+    findings: results.slice(0, 24),
+    exempt: exempt.length,
+    exemptSample: exempt.slice(0, 6)
+  });
 })()

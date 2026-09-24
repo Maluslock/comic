@@ -5,6 +5,7 @@ $primary-dark: #4f46e5;
 $success-color: #22c55e;
 $warning-color: #f59e0b;
 $error-color: #ef4444;
+$error-bright: #f87171;   // 压 rgba(239,68,68,.1) 底 → 5.86:1（$error-color 实测仅 4.32:1）
 $info-color: #3b82f6;
 
 $text-primary: #1f2937;
@@ -64,3 +65,15 @@ $neon-cyan: #06b6d4;
 $neon-cyan-glow: rgba(6, 182, 212, 0.3);
 $neon-pink: #ec4899;
 $neon-gradient: linear-gradient(135deg, $neon-purple, $neon-cyan);
+
+// === 对比度 mixin（唯一事实源）===
+// 压霓虹实底的文字：紫端 4.95:1 / 青端 8.07:1 / 粉端 5.56:1
+@mixin on-neon-fill {
+  color: $dark-bg-primary;
+}
+
+// 同色系低对比 pill：亮紫字压紫底 → 实测 ≥5.7:1（原 3.8:1）
+@mixin neon-pill {
+  color: $neon-purple-bright;
+  background: $neon-purple-dim;
+}

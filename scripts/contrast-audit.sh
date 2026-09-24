@@ -46,7 +46,9 @@ import json, sys
 ok = True
 try:
     d = json.loads(json.loads(open(sys.argv[1]).read().strip()))
-    print('total=%-3d worst=%-6s' % (d['total'], d['findings'][0]['ratio'] if d['findings'] else '-'), end=' ')
+    print('total=%-3d exempt=%-2d worst=%-6s' % (
+        d['total'], d.get('exempt', 0),
+        d['findings'][0]['ratio'] if d['findings'] else '-'), end=' ')
 except Exception:
     print('PARSE-FAIL', end=' '); ok = False
 try:

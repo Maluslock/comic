@@ -377,7 +377,7 @@ function logout() {
 
 .stat-label {
   font-size: $font-size-xs;
-  color: rgba(255, 255, 255, 0.8);
+  color: #fff;
   margin-top: 4rpx;
 }
 

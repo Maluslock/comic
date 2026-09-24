@@ -420,6 +420,14 @@ function goReview() {
   }
 }
 
+// 只有亮底变体（pending 青 / confirmed 渐变 / completed 绿）用深字；
+// .cancelled 是 $dark-bg-secondary 深底，保持原有浅字（深字压深底仅 1.07:1）。
+.status-card:not(.cancelled) {
+  .status-icon { @include on-neon-fill; }
+  .status-text { @include on-neon-fill; }
+  .order-id    { @include on-neon-fill; }
+}
+
 .status-icon {
   font-size: 80rpx;
   margin-bottom: $spacing-sm;

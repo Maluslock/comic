@@ -62,11 +62,13 @@ PY
   fi
 }
 
+# order/detail 的 4 个状态变体都跑：青(pending)/渐变(confirmed)/绿(completed)/深底(cancelled)。
+# 只跑 id=1/2 会看不见 .cancelled 被误改（深字压深底 1.07:1）。
 COSER_PAGES="pages/index/index pages/event/detail?id=1 pages/event/list pages/photographer/list \
 pages/photographer/detail?id=1 pages/search/search pages/order/list pages/order/detail?id=1 \
-pages/order/detail?id=2 pages/message/index pages/profile/index pages/favorite/list pages/follow/list \
-pages/comment/index pages/booking/index pages/portfolio/index pages/calendar/index pages/settings/index \
-pages/login/index"
+pages/order/detail?id=2 pages/order/detail?id=3 pages/order/detail?id=4 pages/message/index \
+pages/profile/index pages/favorite/list pages/follow/list pages/comment/index pages/booking/index \
+pages/portfolio/index pages/calendar/index pages/settings/index pages/login/index"
 
 PHOTOGRAPHER_PAGES="pages/photographer/services pages/photographer/works pages/photographer/orders \
 pages/photographer/activate pages/photographer/profile-edit pages/photographer/cert-apply"

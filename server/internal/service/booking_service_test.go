@@ -88,7 +88,7 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
-		fakeRow{values: []any{owner}}, // GetServicePhotographerID -> 摄影师 2（本人）
+		fakeRow{values: []any{owner}}, // GetBookableServicePhotographerID -> 摄影师 2（本人，且已上架）
 		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120)}},
 		fakeRow{values: bookingScanValues(9, "pending")},
 		fakeRow{err: errors.New("no photographer profile")},
@@ -184,7 +184,7 @@ func TestCreateBooking_NegotiableService(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
 		fakeRow{err: errors.New("no photographer profile")},                                // 拉黑检查
 		fakeRow{values: []any{int64(0)}},                                                   // 冲突
-		fakeRow{values: []any{int64(2)}},                                                   // GetServicePhotographerID -> 摄影师 2（本人）
+		fakeRow{values: []any{int64(2)}},                                                   // GetBookableServicePhotographerID -> 摄影师 2（本人，且已上架）
 		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60)}}, // GetServiceById -> price NULL
 		fakeRow{values: bookingScanValues(11, "pending")},                                  // CreateBooking
 		fakeRow{err: errors.New("no photographer profile")},

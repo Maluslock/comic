@@ -433,7 +433,7 @@ function goBack() {
 }
 .service-desc { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 14rpx; line-height: 1.5; }
 .service-actions { margin-top: 24rpx; display: flex; justify-content: flex-end; gap: 16rpx; }
-.btn-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $dark-text-secondary; background: rgba(255, 255, 255, 0.06); border: 1rpx solid $dark-border; border-radius: 24rpx;
+.btn-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $dark-text-primary; background: rgba(255, 255, 255, 0.06); border: 1rpx solid $dark-border; border-radius: 24rpx;
   &.is-busy { opacity: 0.5; }
   &:active { transform: scale(0.95); }
 }

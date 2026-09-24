@@ -46,6 +46,7 @@ type Querier interface {
 	GetActiveServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error)
 	GetAllServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error)
 	GetServicePhotographerID(ctx context.Context, id int64) (*int64, error)
+	GetBookableServicePhotographerID(ctx context.Context, id int64) (*int64, error)
 	InsertService(ctx context.Context, arg InsertServiceParams) (int64, error)
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error)
 	DeleteService(ctx context.Context, id, photographerID int64) (int64, error)

@@ -24,14 +24,24 @@ type PhotographerDetail struct {
 	Reviews     []ReviewItem  `json:"reviews"`
 }
 
+// ServiceItem is the public shape of a package, used by the photographer detail
+// page and the platform-template list. It deliberately carries no shelf state:
+// templates are not sellable, and the detail query only returns packages that are
+// on the shelf anyway — emitting a zero-valued isActive there would be a lie.
 type ServiceItem struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
-	IsActive    bool   `json:"isActive"`
-	SortOrder   int32  `json:"sortOrder"`
+}
+
+// MyServiceItem is what the owner sees in 我的套餐: the public fields plus shelf
+// state, so the page can render the real 上架/下架 tag and offer the toggle.
+type MyServiceItem struct {
+	ServiceItem
+	IsActive  bool  `json:"isActive"`
+	SortOrder int32 `json:"sortOrder"`
 }
 
 type ReviewItem struct {
@@ -326,8 +336,27 @@ func mapServiceItems(services []repository.Service) []ServiceItem {
 			Price:       s.Price,
 			Description: derefString(s.Description),
 			Duration:    s.Duration,
-			IsActive:    s.IsActive,
-			SortOrder:   s.SortOrder,
+		})
+	}
+	return items
+}
+
+// mapMyServiceItems is the owner-facing mapper: the public fields plus shelf state.
+// Only the `mine` query selects is_active / sort_order, so only this mapper may
+// read them.
+func mapMyServiceItems(services []repository.Service) []MyServiceItem {
+	items := make([]MyServiceItem, 0, len(services))
+	for _, s := range services {
+		items = append(items, MyServiceItem{
+			ServiceItem: ServiceItem{
+				ID:          s.ID,
+				Name:        s.Name,
+				Price:       s.Price,
+				Description: derefString(s.Description),
+				Duration:    s.Duration,
+			},
+			IsActive:  s.IsActive,
+			SortOrder: s.SortOrder,
 		})
 	}
 	return items
@@ -460,7 +489,7 @@ func (s *PhotographerService) DeleteWork(ctx context.Context, userID, workID int
 	return nil
 }
 
-func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]ServiceItem, error) {
+func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]MyServiceItem, error) {
 	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
 	if err != nil {
 		return nil, ErrForbidden
@@ -469,7 +498,7 @@ func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]S
 	if err != nil {
 		return nil, err
 	}
-	return mapServiceItems(rows), nil
+	return mapMyServiceItems(rows), nil
 }
 
 func (s *PhotographerService) CreateService(ctx context.Context, userID int64, req ServiceUpsertRequest) (int64, error) {

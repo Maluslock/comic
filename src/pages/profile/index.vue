@@ -337,7 +337,7 @@ function logout() {
   
   &.coser {
     background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    @include on-neon-fill;
   }
   
   &.photographer {
@@ -357,7 +357,10 @@ function logout() {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  background: rgba(255, 255, 255, 0.1);
+  // 必须完全不透明（a=1）：半透明时审计仍会看到外层 header 渐变，三个统计项
+  // 会分别压在亮紫(rgb(176,102,247))与近黑(rgb(88,62,127))上，单一字色无解。
+  // #8553bd = 原 rgba(255,255,255,0.1) 压头部渐变后的实测平均色（白字 5.29:1）。
+  background: #8553bd;
   border-radius: $border-radius-lg;
   padding: $spacing-md;
   margin-top: $spacing-lg;

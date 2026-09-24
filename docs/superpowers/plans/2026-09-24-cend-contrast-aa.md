@@ -14,7 +14,7 @@
 
 - 分支：`fix/cend-contrast-aa`（已建，stack 在 `feat/photographer-pricing` 之上）
 - SCSS 只允许用 token/mixin，禁止新增硬编码色值（`$dark-bg-primary` 等已有 token 除外）
-- 尺寸单位一律 `rpx`；**禁止用 `transform` / `zoom` 缩放交互元素**（那会同步收缩命中区，见 Task 7）
+- 尺寸单位一律 `rpx`；**禁止在「持续态」用 `transform` / `zoom` 缩放交互元素**（会同步收缩命中区，如 `.menu-switch` 的 `scale(0.8)` —— 见 Task 7）。**瞬态 `:active { transform: scale(0.95) }` 式按压反馈不在此列**：按下时指针已落在元素上，不构成可达性缺陷，属既有设计，不在本次范围
 - mixin **只管颜色**：不得把 `padding` / `font-size` / `border-radius` / `border` 塞进 mixin
 - 实测达标的**非紫**同色系（青 ~5.5 / 绿 ~5.8 / 金 ~5.9）**一律不动**（含 `activate.vue` 的 `.btn-works`、`.btn-services`、`.is-cert`，以及 `services.vue` 的 `.btn-tpl` / `.price-tag.is-fixed` / `.is-mutual` / `.is-active`）
 - **紫**同色系一律迁移以保持族内一致：`.tag-item` 等实测 3.80 确属不达标；`activate.vue .btn-cert` 压深页底实测为**边际达标 4.54**，落在测量噪声边缘，一并迁移到 5.7 —— 这是**刻意的族内统一**，不是"顺手改达标项"。Task 4 Step 7 必须核对除 `.btn-cert` 外没有别的边际项被一并改动

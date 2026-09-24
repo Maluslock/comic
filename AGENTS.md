@@ -203,6 +203,17 @@ Additional rules:
 - **PhotographerCard** (dark): 100rpx circle avatar, 3rpx neon-purple border ring, left 4rpx solid purple accent, neon tags
 - **WorkCard** (dark): 240rpx cover, gradient overlay, neon border ring, cyan-on-purple tags
 
+#### 对比度共享层（唯一事实源，勿绕过）
+以下 token / mixin 定义在 `src/styles/variables.scss`（经 `vite.config.ts additionalData` 注入每个 SFC，`@include` 在 scoped 样式中可直接用）。新增或修改暗色样式时必须走它们，不要内联硬编码颜色：
+
+- **`@mixin on-neon-fill`** —— 压**霓虹实底**（青 / 紫 / 粉 / `$neon-gradient` 渐变）的文字一律 `@include on-neon-fill` 取深字（`$dark-bg-primary` 深字压霓虹底：紫端 4.95:1 / 青端 8.07:1 / 粉端 5.56:1）。**不要再写 `color: #fff` 或 `$dark-text-primary`** —— 白字压霓虹底不达标，这正是 F1 家族的成因。
+- **`@mixin neon-pill`** —— 紫底 pill 标签（亮紫字 + `$neon-purple-dim` 底，实测 ≥5.7:1）一律 `@include neon-pill`。**不要再内联 `color: $neon-purple`** —— `$neon-purple` 压半透明紫底只有 3.80:1（F2 家族的成因）。
+- **`$error-bright`** —— 压**红底**（`rgba(239,68,68,.1)`）的红字用它（5.86:1）。`$error-color` 在红底上只有 **4.32:1**，不达标（F3 家族）。
+- **`$neon-purple-surface`** —— 渐变上需要**不透明**实底面板时用它（`#8553bd`，白字 5.29:1）。`$neon-purple-dim` 是半透明版，叠在渐变上无法保证对比度。
+- **同色系文字压同色 tint 并非一律坏** —— 达标情况取决于该色相的亮度：**青 ≈5.5 / 绿 ≈5.8 / 金 ≈5.9 达标**；**紫 3.80 / 红 4.32 不达标**。所以**不要盲目全局替换**同色系 pill，先确认具体色相，改动后用 `bash scripts/contrast-audit.sh <OUT_DIR>` 实测复核。
+- **交互元素禁止持续态 `transform` / `zoom` 缩放** —— 缩放会同步收缩**命中区**（视觉与 hit box 一起缩）。`switch`、`button` 等交互元素的 `width/height/padding` 即触控目标，视觉尺寸不足时改尺寸/间距，**不要**用 `scale()` 缩小。瞬态的 `:active { transform: scale(0.95) }` 按压反馈不受此限（不影响常态命中区）。反面教材：`settings/index.vue` 的 `.menu-switch` 曾用 `scale(0.8)` 把原生 45px 的开关命中区压到 36px（< 44px 触控下限）。
+- **回归基线**：对比度审计的输出目录是 gitignore 的，跨 Task 比较必须使用**同一算法 + 同一页集**的基线（当前：`.audit/task6`，33 页，文件名为 `<role>__<route>.json`）。细则见 `.superpowers/sdd/2026-09-24-cend-contrast-aa/`。
+
 ## COMMANDS
 ```bash
 npm run dev:h5            # H5 dev server (port 5173)

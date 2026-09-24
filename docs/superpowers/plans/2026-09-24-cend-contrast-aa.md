@@ -73,6 +73,20 @@
     return false;
   }
 
+  // WCAG 2.1 SC 1.4.3 明确豁免「未激活的用户界面组件」的对比度要求。
+  // 禁用态在本项目用 class 里的 `disabled` 表达（如 .login-btn.disabled、.btn-submit.disabled）。
+  // 这类元素**不算缺陷**，但也不静默丢弃 —— 单独进 `exempt` 数组以便人看。
+  function isInactive(el) {
+    let n = el;
+    while (n && n.nodeType === 1) {
+      const cls = typeof n.className === 'string' ? n.className : '';
+      if (/(^|\s)disabled(\s|$)/.test(cls) || /(^|\s|-)is-disabled(\s|$)/.test(cls)) return true;
+      if (n.getAttribute && n.getAttribute('aria-disabled') === 'true') return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
   function parseColor(c) {
     if (!c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)') return null;
     const m = c.match(/rgba?\(([^)]+)\)/);
@@ -147,6 +161,7 @@
   }
 
   const results = [];
+  const exempt = [];
   for (const el of document.querySelectorAll('*')) {
     if (ignored(el)) continue;
     let text = '';
@@ -182,7 +197,7 @@
     const need = large ? 3 : 4.5;
     if (worst >= need) continue;
 
-    results.push({
+    const record = {
       sel: el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''),
       text: text.slice(0, 34),
       color: cs.color,
@@ -190,11 +205,22 @@
       ratio: Math.round(worst * 100) / 100,
       need: need,
       px: Math.round(size * 10) / 10
-    });
+    };
+    // 未激活组件（禁用态）按 WCAG 1.4.3 豁免：不计入 total，但保留在 exempt 里可见，
+    // 不静默丢弃 —— 豁免必须是可审计的。
+    if (isInactive(el)) { exempt.push(record); continue; }
+    results.push(record);
   }
 
   results.sort((a, b) => a.ratio - b.ratio);
-  return JSON.stringify({ url: location.hash || location.pathname, total: results.length, findings: results.slice(0, 24) });
+  exempt.sort((a, b) => a.ratio - b.ratio);
+  return JSON.stringify({
+    url: location.hash || location.pathname,
+    total: results.length,
+    findings: results.slice(0, 24),
+    exempt: exempt.length,
+    exemptSample: exempt.slice(0, 6)
+  });
 })()
 ```
 
@@ -249,7 +275,9 @@ import json, sys
 ok = True
 try:
     d = json.loads(json.loads(open(sys.argv[1]).read().strip()))
-    print('total=%-3d worst=%-6s' % (d['total'], d['findings'][0]['ratio'] if d['findings'] else '-'), end=' ')
+    print('total=%-3d exempt=%-2d worst=%-6s' % (
+        d['total'], d.get('exempt', 0),
+        d['findings'][0]['ratio'] if d['findings'] else '-'), end=' ')
 except Exception:
     print('PARSE-FAIL', end=' '); ok = False
 try:
@@ -312,26 +340,55 @@ git commit -m "test(qa): 对比度审计工具入库（含渐变遮挡修正 + �
 
 ---
 
-### Task 2: mixin 层 + 登录页修复（全站最严重 1.97:1）
+### Task 2: WCAG 未激活豁免分区 + mixin 层 + 登录页修复
+
+> **本任务含一处由 controller 裁决带入的工具改动**（ledger `Ruling (T2-1)`）：Task 1 的门控把**禁用态**元素当作缺陷，而 WCAG 2.1 SC 1.4.3 明确豁免「未激活的用户界面组件」的对比度要求。实测证据：登录页主按钮在未输入手机号时带 `.disabled`（`opacity: 0.45`），**改深字后仍只有 2.20:1** —— 即**只改字色修不好登录页**。故先给门控加 `exempt` 分区，再修字色。
 
 Mixin 与首个使用点放在同一 Task，使这一步有可观测的验收。
 
 **Files:**
+- Modify: `scripts/contrast-audit.js`（加 `isInactive()` + `exempt` 分区）
+- Modify: `scripts/contrast-audit.sh`（summary 打印 `exempt=`）
 - Modify: `src/styles/variables.scss`
 - Modify: `src/pages/login/index.vue:325`
 
 **Interfaces:**
 - Produces: `@mixin on-neon-fill`（无参，输出 `color: $dark-bg-primary`）、`@mixin neon-pill`（无参，输出 `color: $neon-purple-bright; background: $neon-purple-dim`）、`$error-bright: #f87171` —— Task 3/4/5 全部依赖这些名字
+- Produces: 审计 payload 新增返回字段 `exempt`（数量）与 `exemptSample`（前 6 条）；**`total` 从此只计可执行缺陷**，Task 3–7 的通过判据均基于它
 
-- [ ] **Step 1: 在 `variables.scss` 加入提亮红 token**
+- [ ] **Step 1: 给门控加 WCAG 未激活豁免分区**
 
-在 `$error-color: #ef4444;`（第 7 行）之后新增一行：
+`scripts/contrast-audit.js`：加入 `isInactive(el)`（自身或祖先 class 命中 `disabled`/`is-disabled`，或 `aria-disabled="true"`），在 `results.push` 之前分流：
+
+```js
+    // 未激活组件（禁用态）按 WCAG 1.4.3 豁免：不计入 total，但保留在 exempt 里可见，
+    // 不静默丢弃 —— 豁免必须是可审计的。
+    if (isInactive(el)) { exempt.push(record); continue; }
+    results.push(record);
+```
+
+并让返回体带上 `exempt` 与 `exemptSample`。`scripts/contrast-audit.sh` 的 summary 加印 `exempt=%-2d`。
+
+（完整代码见 brief，逐字采用。）
+
+- [ ] **Step 2: 验证豁免分区生效，并记录它影响了哪些页**
+
+Run: `bash scripts/contrast-audit.sh .audit/task2-tool`
+
+Expected：
+- `pages/login/index` → `total=0 exempt>=1`（禁用态登录按钮进入 exempt）
+- 其他含禁用态的页面（如 `pages/photographer/cert-apply`，其 `.btn-submit.disabled`）**也会**把这些元素移入 exempt → 其 `total` 下降属**预期**，不是回归
+- **必须逐页记录哪些页的 `total` 因豁免而下降**，确保没有可执行缺陷被误判为豁免
+
+- [ ] **Step 3: 在 `variables.scss` 加入提亮红 token**
+
+在 `$error-color: #ef4444;` 之后新增一行（按 token 名定位，不按行号）：
 
 ```scss
 $error-bright: #f87171;   // 压 rgba(239,68,68,.1) 底 → 5.86:1（$error-color 实测仅 4.32:1）
 ```
 
-- [ ] **Step 2: 在 `variables.scss` 末尾加入两个 mixin**
+- [ ] **Step 4: 在 `variables.scss` 末尾加入两个 mixin**
 
 ```scss
 // === 对比度 mixin（唯一事实源）===
@@ -347,9 +404,9 @@ $error-bright: #f87171;   // 压 rgba(239,68,68,.1) 底 → 5.86:1（$error-colo
 }
 ```
 
-- [ ] **Step 3: 迁移登录页按钮文字**
+- [ ] **Step 5: 迁移登录页按钮文字**
 
-`src/pages/login/index.vue:325` 的 `.login-btn-text` 规则，把：
+`src/pages/login/index.vue` 的 `.login-btn-text` 规则，把：
 
 ```scss
   color: $dark-text-primary;
@@ -361,21 +418,24 @@ $error-bright: #f87171;   // 压 rgba(239,68,68,.1) 底 → 5.86:1（$error-colo
   @include on-neon-fill;
 ```
 
-- [ ] **Step 4: 编译验证**
+- [ ] **Step 6: 编译验证**
 
 Run: `npx vue-tsc --noEmit`
 Expected: 退出码 0，无输出错误
 
-- [ ] **Step 5: 实测验证登录页归零**
+- [ ] **Step 7: 实测验证登录页可执行缺陷归零**
 
 Run: `bash scripts/contrast-audit.sh .audit/task2`
-Expected: `pages/login/index` 行 `total=0`（修复前为 `total=1 worst=1.97`）
 
-- [ ] **Step 6: Commit**
+Expected: `pages/login/index` 行 `total=0`，且 `exempt>=1`（禁用态按钮被豁免）。修复前该页为 `total=1 worst=1.31`（禁用态）。
+
+**另外必须单独验证启用态是真的达标**（豁免不能成为掩盖手段）：在页面里去掉 `.disabled` 后重测，启用态应为 `total=0` 且该元素**不**出现在 findings 里。
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/styles/variables.scss src/pages/login/index.vue
-git commit -m "fix(cend): 登录页按钮对比度 1.97→8.07:1 + 引入 on-neon-fill/neon-pill mixin"
+git add scripts/contrast-audit.js scripts/contrast-audit.sh src/styles/variables.scss src/pages/login/index.vue
+git commit -m "fix(qa,cend): WCAG 未激活豁免分区 + on-neon-fill/neon-pill mixin + 登录页按钮改深字"
 ```
 
 ---
@@ -741,7 +801,8 @@ Run: `bash scripts/contrast-audit.sh .audit/final`
 
 Expected：
 
-- 全部页面 `total=0`，**除**明确标记为「空态未覆盖」者（`favorite/list` 等 textLen 极小页）
+- 全部页面 `total=0`（`total` 已是**可执行缺陷**口径，不含 WCAG 未激活豁免项），**除**明确标记为「空态未覆盖」者（`favorite/list` 等 textLen 极小页）
+- 逐页核对 `exempt`：每个豁免项都必须能被指认为**未激活组件**（class 含 `disabled` / `aria-disabled`）。**任何拿 `exempt` 掩盖可执行缺陷的情况都视为失败** —— 必要时逐个列出 `exemptSample` 复核
 - 与 `.audit/baseline` 对比：**无任何页面数值上升**
 
 ```bash
@@ -805,7 +866,8 @@ git commit -m "fix(cend): F4b 设置页开关去掉 scale(0.8)，命中区 36→
 
 ## 完成标准（全部达成才算收工）
 
-- [ ] 四族 + switch 全部达标，`scripts/contrast-audit.sh` 输出无对应签名
+- [ ] 四族 + switch 全部达标，`scripts/contrast-audit.sh` 输出无对应签名，且所有页面 `total=0`（可执行口径）
+- [ ] 逐页复核 `exempt` 清单：每项都确属 WCAG 未激活组件；无任何可执行缺陷被豁免掩盖
 - [ ] 与基线逐页 diff 无回归
 - [ ] `go build/vet/test` + `vue-tsc` + `smoke.sh` + `build:h5` + `build:mp-weixin` 全绿
 - [ ] 前后截图留存

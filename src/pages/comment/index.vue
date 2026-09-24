@@ -380,7 +380,7 @@ async function submitReview() {
 .btn-primary {
   padding: $spacing-sm $spacing-xl;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-lg;
   font-size: $font-size-base;
   box-shadow: 0 4rpx 16rpx $neon-purple-glow;

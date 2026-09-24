@@ -415,7 +415,7 @@ function goBack() {
 .send-btn {
   padding: $spacing-sm $spacing-lg;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-lg;
   margin-left: $spacing-md;
   font-size: $font-size-base;

@@ -109,6 +109,6 @@ function goBack() {
 .empty-state { display: flex; flex-direction: column; align-items: center; padding-top: 200rpx; }
 .empty-icon { font-size: 100rpx; color: $dark-text-tertiary; }
 .empty-text { font-size: 28rpx; color: $dark-text-secondary; margin: 24rpx 0; }
-.btn-go { padding: 16rpx 48rpx; background: $neon-gradient; color: #fff; border-radius: 32rpx; font-size: 28rpx; }
+.btn-go { padding: 16rpx 48rpx; background: $neon-gradient; @include on-neon-fill; border-radius: 32rpx; font-size: 28rpx; }
 .empty-hint { text-align: center; padding-top: 200rpx; color: $dark-text-tertiary; }
 </style>

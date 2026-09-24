@@ -607,7 +607,7 @@ function goReview() {
 .btn-primary {
   padding: $spacing-sm $spacing-xl;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-lg;
   font-size: $font-size-base;
 

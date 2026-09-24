@@ -232,7 +232,7 @@ function goBack() {
   }
 }
 
-.btn-reapply { padding: 16rpx 64rpx; background: $neon-gradient; color: #fff; border-radius: 32rpx; font-size: 28rpx; box-shadow: 0 0 20rpx $neon-purple-glow;
+.btn-reapply { padding: 16rpx 64rpx; background: $neon-gradient; @include on-neon-fill; border-radius: 32rpx; font-size: 28rpx; box-shadow: 0 0 20rpx $neon-purple-glow;
   &:active { transform: scale(0.97); }
 }
 
@@ -256,7 +256,7 @@ function goBack() {
 .field-input { height: 88rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; color: $dark-text-primary; }
 .field-textarea { width: 100%; height: 200rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 20rpx 24rpx; font-size: 28rpx; color: $dark-text-primary; box-sizing: border-box; }
 
-.btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; color: #fff; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
+.btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; @include on-neon-fill; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
   &:active { transform: scale(0.97); box-shadow: 0 0 12rpx $neon-purple-glow; }
   &.disabled { opacity: 0.4; box-shadow: none; }
 }

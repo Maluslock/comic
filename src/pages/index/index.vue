@@ -406,7 +406,7 @@ function onQuickNav(_url: string) {}
   line-height: 28rpx;
   text-align: center;
   font-size: 18rpx;
-  color: #fff;
+  @include on-neon-fill;
   background: $neon-pink;
   border-radius: 14rpx;
   padding: 0 6rpx;
@@ -475,7 +475,7 @@ function onQuickNav(_url: string) {}
 
 .cta-primary {
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   box-shadow: 0 4rpx 24rpx $neon-purple-glow;
 
   &:active {
@@ -754,7 +754,7 @@ function onQuickNav(_url: string) {}
 .btn-retry {
   padding: 14rpx 48rpx;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-xl;
   font-size: $font-size-base;
   font-weight: 600;

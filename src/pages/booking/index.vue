@@ -367,7 +367,7 @@ async function submitBooking() {
 .btn-primary {
   flex: 1;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-lg;
   padding: $spacing-md;
   text-align: center;

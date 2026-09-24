@@ -659,7 +659,7 @@ function onGalleryImgError(_idx: number) {
 .btn-retry {
   padding: 14rpx 48rpx;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-xl;
   font-size: $font-size-base;
   font-weight: 600;

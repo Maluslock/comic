@@ -220,7 +220,7 @@ async function save() {
   text-align: center;
   padding: 24rpx 0;
   background: $neon-gradient;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: 44rpx;
   font-size: 30rpx;
   font-weight: 600;

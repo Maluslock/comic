@@ -183,7 +183,7 @@ function goBack() {
 
 .activated-tip { display: flex; flex-direction: column; align-items: center; background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 48rpx 32rpx; }
 .tip-text { font-size: 28rpx; color: $dark-text-secondary; margin-bottom: 24rpx; }
-.btn-go { padding: 16rpx 48rpx; background: $neon-gradient; color: #fff; border-radius: 32rpx; font-size: 28rpx; box-shadow: 0 0 20rpx $neon-purple-glow; }
+.btn-go { padding: 16rpx 48rpx; background: $neon-gradient; @include on-neon-fill; border-radius: 32rpx; font-size: 28rpx; box-shadow: 0 0 20rpx $neon-purple-glow; }
 .btn-edit { margin-top: 24rpx; padding: 14rpx 48rpx; background: $dark-bg-secondary; border: 2rpx solid $neon-purple; color: $neon-purple; border-radius: 32rpx; font-size: 28rpx; }
 .btn-works { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(6, 182, 212, 0.1); border: 2rpx solid $neon-cyan; color: $neon-cyan; border-radius: 32rpx; font-size: 28rpx; }
 .btn-services { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(236, 72, 153, 0.1); border: 2rpx solid $neon-pink; color: $neon-pink; border-radius: 32rpx; font-size: 28rpx; }
@@ -203,7 +203,7 @@ function goBack() {
   &.active { border-color: $neon-purple; color: $neon-purple; background: $neon-purple-dim; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
 }
 
-.btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; color: #fff; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
+.btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; @include on-neon-fill; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
   &:active { transform: scale(0.97); box-shadow: 0 0 12rpx $neon-purple-glow; }
 }
 </style>

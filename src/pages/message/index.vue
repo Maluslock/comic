@@ -354,7 +354,7 @@ function goChat(session: any) {
 
 .unread-count {
   background: $neon-pink;
-  color: #fff;
+  @include on-neon-fill;
   font-size: $font-size-xs;
   min-width: 36rpx;
   height: 36rpx;

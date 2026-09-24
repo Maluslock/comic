@@ -271,7 +271,7 @@ function goBack() {
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; }
 .toolbar-count { font-size: 24rpx; color: $dark-text-tertiary; }
-.btn-add { padding: 12rpx 28rpx; background: $neon-gradient; color: #fff; border-radius: 28rpx; font-size: 24rpx; box-shadow: 0 0 16rpx $neon-purple-glow;
+.btn-add { padding: 12rpx 28rpx; background: $neon-gradient; @include on-neon-fill; border-radius: 28rpx; font-size: 24rpx; box-shadow: 0 0 16rpx $neon-purple-glow;
   &:active { transform: scale(0.97); }
 }
 
@@ -318,7 +318,7 @@ function goBack() {
 .img-actions { display: flex; gap: 16rpx; }
 .img-actions .btn-add-img { flex: 1; }
 
-.btn-submit { margin-top: 40rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; color: #fff; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
+.btn-submit { margin-top: 40rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; @include on-neon-fill; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
   &:active { transform: scale(0.97); }
   &.disabled { opacity: 0.5; }
 }

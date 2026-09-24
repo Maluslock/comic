@@ -83,11 +83,11 @@ func (s *ReviewService) Create(ctx context.Context, req CreateReviewRequest) (*R
 		return nil, err
 	}
 
-	// 评分与评价数按 reviews 表重算，让这两个字段对用户有真实含义（此前插评价从不更新它们，
-	// 列表上的「4.9 分 / 234 条」与真实 3 条评价毫无关系）。best-effort：评价本身已落库，
-	// 重算失败只记日志（下一条评价会自我修正），不能因为一个派生字段让用户以为提交失败。
-	if err := s.queries.RecomputePhotographerRating(ctx, int64(req.PhotographerID)); err != nil {
-		log.Printf("recompute photographer rating failed: %v", err)
+	// 评分/评价数/单量按事实重算（此前它们是种子死数字，插评价从不更新）。
+	// best-effort：评价本身已落库，重算失败只记日志（下一条评价会自我修正），
+	// 不能因为派生字段让用户以为提交失败。
+	if err := s.queries.RecomputePhotographerStats(ctx, int64(req.PhotographerID)); err != nil {
+		log.Printf("recompute photographer stats failed: %v", err)
 	}
 
 	img := review.Images

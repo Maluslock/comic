@@ -363,7 +363,18 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
 	}
 
+	// 单量（order_count）随状态流转变化：完成 +1、取消 -1。整表重算而不是加减，
+	// 幂等且能自我修正历史上的错误计数。失败只记日志，不影响订单流转结果。
+	s.recomputeStats(ctx, b.PhotographerID)
+
 	return bookingToItem(updated), nil
+}
+
+// recomputeStats 重算摄影师对外的展示数字（评分/评价数/单量）。best-effort。
+func (s *BookingService) recomputeStats(ctx context.Context, photographerID int32) {
+	if err := s.queries.RecomputePhotographerStats(ctx, int64(photographerID)); err != nil {
+		log.Printf("recompute photographer stats failed: %v", err)
+	}
 }
 
 // AdminUpdateStatus bypasses actor ownership checks; the admin is neither coser nor photographer.
@@ -398,6 +409,8 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
 		s.notifyPhotographer(ctx, b.PhotographerID, "success", "拍摄已完成", "该预约已标记完成。", b.ID)
 	}
+	// 管理员流转同样影响单量，走同一套重算。
+	s.recomputeStats(ctx, b.PhotographerID)
 	return bookingToItem(updated), nil
 }
 

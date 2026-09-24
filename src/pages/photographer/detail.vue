@@ -7,7 +7,7 @@
           <text class="name">{{ photographer?.name }}</text>
           <view class="stats">
             <view class="stat-item">
-              <text class="stat-value">{{ photographer?.rating }}</text>
+              <text class="stat-value">{{ ratingText }}</text>
               <text class="stat-label">评分</text>
             </view>
             <view class="stat-divider"></view>
@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import ReviewCard from '@/components/ReviewCard.vue'
 import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
@@ -161,6 +161,11 @@ type PhotographerView = Photographer & { mode?: string; certified?: boolean }
 
 const userStore = useUserStore()
 const photographer = ref<PhotographerView | null>(null)
+
+// 评分按真实评价重算：没有评价时后端返回 rating=0 / reviewCount=0。
+// 直接显示「0」会被读成「被打 0 分」，故无评价时给文案。
+const ratingText = computed(() => ((photographer.value?.reviewCount ?? 0) > 0 ? String(photographer.value?.rating) : '暂无'))
+
 const collected = ref(false)
 const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
 

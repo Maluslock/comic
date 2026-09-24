@@ -56,32 +56,68 @@ func TestIntegration_BookingSlot_UniqueAmongActiveBookings(t *testing.T) {
 	}
 }
 
-// 评分与评价数必须按 reviews 表重算，而不是停留在种子数字上。
-func TestIntegration_RecomputePhotographerRating(t *testing.T) {
+// 评分 / 评价数 / 单量三个对外展示数字都必须按事实重算，而不是停留在种子死数字上。
+func TestIntegration_RecomputePhotographerStats(t *testing.T) {
 	q, ctx := integrationQueries(t)
 	pid := insertPhotographerFixture(t, q, ctx)
-	if _, err := q.db.Exec(ctx, `UPDATE photographers SET rating = 4.9, review_count = 234 WHERE id = $1`, pid); err != nil {
-		t.Fatalf("seed stale rating: %v", err)
+	if _, err := q.db.Exec(ctx,
+		`UPDATE photographers SET rating = 4.9, review_count = 234, order_count = 567 WHERE id = $1`, pid); err != nil {
+		t.Fatalf("seed stale stats: %v", err)
 	}
 
 	insertReviewFixture(t, q, ctx, pid, 11, 2)
 	insertReviewFixture(t, q, ctx, pid, 12, 4)
+	// 两单完成、一单待确认、一单取消：只有完成的两单计入 order_count。
+	insertBookingFixture(t, q, ctx, pid, 1, "completed", "2099-05-01", "10:00")
+	insertBookingFixture(t, q, ctx, pid, 1, "completed", "2099-05-02", "10:00")
+	insertBookingFixture(t, q, ctx, pid, 1, "pending", "2099-05-03", "10:00")
+	insertBookingFixture(t, q, ctx, pid, 1, "cancelled", "2099-05-04", "10:00")
 
-	if err := q.RecomputePhotographerRating(ctx, pid); err != nil {
-		t.Fatalf("RecomputePhotographerRating: %v", err)
+	if err := q.RecomputePhotographerStats(ctx, pid); err != nil {
+		t.Fatalf("RecomputePhotographerStats: %v", err)
 	}
 
 	var rating float64
-	var count int32
-	if err := q.db.QueryRow(ctx, `SELECT rating::float8, review_count FROM photographers WHERE id = $1`, pid).
-		Scan(&rating, &count); err != nil {
+	var reviews, orders int32
+	if err := q.db.QueryRow(ctx,
+		`SELECT rating::float8, review_count, order_count FROM photographers WHERE id = $1`, pid).
+		Scan(&rating, &reviews, &orders); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
-	if count != 2 {
-		t.Errorf("review_count = %d, want 2 (recomputed from reviews)", count)
+	if reviews != 2 {
+		t.Errorf("review_count = %d, want 2 (recomputed from reviews)", reviews)
 	}
 	if rating < 2.99 || rating > 3.01 {
 		t.Errorf("rating = %v, want 3.0 (avg of 2 and 4)", rating)
+	}
+	if orders != 2 {
+		t.Errorf("order_count = %d, want 2 (only completed bookings count)", orders)
+	}
+}
+
+// 没有任何评价/完成单时，重算必须给 0（而不是沿用旧数字）—— 前端据此显示「暂无评分」。
+func TestIntegration_RecomputePhotographerStats_ZeroesWhenNoFacts(t *testing.T) {
+	q, ctx := integrationQueries(t)
+	pid := insertPhotographerFixture(t, q, ctx)
+	if _, err := q.db.Exec(ctx,
+		`UPDATE photographers SET rating = 4.9, review_count = 234, order_count = 567 WHERE id = $1`, pid); err != nil {
+		t.Fatalf("seed stale stats: %v", err)
+	}
+
+	if err := q.RecomputePhotographerStats(ctx, pid); err != nil {
+		t.Fatalf("RecomputePhotographerStats: %v", err)
+	}
+
+	var rating float64
+	var reviews, orders int32
+	if err := q.db.QueryRow(ctx,
+		`SELECT rating::float8, review_count, order_count FROM photographers WHERE id = $1`, pid).
+		Scan(&rating, &reviews, &orders); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if rating != 0 || reviews != 0 || orders != 0 {
+		t.Errorf("want all zero without any reviews/orders, got rating=%v reviews=%d orders=%d",
+			rating, reviews, orders)
 	}
 }
 

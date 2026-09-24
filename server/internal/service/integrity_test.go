@@ -194,3 +194,36 @@ func reviewScanValues(id int64, photographerID, userID, rating int32) []any {
 		(*string)(nil), []string{}, time.Now(),
 	}
 }
+
+// 订单流转会改变「单量」（order_count 只数已完成），所以每次成功的状态流转都必须触发重算；
+// 被拒绝的流转不该有任何写入。
+func TestUpdateStatus_RecomputesStatsOnSuccess(t *testing.T) {
+	db := &fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(7, "confirmed")}, // GetBookingByID
+		fakeRow{values: bookingScanValues(7, "completed")}, // UpdateBookingStatus
+		fakeRow{values: []any{int64(1)}},                   // notify → InsertNotification
+	}}
+	svc := NewBookingService(repository.New(db))
+
+	// bookingScanValues 里 coser_id = 2，所以动作人必须是 2（coser 侧流转）。
+	if _, err := svc.UpdateStatus(context.Background(), 7, "completed", 2, "coser"); err != nil {
+		t.Fatalf("UpdateStatus unexpected error: %v", err)
+	}
+	if len(db.execArgs) != 1 {
+		t.Fatalf("want exactly 1 Exec (stats recompute) after a successful transition, got %d", len(db.execArgs))
+	}
+}
+
+func TestUpdateStatus_RejectedTransitionDoesNotRecompute(t *testing.T) {
+	db := &fakeDBTX{rows: []pgx.Row{
+		fakeRow{values: bookingScanValues(7, "pending")}, // 待确认 → 完成：非法流转
+	}}
+	svc := NewBookingService(repository.New(db))
+
+	if _, err := svc.UpdateStatus(context.Background(), 7, "completed", 2, "coser"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("want ErrInvalidTransition, got %v", err)
+	}
+	if len(db.execArgs) != 0 {
+		t.Errorf("a rejected transition must not write, got %d Exec", len(db.execArgs))
+	}
+}

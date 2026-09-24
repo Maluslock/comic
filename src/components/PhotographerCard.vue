@@ -5,8 +5,11 @@
       <view class="header">
         <text class="name">{{ photographer.name }}</text>
         <view class="rating">
-          <text class="star">★</text>
-          <text class="score">{{ photographer.rating }}</text>
+          <template v-if="hasRating">
+            <text class="star">★</text>
+            <text class="score">{{ photographer.rating }}</text>
+          </template>
+          <text v-else class="no-rating">暂无评分</text>
         </view>
       </view>
       <text v-if="photographer.description" class="desc">{{ photographer.description }}</text>
@@ -40,6 +43,10 @@ import { describePrice } from '@/utils/price'
 const props = defineProps<{
   photographer: Photographer
 }>()
+
+// 评分现在按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0。
+// 显示「★ 0」会让人以为被打了 0 分，所以无评价时改文案。
+const hasRating = computed(() => (props.photographer.reviewCount ?? 0) > 0)
 
 // 价格文案取「最低可成交价」（闲鱼/淘宝多 SKU 惯例）；
 // 接口没返回价格汇总时 describePrice 给空串，这里直接不渲染。
@@ -118,6 +125,11 @@ function goDetail() {
   color: $warning-color;
   font-size: 22rpx;
   margin-left: 2rpx;
+}
+
+.no-rating {
+  color: $dark-text-tertiary;
+  font-size: 20rpx;
 }
 
 .desc {

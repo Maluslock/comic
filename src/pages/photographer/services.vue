@@ -401,7 +401,7 @@ function goBack() {
 .btn-edit { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $neon-cyan; background: rgba(6, 182, 212, 0.1); border: 1rpx solid rgba(6, 182, 212, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
-.btn-del { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $error-color; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
+.btn-del { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $error-bright; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
 

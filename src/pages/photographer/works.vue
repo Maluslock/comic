@@ -298,7 +298,7 @@ function goBack() {
 .btn-edit { padding: 8rpx 24rpx; font-size: 22rpx; color: $neon-cyan; background: rgba(6, 182, 212, 0.1); border: 1rpx solid rgba(6, 182, 212, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
-.btn-del { padding: 8rpx 24rpx; font-size: 22rpx; color: $error-color; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
+.btn-del { padding: 8rpx 24rpx; font-size: 22rpx; color: $error-bright; background: rgba(239, 68, 68, 0.1); border: 1rpx solid rgba(239, 68, 68, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }
 
@@ -313,7 +313,7 @@ function goBack() {
 .img-row { display: flex; align-items: center; gap: 12rpx; margin-bottom: 16rpx;
   .field-input { flex: 1; }
 }
-.img-del { width: 56rpx; height: 56rpx; display: flex; align-items: center; justify-content: center; font-size: 36rpx; color: $error-color; background: rgba(239, 68, 68, 0.1); border-radius: 50%; flex-shrink: 0; }
+.img-del { width: 56rpx; height: 56rpx; display: flex; align-items: center; justify-content: center; font-size: 36rpx; color: $error-bright; background: rgba(239, 68, 68, 0.1); border-radius: 50%; flex-shrink: 0; }
 .btn-add-img { padding: 14rpx 0; text-align: center; font-size: 24rpx; color: $neon-cyan; border: 2rpx dashed rgba(6, 182, 212, 0.4); border-radius: 16rpx; }
 .img-actions { display: flex; gap: 16rpx; }
 .img-actions .btn-add-img { flex: 1; }

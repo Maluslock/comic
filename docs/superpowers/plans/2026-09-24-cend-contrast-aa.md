@@ -14,7 +14,7 @@
 
 - 分支：`fix/cend-contrast-aa`（已建，stack 在 `feat/photographer-pricing` 之上）
 - SCSS 只允许用 token/mixin，禁止新增硬编码色值（`$dark-bg-primary` 等已有 token 除外）
-- 尺寸单位一律 `rpx`（`min-height: 44px` 这一处例外，因要与 `uni-switch` 的 px 渲染对齐）
+- 尺寸单位一律 `rpx`；**禁止用 `transform` / `zoom` 缩放交互元素**（那会同步收缩命中区，见 Task 7）
 - mixin **只管颜色**：不得把 `padding` / `font-size` / `border-radius` / `border` 塞进 mixin
 - 实测达标的**非紫**同色系（青 ~5.5 / 绿 ~5.8 / 金 ~5.9）**一律不动**（含 `activate.vue` 的 `.btn-works`、`.btn-services`、`.is-cert`，以及 `services.vue` 的 `.btn-tpl` / `.price-tag.is-fixed` / `.is-mutual` / `.is-active`）
 - **紫**同色系一律迁移以保持族内一致：`.tag-item` 等实测 3.80 确属不达标；`activate.vue .btn-cert` 压深页底实测为**边际达标 4.54**，落在测量噪声边缘，一并迁移到 5.7 —— 这是**刻意的族内统一**，不是"顺手改达标项"。Task 4 Step 7 必须核对除 `.btn-cert` 外没有别的边际项被一并改动
@@ -698,8 +698,12 @@ Expected：
 - 与 `.audit/baseline` 对比：**无任何页面数值上升**
 
 ```bash
+# 守卫：.audit/ 是 gitignore 的，基线可能不存在。缺基线时 diff 会拿空字典对比并
+# 静默输出「无回归」—— 那正是本项目栽过的假通过。必须先确认基线非空。
+test -n "$(ls -A .audit/baseline/*.json 2>/dev/null)" || {
+  echo "基线缺失，先重建："; bash scripts/contrast-audit.sh .audit/baseline; }
 python3 - <<'PY'
-import json, glob, os
+import json, glob, os, sys
 def load(d):
     out={}
     for f in glob.glob(d+'/*.json'):
@@ -707,6 +711,9 @@ def load(d):
         except Exception: pass
     return out
 b,a=load('.audit/baseline'),load('.audit/final')
+if not b: sys.exit('FATAL: 基线为空，拒绝给出「无回归」结论')
+missing=[k for k in b if k not in a]
+if missing: sys.exit('FATAL: 复测缺页 %s（测量不完整，不得判定通过）' % missing)
 for k in sorted(set(b)|set(a)):
     if a.get(k,0)>b.get(k,0): print('REGRESSION', k, b.get(k), '->', a.get(k))
 print('所有页面缺陷数：', {k:a.get(k) for k in sorted(a) if a.get(k)})

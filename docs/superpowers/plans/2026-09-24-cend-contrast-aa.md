@@ -1033,6 +1033,11 @@ b,a=load(sys.argv[1]),load('.audit/final')
 if not b: sys.exit('FATAL: 基线为空，拒绝给出「无回归」结论')
 missing=[k for k in b if k not in a]
 if missing: sys.exit('FATAL: 复测缺页 %s（测量不完整，不得判定通过）' % missing)
+extra=[k for k in a if k not in b]
+if extra:
+    # 复测里出现基线没有的页 —— 多为 OUT_DIR 残留的旧文件（见 Ruling T7-1）。
+    # 这些页无法与基线比较，既不能计入回归，也**不得**当作通过：必须显式列出并阻断。
+    sys.exit('FATAL: 复测含基线之外的 %d 页 %s —— 疑为 OUT_DIR 残留旧文件，请清理后重跑' % (len(extra), extra))
 rose=[k for k in b if a.get(k,0)>b[k]]
 for k in rose: print('REGRESSION', k, b[k], '->', a[k])
 print('页数: 基线 %d / 复测 %d' % (len(b), len(a)))

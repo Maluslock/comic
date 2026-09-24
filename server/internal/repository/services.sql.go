@@ -202,3 +202,49 @@ func (q *Queries) DeleteService(ctx context.Context, id, photographerID int64) (
 	}
 	return tag.RowsAffected(), nil
 }
+
+// ServicePriceSummary is the per-photographer price roll-up the list page renders as
+// 「¥最低价 起 / 互勉 / 面议 / 暂未设置」. Only on-the-shelf packages count, so a
+// photographer who took everything down reads as 暂未设置 rather than showing a
+// price nobody can book.
+//
+// Fetched as ONE batch query for a page of ids — never per row — so the list page
+// stays a single round trip.
+type ServicePriceSummary struct {
+	PhotographerID int64  `json:"photographer_id"` // services.photographer_id 是 BIGINT，别窄化
+	MinPrice       *int32 `json:"min_price"`       // 最低固定价（>0）；无固定价时为 NULL
+	HasFree        bool   `json:"has_free"`        // 存在 0 元（互勉）套餐
+	HasNegotiable  bool   `json:"has_negotiable"`  // 存在面议（price IS NULL）套餐
+	ActiveCount    int32  `json:"active_count"`
+}
+
+// bool_or 会忽略 NULL 输入：当一位摄影师的在架套餐全是面议（price IS NULL）时，
+// "price = 0" 对每行都是 NULL，bool_or 便整体返回 NULL —— 扫进 Go 的 bool 会报
+// "cannot scan NULL into *bool"，让整个列表接口 500。故必须 COALESCE 兜底。
+const getServicePriceSummaries = `-- name: GetServicePriceSummaries :many
+SELECT photographer_id,
+       MIN(price) FILTER (WHERE price > 0)     AS min_price,
+       COALESCE(bool_or(price = 0), false)     AS has_free,
+       COALESCE(bool_or(price IS NULL), false) AS has_negotiable,
+       count(*)                                AS active_count
+FROM services
+WHERE is_active AND photographer_id = ANY($1::bigint[])
+GROUP BY photographer_id
+`
+
+func (q *Queries) GetServicePriceSummaries(ctx context.Context, photographerIDs []int64) ([]ServicePriceSummary, error) {
+	rows, err := q.db.Query(ctx, getServicePriceSummaries, photographerIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ServicePriceSummary, 0)
+	for rows.Next() {
+		var i ServicePriceSummary
+		if err := rows.Scan(&i.PhotographerID, &i.MinPrice, &i.HasFree, &i.HasNegotiable, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}

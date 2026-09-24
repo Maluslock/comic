@@ -9,11 +9,23 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// PhotographerListItem is the list-page row: the shared photographer fields plus the
+// price roll-up the card renders (「¥399 起 / 互勉 / 面议 / 暂未设置」). It is a
+// separate type on purpose — adding these to PhotographerItem itself would leak zero
+// values into the home and detail responses, which never fetch them.
+type PhotographerListItem struct {
+	PhotographerItem
+	MinPrice      *int32 `json:"minPrice"`      // 最低固定价；无固定价时 null
+	HasFree       bool   `json:"hasFree"`       // 有 0 元（互勉）套餐
+	HasNegotiable bool   `json:"hasNegotiable"` // 有面议套餐
+	ServiceCount  int32  `json:"serviceCount"`  // 上架套餐数；0 = 暂未设置
+}
+
 type PhotographerListResponse struct {
-	List     []PhotographerItem `json:"list"`
-	Total    int                `json:"total"`
-	Page     int                `json:"page"`
-	PageSize int                `json:"pageSize"`
+	List     []PhotographerListItem `json:"list"`
+	Total    int                    `json:"total"`
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"pageSize"`
 }
 
 type PhotographerDetail struct {
@@ -262,7 +274,23 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		photographers = photographers[:size]
 	}
 
-	items := mapPhotographers(photographers)
+	items := make([]PhotographerListItem, 0, len(photographers))
+	for _, it := range mapPhotographers(photographers) {
+		items = append(items, PhotographerListItem{PhotographerItem: it})
+	}
+	// 一次批量取回本页的价格汇总（不是逐行查询）；无上架套餐的摄影师不会出现在结果里，
+	// 保持零值 → 前端显示「暂未设置」。
+	ids := make([]int64, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(ids) > 0 {
+		sums, err := s.queries.GetServicePriceSummaries(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		items = mergePriceSummaries(items, sums)
+	}
 
 	total := offset + len(photographers)
 	if hasMore {
@@ -275,6 +303,26 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		Page:     page,
 		PageSize: size,
 	}, nil
+}
+
+// mergePriceSummaries attaches the price roll-up to a page of list rows. Pure, so it
+// is unit-testable without a database.
+func mergePriceSummaries(items []PhotographerListItem, sums []repository.ServicePriceSummary) []PhotographerListItem {
+	byID := make(map[int64]repository.ServicePriceSummary, len(sums))
+	for _, s := range sums {
+		byID[s.PhotographerID] = s
+	}
+	for i := range items {
+		s, ok := byID[items[i].ID]
+		if !ok {
+			continue
+		}
+		items[i].MinPrice = s.MinPrice
+		items[i].HasFree = s.HasFree
+		items[i].HasNegotiable = s.HasNegotiable
+		items[i].ServiceCount = s.ActiveCount
+	}
+	return items
 }
 
 func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*PhotographerDetail, error) {
@@ -394,12 +442,12 @@ func mapReviewItems(reviews []repository.Review) []ReviewItem {
 			PhotographerID:   r.PhotographerID,
 			PhotographerName: r.PhotographerName,
 			UserID:           r.UserID,
-			UserName:       derefString(r.UserName),
-			UserAvatar:     derefString(r.UserAvatar),
-			Rating:         r.Rating,
-			Content:        derefString(r.Content),
-			Images:         images,
-			CreatedAt:      r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UserName:         derefString(r.UserName),
+			UserAvatar:       derefString(r.UserAvatar),
+			Rating:           r.Rating,
+			Content:          derefString(r.Content),
+			Images:           images,
+			CreatedAt:        r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 	return items

@@ -117,3 +117,97 @@ func TestIntegration_Bookable_RejectsPackageOffTheShelf(t *testing.T) {
 		t.Errorf("want owner 1, got %v", owner)
 	}
 }
+
+// insertPhotographerFixture creates a throwaway photographer (only `name` is required)
+// so the roll-up tests never touch the demo rows.
+func insertPhotographerFixture(t *testing.T, q *Queries, ctx context.Context) int64 {
+	t.Helper()
+	var id int64
+	if err := q.db.QueryRow(ctx,
+		`INSERT INTO photographers (name) VALUES ('__pricing_it_photographer__') RETURNING id`).Scan(&id); err != nil {
+		t.Fatalf("insert photographer fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		bg := context.Background()
+		_, _ = q.db.Exec(bg, `DELETE FROM services WHERE photographer_id = $1`, id)
+		_, _ = q.db.Exec(bg, `DELETE FROM photographers WHERE id = $1`, id)
+	})
+	return id
+}
+
+func insertServiceFixture(t *testing.T, q *Queries, ctx context.Context, photographerID int64, price *int32, active bool) int64 {
+	t.Helper()
+	var id int64
+	if err := q.db.QueryRow(ctx,
+		`INSERT INTO services (name, price, description, duration, photographer_id, is_active)
+		 VALUES ('__pricing_it__', $1, '', 60, $2, $3) RETURNING id`,
+		price, photographerID, active).Scan(&id); err != nil {
+		t.Fatalf("insert service fixture: %v", err)
+	}
+	return id
+}
+
+// 全是面议（price IS NULL）时 min_price 这一列整体为 NULL。这曾经让列表接口直接 500
+// ——「摄影师只挂面议套餐」是完全合法的用法，所以这条必须钉住。
+func TestIntegration_GetServicePriceSummaries_AllNegotiable(t *testing.T) {
+	q, ctx := pricingTestQueries(t)
+	pid := insertPhotographerFixture(t, q, ctx)
+	insertServiceFixture(t, q, ctx, pid, nil, true)
+	insertServiceFixture(t, q, ctx, pid, nil, true)
+	insertServiceFixture(t, q, ctx, pid, nil, false) // 下架不计入
+
+	sums, err := q.GetServicePriceSummaries(ctx, []int64{pid})
+	if err != nil {
+		t.Fatalf("GetServicePriceSummaries: %v", err)
+	}
+	if len(sums) != 1 {
+		t.Fatalf("want 1 summary row, got %d", len(sums))
+	}
+	s := sums[0]
+	if s.PhotographerID != pid {
+		t.Errorf("want photographer %d, got %d", pid, s.PhotographerID)
+	}
+	if s.MinPrice != nil {
+		t.Errorf("want NULL min price when every package is negotiable, got %d", *s.MinPrice)
+	}
+	if s.HasFree {
+		t.Error("want hasFree=false (no zero-priced package)")
+	}
+	if !s.HasNegotiable {
+		t.Error("want hasNegotiable=true")
+	}
+	if s.ActiveCount != 2 {
+		t.Errorf("want activeCount 2 (downed package excluded), got %d", s.ActiveCount)
+	}
+}
+
+// 互勉（0 元）不能把最低价拉成 0，也不能漏掉 hasFree。
+func TestIntegration_GetServicePriceSummaries_FreeDoesNotLowerMinPrice(t *testing.T) {
+	q, ctx := pricingTestQueries(t)
+	pid := insertPhotographerFixture(t, q, ctx)
+	zero := int32(0)
+	cheap := int32(399)
+	insertServiceFixture(t, q, ctx, pid, &zero, true)
+	insertServiceFixture(t, q, ctx, pid, &cheap, true)
+
+	sums, err := q.GetServicePriceSummaries(ctx, []int64{pid})
+	if err != nil {
+		t.Fatalf("GetServicePriceSummaries: %v", err)
+	}
+	if len(sums) != 1 {
+		t.Fatalf("want 1 summary row, got %d", len(sums))
+	}
+	s := sums[0]
+	if !s.HasFree {
+		t.Error("want hasFree=true")
+	}
+	if s.MinPrice == nil || *s.MinPrice != 399 {
+		t.Errorf("want min price 399 (the 0-priced package must not win), got %v", s.MinPrice)
+	}
+	if s.HasNegotiable {
+		t.Error("want hasNegotiable=false")
+	}
+	if s.ActiveCount != 2 {
+		t.Errorf("want activeCount 2, got %d", s.ActiveCount)
+	}
+}

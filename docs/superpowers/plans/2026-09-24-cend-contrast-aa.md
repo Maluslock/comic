@@ -872,14 +872,21 @@ Expected：
 
 - 全部页面 `total=0`（`total` 已是**可执行缺陷**口径，不含 WCAG 未激活豁免项），**除**明确标记为「空态未覆盖」者（`favorite/list` 等 textLen 极小页）
 - 逐页核对 `exempt`：每个豁免项都必须能被指认为**未激活组件**（class 含 `disabled` / `aria-disabled`）。**任何拿 `exempt` 掩盖可执行缺陷的情况都视为失败** —— 必要时逐个列出 `exemptSample` 复核
-- 与 `.audit/baseline` 对比：**无任何页面数值上升**
+- 与**同算法基线** `.audit/task3` 对比：**无任何页面数值上升**
+
+> **为什么不再拿 `.audit/baseline` 比**（Task 1 产物）：两个原因，都是实证得来的。
+> 1. **页集不同** —— Task 3 Step 2c 把门控从 25 页扩到 **27 页**（新增 `order/detail?id=3/id=4`）。拿 25 页基线比 27 页结果会误报缺页。
+> 2. **算法不同，更关键** —— `.audit/baseline` 是**旧测量算法**（忽略透明度、渐变取最差停靠点）测的。跨算法比较会把**工具修正**误读成代码回归。Task 3 起的所有比较都必须用**同一算法**的基线。
+>
+> 因此：可比的回归基线是 **`.audit/task3`**（Task 3 收口时的 27 页、当前算法）。
 
 ```bash
-# 守卫：.audit/ 是 gitignore 的，基线可能不存在。缺基线时 diff 会拿空字典对比并
-# 静默输出「无回归」—— 那正是本项目栽过的假通过。必须先确认基线非空。
-test -n "$(ls -A .audit/baseline/*.json 2>/dev/null)" || {
-  echo "基线缺失，先重建："; bash scripts/contrast-audit.sh .audit/baseline; }
-python3 - <<'PY'
+# 守卫：.audit/ 是 gitignore 的。缺基线时 diff 会拿空字典对比并静默输出「无回归」——
+# 那正是本项目栽过的假通过。基线必须存在、非空，且页集不得比复测少。
+BASE_DIR="${BASE_DIR:-.audit/task3}"
+test -n "$(ls -A "$BASE_DIR"/*.json 2>/dev/null)" || {
+  echo "FATAL: 回归基线 $BASE_DIR 为空或缺失 —— 拒绝给出「无回归」结论" >&2; exit 1; }
+python3 - "$BASE_DIR" <<'PY'
 import json, glob, os, sys
 def load(d):
     out={}
@@ -887,13 +894,15 @@ def load(d):
         try: out[os.path.basename(f)]=json.loads(json.loads(open(f).read().strip()))['total']
         except Exception: pass
     return out
-b,a=load('.audit/baseline'),load('.audit/final')
+b,a=load(sys.argv[1]),load('.audit/final')
 if not b: sys.exit('FATAL: 基线为空，拒绝给出「无回归」结论')
 missing=[k for k in b if k not in a]
 if missing: sys.exit('FATAL: 复测缺页 %s（测量不完整，不得判定通过）' % missing)
-for k in sorted(set(b)|set(a)):
-    if a.get(k,0)>b.get(k,0): print('REGRESSION', k, b.get(k), '->', a.get(k))
-print('所有页面缺陷数：', {k:a.get(k) for k in sorted(a) if a.get(k)})
+rose=[k for k in b if a.get(k,0)>b[k]]
+for k in rose: print('REGRESSION', k, b[k], '->', a[k])
+print('页数: 基线 %d / 复测 %d' % (len(b), len(a)))
+print('仍不达标页:', {k:a.get(k) for k in sorted(a) if a.get(k)})
+sys.exit(1 if rose else 0)
 PY
 ```
 

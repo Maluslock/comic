@@ -235,8 +235,7 @@ function goDetail(id: string) {
   transition: all 0.15s;
 
   &.active {
-    background: rgba($neon-purple, 0.15);
-    color: $neon-purple;
+    @include neon-pill;
     border-color: rgba($neon-purple, 0.3);
   }
 

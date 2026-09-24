@@ -515,48 +515,54 @@ git commit -m "fix(qa,cend): WCAG 未激活豁免分区 + on-neon-fill/neon-pill
   @include on-neon-fill;
 ```
 
-- [ ] **Step 2b: 补齐静态清单漏掉的 light-on-neon 块（由实测发现，见 ledger `Ruling (T3-1)`）**
+- [ ] **Step 2b: `order/detail` —— 按状态变体分别取色（见 ledger `Ruling (T3-3)`）**
 
-**范围以实测为准，不以静态清单为准。** 上面 19 项来自静态扫描，它**漏了「背景在父元素、文字在子元素」的写法**（与登录页 `.login-btn` → `.login-btn-text` 同一失效模式）。改动后仍有 15 处 light-on-neon 残留，全部补在此步：
+**关键事实**：`.status-card` 在不同状态下底色不同 —— active/pending/confirmed/completed 是亮底（青 / `$neon-gradient`），而 **`.cancelled` 是 `$dark-bg-secondary`（rgb(18,18,42)）**。深字压后者只有 **1.07:1**，白字压后者是 **18.3:1 ✅**。所以**不能**对这三个子元素无差别改深字。
 
-`src/pages/order/detail.vue` —— `.status-card`（青/渐变底）的三个子元素，各自把颜色声明换成 `@include on-neon-fill;`：
-
-```scss
-// .status-icon
-  color: rgba(255, 255, 255, 0.9);   →   @include on-neon-fill;
-
-// .status-text
-  color: #fff;                       →   @include on-neon-fill;
-
-// .order-id
-  color: rgba(255, 255, 255, 0.8);   →   @include on-neon-fill;
-```
-
-`src/pages/photographer/detail.vue` —— 两处 `background: $neon-purple` 的按钮，各把 `color: #fff;` 换成 `@include on-neon-fill;`：
+用**变体作用域选择器**（只改选择器与颜色，不碰几何）：
 
 ```scss
-  .btn           // 约 :533
-  .btn-primary   // 约 :639
+// .status-card:not(.cancelled) 的三个子元素改用深字
+.status-card:not(.cancelled) {
+  .status-icon { @include on-neon-fill; }   // 原 color: rgba(255,255,255,0.9)
+  .status-text { @include on-neon-fill; }   // 原 color: #fff
+  .order-id    { @include on-neon-fill; }   // 原 color: rgba(255,255,255,0.8)
+}
 ```
 
-`src/pages/profile/index.vue` —— 渐变头部内的三处，各把颜色声明换成 `@include on-neon-fill;`：
+`.cancelled` 保持原有浅字不动。具体写法以能命中 `src/pages/order/detail.vue` 现有 DOM 为准（先确认 `.status-card` 的变体类名实际是怎么挂的），**不得凭猜**。
 
-```scss
-  .stat-value              color: #fff;                        → @include on-neon-fill;
-  .stat-label              color: rgba(255, 255, 255, 0.8);    → @include on-neon-fill;
-  .role-tag { &.coser }    color: #fff;                        → @include on-neon-fill;
+- [ ] **Step 2c: 补上门控漏测的状态变体（见 ledger `Ruling (T3-3)`）**
+
+25 页清单只跑了 `order/detail?id=1`(pending) 与 `?id=2`(confirmed)，所以**它看不见 `.cancelled` 被改坏**。给 `scripts/contrast-audit.sh` 的 `COSER_PAGES` 增补两个真实存在的状态页：
+
+```
+pages/order/detail?id=3      # completed
+pages/order/detail?id=4      # cancelled
 ```
 
-`src/pages/index/index.vue` —— `.cta-marker`（`◆` 装饰字形）当前继承 `.cta-primary` 的深字，但自身 `opacity: 0.7` 把它压到 **3.44:1**（需 4.5）。**删掉 `opacity: 0.7;` 这一行**即可达 4.95:1：
+（这两个 id 属 coser `13800138000`，已核实存在。）
 
-```scss
-// 前
-.cta-marker { ...; opacity: 0.7; }
-// 后
-.cta-marker { ... }
-```
+- [ ] **Step 2d: 让门控对渐变按「元素实际位置」取样（见 ledger `Ruling (T3-4)`）**
 
-> 注：`.cta-marker` 不是「纯装饰豁免」的候选 —— 本项目不做装饰性自动豁免（无法可靠识别），一律修到达标。
+**背景**：`.header` 是 `linear-gradient(135deg, #a855f7 40%, #12122a 100%)`。审计目前把**所有渐变停靠点**当候选并取最差（紫端 → 3.09/3.96），但统计行实际投影在 **t≈0.56**，真实背景 ≈ `rgb(128,67,192)`，**白字在其上是 6.02:1，本来就达标**。这是**假阳性**，且整段渐变上不存在能同时满足两端的单一文字色（全灰暴力搜最大 3.96）—— 所以按最差停靠点判定会导致"无解"，进而逼迫改品牌渐变。**不这么修。**
+
+改 `scripts/contrast-audit.js` 的 `effectiveBackgrounds`：遇到渐变时，不再取全部停靠点，而是**取元素自身包围盒的 5 个取样点**（四角 + 中心）投影到该渐变的渐变轴上，插值求出各点颜色，作为候选集。
+
+要点：
+- 需要解析 `linear-gradient(<angle>deg, <color> [pct]%, <color> [pct]%)`，并按 CSS 规则由渐变角度与**承载渐变的那个祖先盒子**的尺寸算出渐变线长度；
+- 未标注百分比的停靠点按 CSS 规则均匀分布；
+- 投影点落在首/末停靠点之外时钳制到端点色；
+- **大元素仍会取到两端**（如登录按钮跨整段渐变，四角覆盖紫端与青端，最差仍是青端 2.43）→ 该修复不应放松登录页的判定。
+
+- [ ] **Step 2e: `profile/index` 用新取样重测后再定（见 ledger `Ruling (T3-4)`）**
+
+Step 2d 生效后重测。预期统计行按其真实位置取值：
+
+- `.stat-value` / `.role-tag.coser`（`color: #fff`）→ 约 6.02:1 ✅ **不动**
+- `.stat-label`（`color: rgba(255,255,255,0.8)`）→ 约 **4.475:1，差 0.03** → 把该声明改为 `color: #fff;`（全白，约 6.02:1 ✅）
+
+**不得**修改 `.header` 的渐变色。若重测后仍有 profile 项不达标，**停下报告**，不要臆断。
 
 - [ ] **Step 3: 编译验证**
 
@@ -579,13 +585,18 @@ Expected：以下签名**全部不再出现**（括号内为修复前实测值�
 
 **剩余发现必须只属于 F2（紫底紫字）、F3（红底红字）、F4（三级文本）三族** —— 即留给 Task 4/5/6 的那批。出现任何其他 light-on-neon 或深字压霓虹的残留，都说明清单再次遗漏。
 
-且**不得出现任何新的** `rgb(10,10,26) → rgb(10,10,26)` 型 1.00:1 报告（渐变遮挡假阳性，Task 1 已修，出现即为回归）。
+**本轮新增覆盖**（Step 2c 加的 `?id=3` / `?id=4`）也必须一并达标：
+- `pages/order/detail?id=4`（cancelled，深底 + 浅字）→ `total=0`
+- `pages/order/detail?id=3`（completed，亮底 + 深字）→ `total=0`
+- `pages/profile/index` → `total=0`（Step 2e 后）
+
+且**不得出现任何新的** `rgb(10,10,26) → rgb(10,10,26)` 型 1.00:1 报告（渐变遮挡假阳性，Task 1 已修，出现即为回归），**也不得出现 `rgb(10,10,26) → rgb(18,18,42)` 型 1.07:1**（深字压深底 —— 即 `cancelled` 变体被误改的信号）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages
-git commit -m "fix(cend): F1 霓虹底浅字全站迁移 to on-neon-fill（19+15 处，1.97–3.96→4.95–8.07:1）"
+git add scripts/contrast-audit.js scripts/contrast-audit.sh src/pages
+git commit -m "fix(qa,cend): F1 收口 —— 变体作用域取色 + 渐变按位置取样 + 补测 cancelled/completed 状态"
 ```
 
 ---

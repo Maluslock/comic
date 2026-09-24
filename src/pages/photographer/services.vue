@@ -39,6 +39,11 @@
             </view>
             <text v-if="s.description" class="service-desc">{{ s.description }}</text>
             <view class="service-actions">
+              <view
+                class="btn-toggle"
+                :class="{ 'is-busy': togglingId === s.id }"
+                @click="toggleActive(s)"
+              >{{ isActive(s) ? '下架' : '上架' }}</view>
               <view class="btn-edit" @click="openEdit(s)">编辑</view>
               <view class="btn-del" @click="confirmDelete(s)">删除</view>
             </view>
@@ -132,6 +137,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const prefilling = ref(false)
 const services = ref<MyService[]>([])
+const togglingId = ref<number | null>(null)
 
 const form = reactive({ name: '', price: '', duration: '60', description: '' })
 const priceError = ref('')
@@ -183,7 +189,36 @@ function priceClass(price: number | null): string {
 }
 
 function isActive(s: MyService): boolean {
-  return s.isActive !== false
+  return s.isActive
+}
+
+/**
+ * 上下架只翻转 isActive，其余字段原样回传（后端要求 name 必填）。刻意不带
+ * sortOrder —— 后端对 isActive / sortOrder 做 COALESCE，省略即保留数据库现值。
+ */
+async function toggleActive(s: MyService) {
+  if (togglingId.value !== null) return
+  const next = !isActive(s)
+  togglingId.value = s.id
+  try {
+    await updateService(s.id, {
+      name: s.name,
+      price: s.price,
+      description: s.description || '',
+      duration: s.duration,
+      isActive: next
+    })
+    s.isActive = next
+    uni.showToast({ title: next ? '已上架' : '已下架', icon: 'none' })
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) {
+      uni.showToast({ title: '仅本人套餐可操作', icon: 'none' })
+    } else {
+      uni.showToast({ title: '操作失败', icon: 'none' })
+    }
+  } finally {
+    togglingId.value = null
+  }
 }
 
 function formatDuration(minutes: number): string {
@@ -398,6 +433,10 @@ function goBack() {
 }
 .service-desc { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 14rpx; line-height: 1.5; }
 .service-actions { margin-top: 24rpx; display: flex; justify-content: flex-end; gap: 16rpx; }
+.btn-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $dark-text-secondary; background: rgba(255, 255, 255, 0.06); border: 1rpx solid $dark-border; border-radius: 24rpx;
+  &.is-busy { opacity: 0.5; }
+  &:active { transform: scale(0.95); }
+}
 .btn-edit { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; font-size: 26rpx; color: $neon-cyan; background: rgba(6, 182, 212, 0.1); border: 1rpx solid rgba(6, 182, 212, 0.4); border-radius: 24rpx;
   &:active { transform: scale(0.95); }
 }

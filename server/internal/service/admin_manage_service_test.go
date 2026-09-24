@@ -32,6 +32,37 @@ func (r fakeRow) Scan(dest ...any) error {
 	return nil
 }
 
+// fakeRows serves a canned result set for `:many` statements. Scan delegates to
+// the underlying pgx.Row so the same value-assignment rules apply.
+type fakeRows struct {
+	rows []pgx.Row
+	next int
+	err  error
+}
+
+func (r *fakeRows) Close()                                       {}
+func (r *fakeRows) Err() error                                   { return r.err }
+func (r *fakeRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *fakeRows) Conn() *pgx.Conn                              { return nil }
+func (r *fakeRows) RawValues() [][]byte                          { return nil }
+func (r *fakeRows) Values() ([]any, error)                       { return nil, nil }
+
+func (r *fakeRows) Next() bool {
+	if r.next >= len(r.rows) {
+		return false
+	}
+	r.next++
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.next == 0 || r.next > len(r.rows) {
+		return errors.New("fakeRows.Scan: called outside Next()")
+	}
+	return r.rows[r.next-1].Scan(dest...)
+}
+
 func assignScan(dest any, val any) error {
 	switch d := dest.(type) {
 	case *int64:
@@ -108,6 +139,15 @@ type fakeDBTX struct {
 	rows     []pgx.Row
 	next     int
 	execRows int64
+
+	// execArgs records each Exec call's argument list so a test can assert on the
+	// contract a statement has with the database (e.g. nil in a COALESCE slot means
+	// "keep the stored value"). Read only by the tests that need it.
+	execArgs [][]any
+	// queryRows serves `:many` statements. When empty, Query keeps its historical
+	// behaviour of reporting an unexpected call.
+	queryRows []pgx.Rows
+	queryNext int
 }
 
 func (f *fakeDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
@@ -120,10 +160,16 @@ func (f *fakeDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 }
 
 func (f *fakeDBTX) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
-	return nil, errors.New("fakeDBTX: Query not expected")
+	if f.queryNext >= len(f.queryRows) {
+		return nil, errors.New("fakeDBTX: Query not expected")
+	}
+	r := f.queryRows[f.queryNext]
+	f.queryNext++
+	return r, nil
 }
 
-func (f *fakeDBTX) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+func (f *fakeDBTX) Exec(_ context.Context, _ string, a ...any) (pgconn.CommandTag, error) {
+	f.execArgs = append(f.execArgs, a)
 	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", f.execRows)), nil
 }
 

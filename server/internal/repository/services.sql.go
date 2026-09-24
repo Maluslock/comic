@@ -84,7 +84,7 @@ func (q *Queries) GetActiveServicesByPhotographer(ctx context.Context, photograp
 }
 
 const getAllServicesByPhotographer = `-- name: GetAllServicesByPhotographer :many
-SELECT id, name, price, description, duration
+SELECT id, name, price, description, duration, is_active, sort_order
 FROM services
 WHERE photographer_id = $1
 ORDER BY sort_order ASC, id ASC
@@ -99,7 +99,7 @@ func (q *Queries) GetAllServicesByPhotographer(ctx context.Context, photographer
 	items := make([]Service, 0)
 	for rows.Next() {
 		var i Service
-		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration, &i.IsActive, &i.SortOrder); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -114,6 +114,21 @@ SELECT photographer_id FROM services WHERE id = $1
 func (q *Queries) GetServicePhotographerID(ctx context.Context, id int64) (*int64, error) {
 	var pid *int64
 	err := q.db.QueryRow(ctx, getServicePhotographerID, id).Scan(&pid)
+	return pid, err
+}
+
+// getBookableServicePhotographerID is the booking-time ownership check. Unlike
+// GetServicePhotographerID it also requires the package to be on the shelf, so a
+// package the photographer has taken down can no longer be booked from a stale
+// page. Callers map pgx.ErrNoRows to an invalid reference, exactly as they did for
+// a missing package.
+const getBookableServicePhotographerID = `-- name: GetBookableServicePhotographerID :one
+SELECT photographer_id FROM services WHERE id = $1 AND is_active = true
+`
+
+func (q *Queries) GetBookableServicePhotographerID(ctx context.Context, id int64) (*int64, error) {
+	var pid *int64
+	err := q.db.QueryRow(ctx, getBookableServicePhotographerID, id).Scan(&pid)
 	return pid, err
 }
 
@@ -144,10 +159,16 @@ func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (i
 
 const updateService = `-- name: UpdateService :execrows
 UPDATE services
-SET name = $3, price = $4, description = $5, duration = $6, is_active = $7, sort_order = $8
+SET name = $3, price = $4, description = $5, duration = $6,
+    is_active = COALESCE($7, is_active),
+    sort_order = COALESCE($8, sort_order)
 WHERE id = $1 AND photographer_id = $2
 `
 
+// UpdateServiceParams carries the editable fields. IsActive and SortOrder are
+// pointers so that "not supplied" is distinguishable from "set to false / 0": the
+// statement COALESCEs nil back to the stored value, which is what keeps an
+// unpublished package unpublished across an ordinary edit.
 type UpdateServiceParams struct {
 	ID             int64
 	PhotographerID int64
@@ -155,8 +176,8 @@ type UpdateServiceParams struct {
 	Price          *int32
 	Description    *string
 	Duration       int32
-	IsActive       bool
-	SortOrder      int32
+	IsActive       *bool
+	SortOrder      *int32
 }
 
 func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error) {

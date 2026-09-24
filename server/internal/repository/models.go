@@ -65,6 +65,8 @@ type Service struct {
 	Price       *int32  `json:"price"`
 	Description *string `json:"description"`
 	Duration    int32   `json:"duration"`
+	IsActive    bool    `json:"is_active"`
+	SortOrder   int32   `json:"sort_order"`
 }
 
 type Review struct {

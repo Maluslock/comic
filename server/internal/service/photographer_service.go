@@ -30,6 +30,8 @@ type ServiceItem struct {
 	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
+	IsActive    bool   `json:"isActive"`
+	SortOrder   int32  `json:"sortOrder"`
 }
 
 type ReviewItem struct {
@@ -102,8 +104,10 @@ type ServiceUpsertRequest struct {
 	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
-	IsActive    *bool  `json:"isActive"`
-	SortOrder   int32  `json:"sortOrder"`
+	// IsActive / SortOrder are optional. On update an omitted field keeps its stored
+	// value (the statement COALESCEs nil); on create it falls back to published / 0.
+	IsActive  *bool  `json:"isActive"`
+	SortOrder *int32 `json:"sortOrder"`
 }
 
 func (s *PhotographerService) Activate(ctx context.Context, userID int64, name string, mode string, intro string) (int64, error) {
@@ -322,6 +326,8 @@ func mapServiceItems(services []repository.Service) []ServiceItem {
 			Price:       s.Price,
 			Description: derefString(s.Description),
 			Duration:    s.Duration,
+			IsActive:    s.IsActive,
+			SortOrder:   s.SortOrder,
 		})
 	}
 	return items
@@ -478,6 +484,10 @@ func (s *PhotographerService) CreateService(ctx context.Context, userID int64, r
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
+	var order int32
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
 	return s.queries.InsertService(ctx, repository.InsertServiceParams{
 		Name:           req.Name,
 		Price:          req.Price,
@@ -485,7 +495,7 @@ func (s *PhotographerService) CreateService(ctx context.Context, userID int64, r
 		Duration:       req.Duration,
 		PhotographerID: int64(p.ID),
 		IsActive:       active,
-		SortOrder:      req.SortOrder,
+		SortOrder:      order,
 	})
 }
 
@@ -497,10 +507,9 @@ func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, s
 	if err != nil {
 		return ErrForbidden
 	}
-	active := true
-	if req.IsActive != nil {
-		active = *req.IsActive
-	}
+	// Deliberately no defaulting here: nil means "leave it as stored", which the
+	// statement COALESCEs. Substituting true / 0 is exactly what used to re-publish
+	// an unpublished package and wipe its ordering on every edit.
 	n, err := s.queries.UpdateService(ctx, repository.UpdateServiceParams{
 		ID:             serviceID,
 		PhotographerID: int64(p.ID),
@@ -508,7 +517,7 @@ func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, s
 		Price:          req.Price,
 		Description:    strPtr(req.Description),
 		Duration:       req.Duration,
-		IsActive:       active,
+		IsActive:       req.IsActive,
 		SortOrder:      req.SortOrder,
 	})
 	if err != nil {

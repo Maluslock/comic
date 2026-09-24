@@ -144,10 +144,12 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		remarks = &req.Remarks
 	}
 
-	// 套餐归属校验：套餐必须归属于被预约的摄影师。平台模板套餐（photographer_id IS NULL）
-	// 不作为可售商品，一律拒绝；套餐不存在（ErrNoRows）同样视为无效引用，但不掩盖真实 DB 故障。
+	// 套餐归属校验：套餐必须归属于被预约的摄影师，且**必须处于上架状态**。平台模板套餐
+	// （photographer_id IS NULL）不作为可售商品，一律拒绝；套餐不存在或已下架（ErrNoRows）
+	// 同样视为无效引用 —— 下架校验放在这里，避免「列表里看不到、下单却能成」。
+	// 不掩盖真实 DB 故障。
 	serviceID64 := int64(req.ServiceID)
-	ownerID, err := s.queries.GetServicePhotographerID(ctx, serviceID64)
+	ownerID, err := s.queries.GetBookableServicePhotographerID(ctx, serviceID64)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidReference

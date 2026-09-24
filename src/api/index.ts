@@ -179,8 +179,28 @@ export interface MyService {
   price: number | null
   description: string
   duration: number
-  /** backend `mine` endpoint does not return this yet; optional for forward-compat */
+  /** 是否上架到公开页面（下架后仍在自己列表可见，但不可被下单） */
+  isActive: boolean
+  sortOrder: number
+}
+
+/** 套餐可写字段。isActive / sortOrder 省略时，后端保留数据库现值。 */
+export interface ServiceUpsertPayload {
+  name: string
+  price: number | null
+  description: string
+  duration: number
   isActive?: boolean
+  sortOrder?: number
+}
+
+/** 平台模板只暴露预填所需字段（无 isActive / sortOrder —— 模板不可直接上架）。 */
+export interface ServiceTemplate {
+  id: number
+  name: string
+  price: number | null
+  description: string
+  duration: number
 }
 
 export function getMyServices() {
@@ -188,22 +208,14 @@ export function getMyServices() {
 }
 
 export function getServiceTemplates() {
-  return apiGet<MyService[] | null>('/v1/services/templates')
+  return apiGet<ServiceTemplate[] | null>('/v1/services/templates')
 }
 
-export function createService(payload: {
-  name: string
-  price: number | null
-  description: string
-  duration: number
-}) {
+export function createService(payload: ServiceUpsertPayload) {
   return apiPost<{ id: number }>('/v1/photographers/services', payload)
 }
 
-export function updateService(
-  id: number,
-  payload: { name: string; price: number | null; description: string; duration: number }
-) {
+export function updateService(id: number, payload: ServiceUpsertPayload) {
   return apiPut<{ ok: boolean }>(`/v1/photographers/services/${id}`, payload)
 }
 

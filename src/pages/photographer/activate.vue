@@ -187,7 +187,7 @@ function goBack() {
 .btn-edit { margin-top: 24rpx; padding: 14rpx 48rpx; background: $dark-bg-secondary; border: 2rpx solid $neon-purple; color: $neon-purple; border-radius: 32rpx; font-size: 28rpx; }
 .btn-works { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(6, 182, 212, 0.1); border: 2rpx solid $neon-cyan; color: $neon-cyan; border-radius: 32rpx; font-size: 28rpx; }
 .btn-services { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(236, 72, 153, 0.1); border: 2rpx solid $neon-pink; color: $neon-pink; border-radius: 32rpx; font-size: 28rpx; }
-.btn-cert { margin-top: 24rpx; padding: 14rpx 48rpx; background: $neon-purple-dim; border: 2rpx solid $neon-purple; color: $neon-purple; border-radius: 32rpx; font-size: 28rpx;
+.btn-cert { margin-top: 24rpx; padding: 14rpx 48rpx; @include neon-pill; border: 2rpx solid $neon-purple; border-radius: 32rpx; font-size: 28rpx;
   &.is-cert { background: rgba(245, 158, 11, 0.12); border-color: $warning-color; color: $warning-color; box-shadow: 0 0 12rpx rgba(245, 158, 11, 0.25); }
 }
 
@@ -200,7 +200,7 @@ function goBack() {
 
 .mode-row { display: flex; gap: 16rpx; }
 .mode-item { flex: 1; text-align: center; padding: 20rpx 0; background: $dark-bg-secondary; border: 2rpx solid $dark-border; border-radius: 16rpx; font-size: 28rpx; color: $dark-text-secondary;
-  &.active { border-color: $neon-purple; color: $neon-purple; background: $neon-purple-dim; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
+  &.active { border-color: $neon-purple; @include neon-pill; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
 }
 
 .btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; @include on-neon-fill; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;

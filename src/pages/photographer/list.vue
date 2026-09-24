@@ -149,7 +149,7 @@ function setFilter(key: string) {
 
   &.active {
     background: rgba($neon-purple, 0.15);
-    color: $neon-purple;
+    color: $neon-purple-bright;
     border-color: rgba($neon-purple, 0.3);
   }
 

@@ -128,7 +128,7 @@ function goDetail() {
 .tag {
   padding: 2rpx 10rpx;
   background: rgba($neon-purple, 0.15);
-  color: $neon-purple;
+  color: $neon-purple-bright;
   font-size: 20rpx;
   border-radius: $border-radius-sm;
 }

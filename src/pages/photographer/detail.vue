@@ -421,8 +421,7 @@ function goReviews() {
 
 .tag {
   padding: 6rpx 16rpx;
-  background: $neon-purple-dim;
-  color: $neon-purple;
+  @include neon-pill;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
 }

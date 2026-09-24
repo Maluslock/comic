@@ -252,7 +252,7 @@ function goBack() {
 
 .mode-row { display: flex; gap: 16rpx; }
 .mode-item { flex: 1; text-align: center; padding: 20rpx 0; background: $dark-bg-secondary; border: 2rpx solid $dark-border; border-radius: 16rpx; font-size: 28rpx; color: $dark-text-secondary;
-  &.active { border-color: $neon-purple; color: $neon-purple; background: $neon-purple-dim; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
+  &.active { border-color: $neon-purple; @include neon-pill; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
 }
 
 .btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; @include on-neon-fill; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;

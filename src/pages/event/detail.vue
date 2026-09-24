@@ -459,8 +459,7 @@ function onGalleryImgError(_idx: number) {
 .tag-item {
   padding: 6rpx 20rpx;
   font-size: 22rpx;
-  color: $neon-purple;
-  background: $neon-purple-dim;
+  @include neon-pill;
   border: 1rpx solid rgba($neon-purple, 0.3);
   border-radius: $border-radius-xl;
 }

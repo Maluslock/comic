@@ -710,8 +710,7 @@ function onQuickNav(_url: string) {}
 .tag-item {
   padding: 10rpx 28rpx;
   font-size: $font-size-sm;
-  color: $neon-purple;
-  background: $neon-purple-dim;
+  @include neon-pill;
   border: 2rpx solid rgba($neon-purple, 0.4);
   border-radius: $border-radius-xl;
   transition: all 0.2s;

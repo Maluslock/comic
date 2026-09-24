@@ -240,8 +240,7 @@ function goBack() {
   color: $dark-text-secondary;
 
   &:active {
-    background: $neon-purple-dim;
-    color: $neon-purple;
+    @include neon-pill;
   }
 }
 

@@ -239,8 +239,7 @@ function goChat(session: any) {
   flex-shrink: 0;
 
   &.success {
-    background: $neon-purple-dim;
-    color: $neon-purple;
+    @include neon-pill;
   }
 
   &.info {

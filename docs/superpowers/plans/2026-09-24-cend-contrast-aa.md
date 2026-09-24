@@ -515,30 +515,77 @@ git commit -m "fix(qa,cend): WCAG 未激活豁免分区 + on-neon-fill/neon-pill
   @include on-neon-fill;
 ```
 
+- [ ] **Step 2b: 补齐静态清单漏掉的 light-on-neon 块（由实测发现，见 ledger `Ruling (T3-1)`）**
+
+**范围以实测为准，不以静态清单为准。** 上面 19 项来自静态扫描，它**漏了「背景在父元素、文字在子元素」的写法**（与登录页 `.login-btn` → `.login-btn-text` 同一失效模式）。改动后仍有 15 处 light-on-neon 残留，全部补在此步：
+
+`src/pages/order/detail.vue` —— `.status-card`（青/渐变底）的三个子元素，各自把颜色声明换成 `@include on-neon-fill;`：
+
+```scss
+// .status-icon
+  color: rgba(255, 255, 255, 0.9);   →   @include on-neon-fill;
+
+// .status-text
+  color: #fff;                       →   @include on-neon-fill;
+
+// .order-id
+  color: rgba(255, 255, 255, 0.8);   →   @include on-neon-fill;
+```
+
+`src/pages/photographer/detail.vue` —— 两处 `background: $neon-purple` 的按钮，各把 `color: #fff;` 换成 `@include on-neon-fill;`：
+
+```scss
+  .btn           // 约 :533
+  .btn-primary   // 约 :639
+```
+
+`src/pages/profile/index.vue` —— 渐变头部内的三处，各把颜色声明换成 `@include on-neon-fill;`：
+
+```scss
+  .stat-value              color: #fff;                        → @include on-neon-fill;
+  .stat-label              color: rgba(255, 255, 255, 0.8);    → @include on-neon-fill;
+  .role-tag { &.coser }    color: #fff;                        → @include on-neon-fill;
+```
+
+`src/pages/index/index.vue` —— `.cta-marker`（`◆` 装饰字形）当前继承 `.cta-primary` 的深字，但自身 `opacity: 0.7` 把它压到 **3.44:1**（需 4.5）。**删掉 `opacity: 0.7;` 这一行**即可达 4.95:1：
+
+```scss
+// 前
+.cta-marker { ...; opacity: 0.7; }
+// 后
+.cta-marker { ... }
+```
+
+> 注：`.cta-marker` 不是「纯装饰豁免」的候选 —— 本项目不做装饰性自动豁免（无法可靠识别），一律修到达标。
+
 - [ ] **Step 3: 编译验证**
 
 Run: `npx vue-tsc --noEmit`
 Expected: 退出码 0
 
-- [ ] **Step 4: 实测验证 F1 归零**
+- [ ] **Step 4: 实测验证 F1 完全归零**
 
 Run: `bash scripts/contrast-audit.sh .audit/task3`
 
-Expected：以下签名**不再出现**（修复前的值）：
+Expected：以下签名**全部不再出现**（括号内为修复前实测值）：
 
-- `rgb(255, 255, 255) → rgb(6,182,212)`（原 2.43）
-- `rgba(255, 255, 255, 0.8/0.9) → rgb(6,182,212)`（原 2.43）
-- `rgb(255, 255, 255) → rgb(168,85,247)`（原 3.96）
-- `rgba(255, 255, 255, 0.8) → rgb(168,85,247)`（原 3.96）
-- `rgb(255, 255, 255) → rgb(236,72,153)`（原 3.53）
+- `rgb(255,255,255) → rgb(6,182,212)`（2.43）
+- `rgba(255,255,255,0.8) → rgb(6,182,212)`（2.02）
+- `rgba(255,255,255,0.9) → rgb(6,182,212)`（2.21）
+- `rgb(255,255,255) → rgb(168,85,247)`（3.96）
+- `rgba(255,255,255,0.8) → rgb(168,85,247)`（3.09）
+- `rgb(255,255,255) → rgb(236,72,153)`（3.53）
+- `rgb(10,10,26) → rgb(168,85,247)`（3.44，`.cta-marker`）
 
-且**不得出现任何新的** `rgb(10,10,26) → rgb(10,10,26)` 型 1.00:1 报告（那是渐变遮挡假阳性，Task 1 已修，出现即为回归）。
+**剩余发现必须只属于 F2（紫底紫字）、F3（红底红字）、F4（三级文本）三族** —— 即留给 Task 4/5/6 的那批。出现任何其他 light-on-neon 或深字压霓虹的残留，都说明清单再次遗漏。
+
+且**不得出现任何新的** `rgb(10,10,26) → rgb(10,10,26)` 型 1.00:1 报告（渐变遮挡假阳性，Task 1 已修，出现即为回归）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/pages
-git commit -m "fix(cend): F1 霓虹底浅字全站迁移 to on-neon-fill（20 处，2.43–3.96→4.95–8.07:1）"
+git commit -m "fix(cend): F1 霓虹底浅字全站迁移 to on-neon-fill（19+15 处，1.97–3.96→4.95–8.07:1）"
 ```
 
 ---

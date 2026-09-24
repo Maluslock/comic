@@ -100,7 +100,11 @@ mixin **只管颜色**，不动 `padding` / `font-size` / `border-radius` / `bor
 
 ### F4b（switch）
 
-给设置页开关容器补 `min-height: 44px`。仅此一处。
+**根因已实测确认，审计文档的处置建议是错的。** `.menu-switch`（`src/pages/settings/index.vue:351`）的原生 `offsetHeight` 本来就是 **45px**，是 `transform: scale(0.8)` 把视觉与**命中区**压到 **36px**。
+
+因此审计建议的「补 `min-height: 44px`」**无效** —— 元素本就有 45px 高，加 `min-height` 不会解除 `transform` 造成的命中区收缩。正确做法：**去掉 `transform: scale(0.8)`**，恢复原生 45px。
+
+若要调整视觉紧凑度，只允许动**外层行**的 `padding` / `gap`，**禁止**再用 `transform` / `zoom` 缩放交互元素。
 
 ## 4. 迁移范围
 

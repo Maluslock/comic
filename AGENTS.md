@@ -449,7 +449,7 @@ Every user can activate a photographer identity (闲鱼式双角色) — one-cli
 
 - `GET /photographers/by-user/:userId` omits `mode`/`certified` in its response (`GetByUser` builds `PhotographerItem` without them; `GET /photographers/:id` includes both). Follow-up: align GetByUser fields.
 - `TestPhotographerHandler_Detail_Success` panics — its mock scan order predates the `user_id`/`mode`/`certified` columns added by P2a. Follow-up: update the mock to `GetPhotographerById` scan order.
-- UI login phone regex `^1[3-9]\d{9}$` blocks API test photographer account `10000000001` (pre-existing); photographer H5 flows verified via API-token storage injection.
+- ~~UI login phone regex `^1[3-9]\d{9}$` blocks API test photographer account `10000000001`~~ **该说法已证伪（2026-09-24 实测）**：`src/pages/login/index.vue:102` 的 `canSend` 是 `^1[3-9]\d{9}$` **或** `^100\d{8}$`，`10000000001` 实际可正常 UI 登录；摄影师账号无需再靠 token 注入。另：登录按钮禁用时点击无反馈是另一个真缺陷（B-05，已修）。
 - `certified` badge is display-only — application flow is P2b scope.
 
 ## 后台管理系统（P2c）
@@ -793,7 +793,7 @@ C 端摄影师自助认证申请（提交 → 审核中 → 已通过/已驳回 
 
 - `photographer_cert_applications`：#1 approved(樱花落2)、#2 rejected(暗夜骑士3)、#3 approved(古风公子4)、#4 approved(暗夜骑士3)、#5 rejected(测试摄影师5)、#6 rejected(测试摄影师5, Task 2 测试恢复)、#7 rejected(测试摄影师5, Task 3 E2E 提交后恢复)。
 - `photographers.certified`：光影行者/樱花落/暗夜骑士/古风公子 = true；测试摄影师 = false（E2E 全程未改 certified）。
-- 测试摄影师（13800138000）处于 rejected → 可直接演示「已驳回 + 重新申请」完整流程。
+- 测试摄影师（13700000005，photographer_id=5；**不是** coser 的 13800138000）处于 rejected → 可直接演示「已驳回 + 重新申请」完整流程。2026-09-24 实测 DB：测试摄影师名下仅剩 #5 rejected（#6/#7 已在 E2E 收尾时清理）。
 
 ### 后续（不在本次）
 

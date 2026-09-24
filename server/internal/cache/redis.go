@@ -76,6 +76,25 @@ func (r *RedisCache) Delete(ctx context.Context, key string) {
 	r.client.Del(ctx, key)
 }
 
+// DeletePrefix removes every key starting with prefix and reports how many went away.
+//
+// Uses SCAN rather than KEYS: KEYS blocks the server for the whole keyspace, which is
+// unacceptable on the request path. Best-effort by design — a failed invalidation must
+// never fail the write that triggered it (the entry simply expires on its TTL).
+func (r *RedisCache) DeletePrefix(ctx context.Context, prefix string) int {
+	if !r.IsAvailable() {
+		return 0
+	}
+	removed := 0
+	iter := r.client.Scan(ctx, 0, prefix+"*", 100).Iterator()
+	for iter.Next(ctx) {
+		if err := r.client.Del(ctx, iter.Val()).Err(); err == nil {
+			removed++
+		}
+	}
+	return removed
+}
+
 // Close shuts down the Redis client.
 func (r *RedisCache) Close() error {
 	if !r.IsAvailable() {

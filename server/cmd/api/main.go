@@ -136,7 +136,7 @@ func main() {
 		// Photographers
 		photographerSvc := service.NewPhotographerService(queries)
 		photographerH := handler.NewPhotographerHandler(photographerSvc, redisCache, bookingSvc)
-		svcH := handler.NewPhotographerServiceHandler(photographerSvc)
+		svcH := handler.NewPhotographerServiceHandler(photographerSvc, redisCache)
 		router.GET("/api/v1/photographers/services/mine", middleware.AuthRequired(userRepo), svcH.MyServices)
 		router.POST("/api/v1/photographers/services", middleware.AuthRequired(userRepo), svcH.Create)
 		router.PUT("/api/v1/photographers/services/:id", middleware.AuthRequired(userRepo), svcH.Update)

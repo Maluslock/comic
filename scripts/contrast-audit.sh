@@ -33,8 +33,10 @@ set_role() {  # $1=phone
 
 FAILED=0
 
-audit_page() {  # $1=route
-  local n; n="$(printf '%s' "$1" | tr '/?=' '___')"
+audit_page() {  # $1=route  $2=role
+  # 文件名带角色前缀：同一路由会在 coser 与 photographer 两轮各测一次
+  # （如 pages/profile/index），无前缀会互相覆盖、diff 看不出差异。
+  local n; n="$2__$(printf '%s' "$1" | tr '/?=' '___')"
   "$AB" open "$BASE_URL/#/$1" >/dev/null 2>&1
   "$AB" reload >/dev/null 2>&1
   sleep 3.2
@@ -71,15 +73,16 @@ pages/profile/index pages/favorite/list pages/follow/list pages/comment/index pa
 pages/portfolio/index pages/calendar/index pages/settings/index pages/login/index"
 
 PHOTOGRAPHER_PAGES="pages/photographer/services pages/photographer/works pages/photographer/orders \
-pages/photographer/activate pages/photographer/profile-edit pages/photographer/cert-apply"
+pages/photographer/activate pages/photographer/profile-edit pages/photographer/cert-apply \
+pages/profile/index"
 
 echo "== role=coser =="
 set_role 13800138000
-for p in $COSER_PAGES; do audit_page "$p"; done
+for p in $COSER_PAGES; do audit_page "$p" coser; done
 
 echo "== role=photographer =="
 set_role 10000000001
-for p in $PHOTOGRAPHER_PAGES; do audit_page "$p"; done
+for p in $PHOTOGRAPHER_PAGES; do audit_page "$p" photographer; done
 
 # 退出码必须是有意义的通过/失败信号：任何页面测量失败 → 本次运行无效。
 if [ "$FAILED" -ne 0 ]; then

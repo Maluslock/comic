@@ -324,7 +324,7 @@ function logout() {
   padding: 2rpx 12rpx;
   border: 2rpx solid #f59e0b;
   background: rgba(245, 158, 11, 0.18);
-  color: #fbbf24;
+  @include on-neon-fill;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
   box-shadow: 0 0 8rpx rgba(245, 158, 11, 0.35);
@@ -342,7 +342,7 @@ function logout() {
   
   &.photographer {
     background: rgba(255, 215, 0, 0.3);
-    color: #fff;
+    @include on-neon-fill;
   }
 }
 
@@ -359,8 +359,7 @@ function logout() {
   justify-content: space-around;
   // 必须完全不透明（a=1）：半透明时审计仍会看到外层 header 渐变，三个统计项
   // 会分别压在亮紫(rgb(176,102,247))与近黑(rgb(88,62,127))上，单一字色无解。
-  // #8553bd = 原 rgba(255,255,255,0.1) 压头部渐变后的实测平均色（白字 5.29:1）。
-  background: #8553bd;
+  background: $neon-purple-surface;
   border-radius: $border-radius-lg;
   padding: $spacing-md;
   margin-top: $spacing-lg;

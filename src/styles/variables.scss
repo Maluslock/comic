@@ -61,6 +61,8 @@ $neon-purple: #a855f7;
 $neon-purple-bright: #c084fc;
 $neon-purple-glow: rgba(168, 85, 247, 0.3);
 $neon-purple-dim: rgba(168, 85, 247, 0.1);
+// 不透明紫色表面：用于渐变上的实底面板（`$neon-purple-dim` 是半透明版，这个是实底版）
+$neon-purple-surface: #8553bd;   // 白字 5.29:1；由旧半透明面板在头部渐变上的实测均值选定
 $neon-cyan: #06b6d4;
 $neon-cyan-glow: rgba(6, 182, 212, 0.3);
 $neon-pink: #ec4899;

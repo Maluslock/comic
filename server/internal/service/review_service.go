@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"log"
 
 	"github.com/Maluslock/comic/server/internal/repository"
 )
@@ -16,6 +18,15 @@ type CreateReviewRequest struct {
 	Images         []string `json:"images"`
 }
 
+var (
+	// ErrReviewNotAllowed：没有已完成的订单不能评价 —— 评价必须对应真实发生过的拍摄。
+	ErrReviewNotAllowed = errors.New("no completed booking with this photographer")
+	// ErrReviewSelf：不能给自己评价。
+	ErrReviewSelf = errors.New("cannot review yourself")
+	// ErrReviewDuplicate：一人对一位摄影师只能有一条评价（DB 唯一索引兜底）。
+	ErrReviewDuplicate = errors.New("already reviewed this photographer")
+)
+
 type ReviewService struct {
 	queries *repository.Queries
 }
@@ -25,6 +36,20 @@ func NewReviewService(queries *repository.Queries) *ReviewService {
 }
 
 func (s *ReviewService) Create(ctx context.Context, req CreateReviewRequest) (*ReviewItem, error) {
+	// 评价必须对应真实发生过的拍摄：此前对任何人都无条件放行（没约过也能评、能无限重复）。
+	completed, err := s.queries.HasCompletedBookingWith(ctx, int64(req.PhotographerID), req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if !completed {
+		return nil, ErrReviewNotAllowed
+	}
+	// 自己不能评价自己（配合「禁止自成交」双重兜底）。
+	if p, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil &&
+		p.UserID != nil && *p.UserID == int64(req.UserID) {
+		return nil, ErrReviewSelf
+	}
+
 	var userName, userAvatar, content *string
 	if req.UserName != "" {
 		userName = &req.UserName
@@ -51,7 +76,18 @@ func (s *ReviewService) Create(ctx context.Context, req CreateReviewRequest) (*R
 		Images:         images,
 	})
 	if err != nil {
+		// DB 唯一索引 uniq_reviews_user_photographer 是并发下的最终防线。
+		if isUniqueViolation(err) {
+			return nil, ErrReviewDuplicate
+		}
 		return nil, err
+	}
+
+	// 评分与评价数按 reviews 表重算，让这两个字段对用户有真实含义（此前插评价从不更新它们，
+	// 列表上的「4.9 分 / 234 条」与真实 3 条评价毫无关系）。best-effort：评价本身已落库，
+	// 重算失败只记日志（下一条评价会自我修正），不能因为一个派生字段让用户以为提交失败。
+	if err := s.queries.RecomputePhotographerRating(ctx, int64(req.PhotographerID)); err != nil {
+		log.Printf("recompute photographer rating failed: %v", err)
 	}
 
 	img := review.Images

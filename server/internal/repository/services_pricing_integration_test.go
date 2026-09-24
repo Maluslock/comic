@@ -130,6 +130,10 @@ func insertPhotographerFixture(t *testing.T, q *Queries, ctx context.Context) in
 	}
 	t.Cleanup(func() {
 		bg := context.Background()
+		// 顺序要紧：bookings/reviews 都指向摄影师，先删子行再删摄影师，否则外键挡住 DELETE，
+		// 夹具会永久留在真库里（曾经真的漏掉过一批）。
+		_, _ = q.db.Exec(bg, `DELETE FROM bookings WHERE photographer_id = $1`, id)
+		_, _ = q.db.Exec(bg, `DELETE FROM reviews WHERE photographer_id = $1`, id)
 		_, _ = q.db.Exec(bg, `DELETE FROM services WHERE photographer_id = $1`, id)
 		_, _ = q.db.Exec(bg, `DELETE FROM photographers WHERE id = $1`, id)
 	})

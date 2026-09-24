@@ -131,6 +131,11 @@ func (s *ChatService) SendMessage(ctx context.Context, sessionID, senderID int64
 }
 
 func (s *ChatService) MarkSessionRead(ctx context.Context, sessionID, userID int64) error {
+	// 非成员此前会拿到 200，并给自己写一条毫无意义的已读行 —— 与 ListMessages/SendMessage
+	// 的口径不一致（那两者都 403）。这里补上同一道校验。
+	if err := s.assertParticipant(ctx, sessionID, userID); err != nil {
+		return err
+	}
 	return s.queries.MarkSessionRead(ctx, sessionID, userID)
 }
 

@@ -37,6 +37,14 @@ func (h *BookingHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "photographer or service not found"})
 			return
 		}
+		if errors.Is(err, service.ErrPastDate) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能预约已经过去的日期"})
+			return
+		}
+		if errors.Is(err, service.ErrSelfBooking) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能预约自己发布的套餐"})
+			return
+		}
 		if errors.Is(err, service.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "cannot book this photographer"})
 			return

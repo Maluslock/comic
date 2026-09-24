@@ -120,3 +120,34 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 	)
 	return i, err
 }
+
+// HasCompletedBookingWith 报告该用户与摄影师之间是否存在**已完成**的订单。
+// 评价只能针对真实发生过的拍摄：此前 POST /reviews 对任何人都无条件放行。
+const hasCompletedBookingWith = `-- name: HasCompletedBookingWith :one
+SELECT EXISTS (
+  SELECT 1 FROM bookings
+  WHERE photographer_id = $1 AND coser_id = $2 AND status = 'completed'
+)
+`
+
+func (q *Queries) HasCompletedBookingWith(ctx context.Context, photographerID int64, coserID int32) (bool, error) {
+	var ok bool
+	err := q.db.QueryRow(ctx, hasCompletedBookingWith, photographerID, coserID).Scan(&ok)
+	return ok, err
+}
+
+// RecomputePhotographerRating 用 reviews 表重算摄影师的评分与评价数。
+// 这两个字段此前是种子数据里的死数字（示例：显示 4.9 分 / 234 条，而 reviews 只有 3 条），
+// 插评价从不更新它们 —— 评分对用户的含义就没了。改成每次评价后按事实重算。
+const recomputePhotographerRating = `-- name: RecomputePhotographerRating :exec
+UPDATE photographers p
+SET rating = COALESCE((SELECT ROUND(AVG(r.rating)::numeric, 1) FROM reviews r WHERE r.photographer_id = p.id), 0.0),
+    review_count = (SELECT COUNT(*) FROM reviews r WHERE r.photographer_id = p.id),
+    updated_at = NOW()
+WHERE p.id = $1
+`
+
+func (q *Queries) RecomputePhotographerRating(ctx context.Context, photographerID int64) error {
+	_, err := q.db.Exec(ctx, recomputePhotographerRating, photographerID)
+	return err
+}

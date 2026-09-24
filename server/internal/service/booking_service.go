@@ -64,6 +64,12 @@ var (
 	ErrBookingNotFound   = errors.New("booking not found")
 	ErrForbidden         = errors.New("forbidden")
 	ErrQuoteNotAllowed   = errors.New("quote not allowed in current state")
+	// ErrPastDate：不允许预约已经过去的日期/时刻。前端选择器也把下限设成今天，
+	// 但那是 UX；这里才是权威校验（小程序端可绕）。
+	ErrPastDate = errors.New("cannot book a date in the past")
+	// ErrSelfBooking：摄影师不能预约自己的套餐。自成交没业务意义，还会污染订单数、
+	// 并为「自己给自己评价」铺路。
+	ErrSelfBooking = errors.New("cannot book your own service")
 )
 
 func canTransition(from, to string) bool {
@@ -75,6 +81,28 @@ func canTransition(from, to string) bool {
 	default:
 		return false
 	}
+}
+
+// isPastSlot 判断请求的档期是否已经过去，按**服务器本地时区**判断（唯一能自证的时钟）。
+// 日期是硬约束；时刻是尽力而为：今天的、已经过去的小时同样拒绝；若时刻字符串解析不了，
+// 退化为「只比日期」——宁可放行一个过期时刻，也不要误杀一个合法预约。
+func isPastSlot(date time.Time, clock string, now time.Time) bool {
+	y, m, d := date.Date()
+	if h, mm, ok := parseClock(clock); ok {
+		slot := time.Date(y, m, d, h, mm, 0, 0, now.Location())
+		return slot.Before(now)
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return time.Date(y, m, d, 0, 0, 0, 0, now.Location()).Before(today)
+}
+
+func parseClock(s string) (int, int, bool) {
+	for _, layout := range []string{"15:04", "15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.Hour(), t.Minute(), true
+		}
+	}
+	return 0, 0, false
 }
 
 func bookingToItem(b repository.Booking) *BookingItem {
@@ -127,11 +155,20 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 	if err != nil {
 		return nil, err
 	}
+	if isPastSlot(date, req.Time, time.Now()) {
+		return nil, ErrPastDate
+	}
 
-	if profile, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil && profile.UserID != nil {
-		blocked, err := s.queries.IsBlockedPair(ctx, int64(req.CoserID), *profile.UserID)
-		if err == nil && blocked {
-			return nil, ErrForbidden
+	if profile, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil {
+		// 摄影师不能给自己下单：自成交没有业务含义，且会让「自己给自己评价」变成可能。
+		if profile.UserID != nil && *profile.UserID == int64(req.CoserID) {
+			return nil, ErrSelfBooking
+		}
+		if profile.UserID != nil {
+			blocked, err := s.queries.IsBlockedPair(ctx, int64(req.CoserID), *profile.UserID)
+			if err == nil && blocked {
+				return nil, ErrForbidden
+			}
 		}
 	}
 
@@ -207,6 +244,11 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		ServiceDuration: snapDuration,
 	})
 	if err != nil {
+		// 唯一约束 uniq_bookings_active_slot 是并发下的最终防线：两个请求可能都通过了上面的
+		// 冲突检查（TOCTOU），但只有一条能落库，另一条在这里被 DB 挡下 → 仍然回 409。
+		if isUniqueViolation(err) {
+			return nil, ErrConflict
+		}
 		if isForeignKeyViolation(err) {
 			return nil, ErrInvalidReference
 		}

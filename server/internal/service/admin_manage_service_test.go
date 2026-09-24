@@ -10,6 +10,7 @@ import (
 	"github.com/Maluslock/comic/server/internal/repository"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeRow struct {
@@ -127,6 +128,22 @@ func assignScan(dest any, val any) error {
 		v, ok := val.(bool)
 		if !ok {
 			return fmt.Errorf("assignScan: want bool for %T", dest)
+		}
+		*d = v
+	case *pgtype.Numeric:
+		v, ok := val.(pgtype.Numeric)
+		if !ok {
+			return fmt.Errorf("assignScan: want pgtype.Numeric for %T", dest)
+		}
+		*d = v
+	case *[]string:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.([]string)
+		if !ok {
+			return fmt.Errorf("assignScan: want []string for %T", dest)
 		}
 		*d = v
 	default:

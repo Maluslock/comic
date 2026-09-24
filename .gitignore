@@ -50,3 +50,6 @@ server/ingest
 .superpowers/
 .snapshots/
 .playwright-mcp/
+
+# Local audit scratch (gocache, vendored pylibs, report generator)
+.audit/

@@ -348,9 +348,9 @@ function logout() {
   color: $dark-text-tertiary;
 }
 
+// 原生高 45px ≥ 44px 触控下限；此前的 scale(0.8) 会把命中区压到 36px。
+// 不得在此重新引入 transform / zoom 缩放（持续态缩放会同步收缩命中区）。
 .menu-switch {
-  transform: scale(0.8);
-  transform-origin: right center;
 }
 
 .logout-section {

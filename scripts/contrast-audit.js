@@ -28,6 +28,19 @@
     const a = fg.a === undefined ? 1 : fg.a;
     return { r: fg.r * a + bg.r * (1 - a), g: fg.g * a + bg.g * (1 - a), b: fg.b * a + bg.b * (1 - a) };
   }
+
+  // Cumulative opacity from the element up to the root. An ancestor with opacity < 1
+  // blends the whole subtree toward the backdrop, so text contrast degrades even when
+  // the element's OWN opacity is 1 — `getComputedStyle(el).opacity` is not inherited.
+  function cumulativeOpacity(el) {
+    let o = 1, n = el;
+    while (n && n.nodeType === 1) {
+      o *= parseFloat(getComputedStyle(n).opacity);
+      if (o === 0) return 0;
+      n = n.parentElement;
+    }
+    return o;
+  }
   function extractColors(img) {
     const out = [];
     const re = /rgba?\(([^)]+)\)/g;
@@ -40,8 +53,10 @@
   }
 
   // A gradient is an opaque paint that OCCLUDES the base beneath it, so when one is
-  // present the plain base is NOT a valid background colour. Only fall back to the
-  // composited solid base when no gradient covers the text. Innermost gradient wins.
+  // present the plain base is NOT a valid background colour. The converse holds too:
+  // an OPAQUE solid occludes anything beneath it, including an outer gradient.
+  // Innermost paint wins. Only fall back to the composited solid base when nothing
+  // covers the text.
   function effectiveBackgrounds(el) {
     const stack = [];
     let n = el;
@@ -54,7 +69,12 @@
     let cands = null;
     for (let i = stack.length - 1; i >= 0; i--) {
       const s = stack[i];
-      if (s.bg && s.bg.a > 0) base = over(s.bg, base);
+      if (s.bg && s.bg.a > 0) {
+        base = over(s.bg, base);
+        // Opaque solid: clear any gradient stops inherited from an outer layer, or
+        // text on an opaque card inside a gradient region scores against stale stops.
+        if (s.bg.a >= 1) cands = null;
+      }
       if (s.img && s.img !== 'none') {
         const stops = extractColors(s.img);
         if (stops.length) cands = stops.map((st) => over(st, base));
@@ -75,15 +95,21 @@
     if (r.width < 1 || r.height < 1) continue;
 
     const cs = getComputedStyle(el);
-    if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) continue;
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const alpha = cumulativeOpacity(el);
+    if (alpha <= 0.001) continue;
     if (parseColor(cs.webkitTextFillColor || cs.color) === null) continue; // gradient-clipped text
 
     const fg = parseColor(cs.color);
     if (!fg) continue;
+    // Semi-transparent text composites toward its background, which always REDUCES
+    // contrast. Ignoring fg alpha therefore OVERESTIMATES contrast and hides real
+    // violations, so composite the effective foreground onto each candidate first.
+    const fgEff = { r: fg.r, g: fg.g, b: fg.b, a: fg.a * alpha };
 
     let worst = Infinity, worstBg = null;
     for (const bg of effectiveBackgrounds(el)) {
-      const c = ratio(fg, bg);
+      const c = ratio(over(fgEff, bg), bg);
       if (c < worst) { worst = c; worstBg = bg; }
     }
 

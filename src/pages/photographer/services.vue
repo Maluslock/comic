@@ -88,10 +88,13 @@
           <input
             v-model="form.duration"
             class="field-input"
+            :class="{ 'has-error': durationError }"
             type="number"
             placeholder="例如：60（分钟）"
             placeholder-style="color: #64748b"
+            @input="durationError = ''"
           />
+          <text v-if="durationError" class="field-error">{{ durationError }}</text>
         </view>
 
         <view class="field">
@@ -126,6 +129,7 @@ import {
   type MyService
 } from '@/api/index'
 import { ApiError } from '@/api/client'
+import { formatDuration } from '@/utils/duration'
 import { useUserStore } from '@/stores/user'
 
 const statusBarHeight = ref(44)
@@ -141,6 +145,7 @@ const togglingId = ref<number | null>(null)
 
 const form = reactive({ name: '', price: '', duration: '60', description: '' })
 const priceError = ref('')
+const durationError = ref('')
 
 const canSubmit = computed(() => form.name.trim() !== '' && !submitting.value)
 
@@ -221,14 +226,6 @@ async function toggleActive(s: MyService) {
   }
 }
 
-function formatDuration(minutes: number): string {
-  if (!minutes || minutes <= 0) return '未填写'
-  if (minutes < 60) return `${minutes} 分钟`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`
-}
-
 function openForm() {
   editingId.value = null
   form.name = ''
@@ -242,7 +239,7 @@ function openEdit(s: MyService) {
   editingId.value = s.id
   form.name = s.name
   form.price = s.price === null || s.price === undefined ? '' : String(s.price)
-  form.duration = String(s.duration || 0)
+  form.duration = s.duration > 0 ? String(s.duration) : ''
   form.description = s.description || ''
   mode.value = 'form'
 }
@@ -260,9 +257,11 @@ function normalizedPrice(): number | null | undefined {
   return Math.round(n)
 }
 
-function normalizedDuration(): number {
-  const n = Number(form.duration.trim())
-  if (!isFinite(n) || n < 0) return 0
+function normalizedDuration(): number | undefined {
+  const raw = form.duration.trim()
+  if (raw === '') return undefined
+  const n = Number(raw)
+  if (!isFinite(n) || n <= 0) return undefined
   return Math.round(n)
 }
 
@@ -275,6 +274,13 @@ async function submit() {
     return
   }
   priceError.value = ''
+  const duration = normalizedDuration()
+  if (duration === undefined) {
+    durationError.value = '时长需为大于 0 的分钟数'
+    uni.showToast({ title: '时长需为大于 0 的分钟数', icon: 'none' })
+    return
+  }
+  durationError.value = ''
   const id = editingId.value
   submitting.value = true
   uni.showLoading({ title: '保存中...' })
@@ -283,7 +289,7 @@ async function submit() {
       name: form.name.trim(),
       price,
       description: form.description.trim(),
-      duration: normalizedDuration()
+      duration
     }
     if (id) {
       await updateService(id, payload)

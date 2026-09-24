@@ -38,6 +38,9 @@ type BookingItem struct {
 	PhotographerAvatar string `json:"photographerAvatar"`
 	PhotographerUserID int64  `json:"photographerUserId"`
 	ServiceName        string `json:"serviceName"`
+	// ServiceDuration is the下单时冻结的时长快照（分钟）。指针对待：快照列可能为空
+	// （000027 之前的旧行），此时前端应显示「—」而不是 0 分钟。
+	ServiceDuration *int32 `json:"serviceDuration"`
 }
 
 type BookingItemWithCoser struct {
@@ -76,20 +79,21 @@ func canTransition(from, to string) bool {
 
 func bookingToItem(b repository.Booking) *BookingItem {
 	return &BookingItem{
-		ID:             b.ID,
-		PhotographerID: b.PhotographerID,
-		CoserID:        b.CoserID,
-		ServiceID:      b.ServiceID,
-		Date:           b.Date.Format("2006-01-02"),
-		Time:           b.Time,
-		Status:         b.Status,
-		TotalPrice:     b.TotalPrice,
-		PriceMode:      b.PriceMode,
-		QuotePrice:     b.QuotePrice,
-		PriceStatus:    b.PriceStatus,
-		Remarks:        derefString(b.Remarks),
-		CreatedAt:      b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		ServiceName:    derefString(b.ServiceName),
+		ID:              b.ID,
+		PhotographerID:  b.PhotographerID,
+		CoserID:         b.CoserID,
+		ServiceID:       b.ServiceID,
+		Date:            b.Date.Format("2006-01-02"),
+		Time:            b.Time,
+		Status:          b.Status,
+		TotalPrice:      b.TotalPrice,
+		PriceMode:       b.PriceMode,
+		QuotePrice:      b.QuotePrice,
+		PriceStatus:     b.PriceStatus,
+		Remarks:         derefString(b.Remarks),
+		CreatedAt:       b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ServiceName:     derefString(b.ServiceName),
+		ServiceDuration: b.ServiceDuration,
 	}
 }
 

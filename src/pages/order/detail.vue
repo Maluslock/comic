@@ -38,7 +38,7 @@
           </view>
           <view class="detail-row">
             <text class="detail-label">拍摄时长</text>
-            <text class="detail-value">{{ order.duration }}分钟</text>
+            <text class="detail-value">{{ formatDuration(order.duration) }}</text>
           </view>
           <view class="detail-row">
             <text class="detail-label">拍摄日期</text>
@@ -138,6 +138,7 @@ import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import type { OrderPriceFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote, confirmRespondQuote } from '@/utils/quote'
+import { formatDuration } from '@/utils/duration'
 
 interface OrderDetail extends OrderPriceFields {
   id: string
@@ -149,7 +150,7 @@ interface OrderDetail extends OrderPriceFields {
   location: string
   serviceId?: string
   serviceName: string
-  duration: number
+  duration: number | null
   date: string
   time: string
   status: string
@@ -165,7 +166,7 @@ const defaultOrder: OrderDetail = {
   photographerAvatar: '',
   location: '',
   serviceName: '未知服务',
-  duration: 0,
+  duration: null,
   date: '',
   time: '',
   remark: '',
@@ -209,7 +210,7 @@ async function loadOrder() {
           location: serverOrder.location || '',
           serviceId: String(serverOrder.serviceId),
           serviceName: serverOrder.serviceName || `服务${serverOrder.serviceId}`,
-          duration: serverOrder.duration || 0,
+          duration: serverOrder.serviceDuration ?? null,
           date: serverOrder.date,
           time: serverOrder.time,
           totalPrice: serverOrder.totalPrice || 0,

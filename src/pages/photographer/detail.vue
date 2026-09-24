@@ -61,7 +61,7 @@
             <view class="service-info">
               <text class="service-name">{{ service.name }}</text>
               <text class="service-desc">{{ service.description }}</text>
-              <text class="service-duration">{{ service.duration }}分钟</text>
+              <text class="service-duration">{{ formatDuration(service.duration) }}</text>
             </view>
             <view class="service-price">
               <text class="price">{{ formatPrice(service.price) }}</text>
@@ -136,6 +136,7 @@ import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser } from '@/api/index'
 import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice } from '@/utils/mappers'
+import { formatDuration } from '@/utils/duration'
 import type { Photographer, Service } from '@/types'
 
 interface PhotographerDetailResponse {

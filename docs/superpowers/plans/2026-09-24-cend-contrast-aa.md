@@ -295,12 +295,13 @@ chmod +x scripts/contrast-audit.sh
 bash scripts/contrast-audit.sh .audit/baseline
 ```
 
-Expected：至少能复现这两条已知缺陷（数字允许 ±0.05）：
+Expected（数字为**累积透明度修正后**的真实绘制值，允许 ±0.05）：
 
-- `pages/login/index` → `worst=1.97`（`.login-btn-text` 的 `$dark-text-primary` 压青端）
-- `pages/index/index` → `worst=2.43`（白字压渐变条青端）
+- `pages/login/index` → `worst=1.31` —— 该按钮的祖先 `uni-view.login-btn.disabled` 带 `opacity: 0.45`（未输入手机号时的 idle 态）。**该值状态相关**：按钮可用态为 1.97。门控取 idle 态的 **1.31**
+- `pages/index/index` → 具名发现 `'近期热门漫展'`（白字压渐变青端）**仍精确为 2.43**；但 summary 的 `worst` 现为 **1.84**（装饰性 `◆`，祖先 `uni-text.cta-marker` opacity 0.7）
+- `pages/photographer/services` → `total=0`（batch 1 已修正确，**不应**出现 1.00 的假阳性）
 
-并确认 `pages/photographer/services` → `total=0`（batch 1 已修正确，**不应**出现 1.00 的假阳性）。
+> **重要**：修正累积透明度后，一批**半透明 / 降透明度**元素的数字会变大（更差）—— 那是**修正本身**，不是回归。首轮基线里的 1.97 / 2.43 / 3.96 等值中，凡涉及 `rgba(255,255,255,0.8/0.9)` 或祖先 `opacity<1` 的，都是**忽略透明度导致的高估值**（例如登录页 1.97 实为 1.31）。Task 2–7 必须以修正后的数字为准。
 
 - [ ] **Step 4: Commit**
 

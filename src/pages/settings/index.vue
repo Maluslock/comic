@@ -310,7 +310,7 @@ function logout() {
   color: $neon-purple;
 
   &:active {
-    background: $neon-purple-dim;
+    @include neon-pill;
   }
 }
 

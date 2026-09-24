@@ -260,7 +260,7 @@ async function submitReview() {
   font-size: $font-size-sm;
 
   &:active {
-    background: $neon-purple-dim;
+    @include neon-pill;
     border-color: $neon-purple-glow;
   }
 }

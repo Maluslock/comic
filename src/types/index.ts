@@ -20,6 +20,11 @@ export interface Photographer extends User {
   reviewCount: number
   orderCount: number
   userId?: number
+  /** 价格汇总：仅列表接口（/v1/photographers）返回；其余接口为 undefined → 卡片不显示价格 */
+  minPrice?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
 }
 
 export interface Work {
@@ -152,6 +157,11 @@ export interface PhotographerItem {
   reviewCount: number
   orderCount: number
   tags: string[]
+  /** 见 Photographer.minPrice：仅列表接口返回 */
+  minPrice?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
 }
 
 export interface WorkItem {

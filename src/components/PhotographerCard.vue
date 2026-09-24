@@ -19,18 +19,31 @@
       </view>
       <view class="footer">
         <text class="location">{{ photographer.location }}</text>
-        <text class="count">{{ photographer.orderCount }}单已接</text>
+        <view class="footer-right">
+          <text class="count">{{ photographer.orderCount }}单已接</text>
+          <text
+            v-if="price.text"
+            class="price"
+            :class="`price-${price.tone}`"
+          >{{ price.text }}</text>
+        </view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Photographer } from '@/types'
+import { describePrice } from '@/utils/price'
 
 const props = defineProps<{
   photographer: Photographer
 }>()
+
+// 价格文案取「最低可成交价」（闲鱼/淘宝多 SKU 惯例）；
+// 接口没返回价格汇总时 describePrice 给空串，这里直接不渲染。
+const price = computed(() => describePrice(props.photographer))
 
 function goDetail() {
   uni.navigateTo({
@@ -141,6 +154,13 @@ function goDetail() {
   padding-top: 6rpx;
 }
 
+.footer-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10rpx;
+}
+
 .location {
   font-size: 20rpx;
   color: $dark-text-tertiary;
@@ -149,5 +169,29 @@ function goDetail() {
 .count {
   font-size: 20rpx;
   color: $dark-text-tertiary;
+}
+
+// 价格是卡片上最需要被扫到的信息，故比同行的元信息略大、加粗。
+// 四个色都实测过在卡片底（含按下态 rgba(255,255,255,0.08) 叠加）上 ≥ 4.5:1。
+.price {
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.price-price {
+  color: $warning-color; // 固定价：金钱色
+}
+
+.price-free {
+  color: $success-color; // 互勉
+}
+
+.price-negotiable {
+  color: $neon-cyan; // 面议
+}
+
+.price-muted {
+  color: $dark-text-tertiary; // 暂未设置
+  font-weight: 400;
 }
 </style>

@@ -270,6 +270,49 @@ Order list/detail responses include joined photographer/service fields:
 - `src/pages/order/list.vue` calls `apiPut(\`/v1/bookings/${id}/status\`, { status })` for confirm/complete/cancel and handles 409 with a toast.
 - `src/pages/booking/index.vue` loads `GET /v1/photographers/:id/timeslots` and marks occupied slots as disabled.
 
+## 完整性约束与核心不变量（2026-09-24 第二轮整体 review）
+
+第二轮 review（业务逻辑 + 核心功能）发现并修复了 6 个缺陷（报告 B-10~B-15）。以下约束是**不变量**，
+改动相关代码时不要绕过 —— 每一条都对应一次真实复现。
+
+### 订单/预约（server/migrations/000029 + booking_service.go）
+
+| 不变量 | 实现 | 为什么不能只在应用层做 |
+|--------|------|------------------------|
+| 同一摄影师同一 date+time 只能有一个未取消订单 | 部分唯一索引 `uniq_bookings_active_slot (photographer_id, date, time) WHERE status <> 'cancelled'` + `Create` 把 23505 映射成 `ErrConflict`(409) | `CountConflictBookings`(SELECT) → INSERT 是 TOCTOU。实测 12 个线程屏障对齐的并发请求曾 **7 个成功、7 条订单落同一档期**；加索引后复测 1 个 201 / 11 个 409。`WHERE status <> 'cancelled'` 是为了让取消释放时段 |
+| 不能预约过去的档期 | `isPastSlot(date, time, now)`：按**服务器本地时区**，日期是硬约束，今天的已过时刻同样拒绝；时刻不可解析时退化为只比日期 | 前端 picker 的 `:start` 只是 UX，小程序端可绕 |
+| 摄影师不能预约自己的套餐 | `Create` 比较下单人与 `GetPhotographerById().UserID` → `ErrSelfBooking`(400) | 自成交无业务含义，还会污染单量并给自评铺路 |
+
+前端配套约定：**取本地日期一律用 `src/utils/date.ts` 的 `localDateKey`/`todayKey`，不要用
+`new Date().toISOString().split('T')[0]`** —— 后者是 UTC，东八区 00:00–08:00 会得到「昨天」
+（预约页默认日期曾因此落在过去的一天）。
+
+### 评价（review_service.go + 迁移 000029）
+
+- 评价必须对应**已完成**订单（`HasCompletedBookingWith`）→ 否则 403；不能自评；`uniq_reviews_user_photographer` 唯一索引兜重复 → 23505 映射 409。
+- **评分与评价数每次评价后按 `reviews` 表重算**（`RecomputePhotographerRating`）。这两个字段此前是种子死数字（显示 4.9 分 / 234 条，真实只有 3 条评价），插入评价从不更新它们。重算是 best-effort（失败只记日志，下一条评价自我修正），不能让派生字段把已成功的评价变成「提交失败」。
+
+### 摄影师列表排序（photographers.sql.go `SearchPhotographers` $7）
+
+- 排序键：`all`（默认，评分优先）/`hot`（评价数）/`rating`/`order`（接单数）/`new`（入驻时间）。用 `CASE WHEN $7::text = ...` 参数绑定，**不要拼接字符串**。
+- 每档末尾都有 `p.id DESC` 作为**稳定 tiebreaker**：排序键不唯一时 LIMIT/OFFSET 翻页会在页间重复或漏行（默认排序同样需要）。
+- **`sort` 必须进列表缓存键**（`photographer_handler.go` 的 `cacheKey`），否则切筛选会命中另一档的缓存。
+- 列表页筛选栏（热门/评分最高/接单最多/最新入驻）此前只改高亮、不传参数，四个筛选返回结果完全一致；现已接线。
+
+### 聊天
+
+- `MarkSessionRead` 现在也走 `assertParticipant`：非会话成员标记已读 → 403（与 `ListMessages`/`SendMessage` 口径一致）。此前返回 200 并给自己写一条无意义的 `chat_read_state` 行。
+
+### 越权（IDOR）现状：已核查，基本干净
+
+2026-09-24 做过一轮跨账号对抗测试：15 项「用 A 的 token 读写 B 的资源」（订单读取/改状态/报价/接受报价、
+跨摄影师读接单、非本人会话读消息与发消息、收藏/关注/通知的越权写）**全部 403/404**。
+模式是统一的：**路径/body 里的用户 id 不参与授权判断**，一律以 token 身份（`middleware.UserID(c)`）为准，
+handler 用 `assertSelf` 或 `...ForUser` 后缀的 service 方法；`POST /favorites`、`POST /follows`、
+`POST /notifications` 会直接**覆盖** body 里的 `userId`。新增接口请沿用这套模式。
+（注意：这类探针容易误报 —— `POST /favorites {userId: 别人的}` 返回 201 看着像越权，实际落库是 token 用户；
+判断越权要看**落库归属**，不能只看响应码。）
+
 ## 收藏 + 聊天模块
 
 Favorites and real chat implemented across Tasks 1-9.

@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
-# C 端对比度审计（可重复）。用法：bash scripts/contrast-audit.sh [OUT_DIR]
+# C 端对比度审计（可重复）。用法：bash scripts/contrast-audit.sh [OUT_DIR]  —— 注意 OUT_DIR 内的 *.json/*.meta 会先被清空
 set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:5173}"
 API_URL="${API_URL:-http://127.0.0.1:8088}"
-OUT_DIR="${1:-.audit/out}"
+# 用 `-` 而非 `:-`：省略参数时才取默认值，显式传入空串则落到下面的守卫被拒绝
+# （否则 `${1:-.audit/out}` 会把空串悄悄变成默认目录，守卫的 "" 分支永远不可达）。
+OUT_DIR="${1-.audit/out}"
 AB="${AGENT_BROWSER:-agent-browser}"
+
+# 清理前拒绝无意义/危险的 OUT_DIR（见 Ruling T7-2a）：`.`、`..`、`/`、空串会把仓库根或系统根的
+# JSON（package.json / tsconfig.json …）当成本次产物删掉。
+case "$OUT_DIR" in
+  ""|.|./|..|../|/) echo "FATAL: 拒绝 OUT_DIR='$OUT_DIR'（会删掉无关 JSON）" >&2; exit 2;;
+esac
+_out_abs="$(cd "$OUT_DIR" 2>/dev/null && pwd -P || true)"
+_root_abs="$(git rev-parse --show-toplevel)"
+[ "$_out_abs" != "$_root_abs" ] || { echo "FATAL: OUT_DIR 解析为仓库根目录，拒绝清理" >&2; exit 2; }
 
 command -v "$AB" >/dev/null 2>&1 || export PATH="/home/user/.nvm/versions/node/v22.16.0/bin:$PATH"
 

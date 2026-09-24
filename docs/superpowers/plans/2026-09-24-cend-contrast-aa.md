@@ -575,6 +575,51 @@ Step 2d 生效后重测。实现者的**像素采样**证明这里有 **2 处真
 
 **仍然不得修改 `.header` 的渐变色**（T3-5）。改完留 `.audit/shots/` 前后截图以便评估观感。
 
+- [ ] **Step 2f: 统计行底色改用 token（修审查 Important，见 ledger `Ruling (T3-9)`）**
+
+`#8553bd` 是**新增硬编码色值**，违反本计划的 token-only 约束（且本任务本身就是一次 token 迁移，再引入魔术 hex 自相矛盾）。在 `src/styles/variables.scss` 的 neon 族中新增 token：
+
+```scss
+// 不透明紫色表面：用于渐变上的实底面板（`$neon-purple-dim` 是半透明版，这个是实底版）
+$neon-purple-surface: #8553bd;   // 白字 5.29:1；由旧半透明面板在头部渐变上的实测均值选定
+```
+
+`src/pages/profile/index.vue` 的 `.stats-row` 改用它：
+
+```scss
+// 前
+  background: #8553bd;
+// 后
+  background: $neon-purple-surface;
+```
+
+- [ ] **Step 2g: 补测摄影师身份的 profile，并修其 2 处缺陷（见 ledger `Ruling (T3-10)`）**
+
+**门控盲区**：`pages/profile/index` 只在 **coser** 身份下被审计，而页面内容随角色变化（`isPhotographer`）。以摄影师身份实测该页 → **total=2**，两处都是真缺陷：
+
+| 元素 | 实测 | 前景 → 背景 |
+|---|---|---|
+| `.cert-badge`「✓ 认证摄影师」 | **2.37:1** | `#fbbf24` 金 → 紫 |
+| `.role-tag.photographer`「摄影师」 | **3.96:1** | `#fff` → 紫 |
+
+1. 给 `scripts/contrast-audit.sh` 的 `PHOTOGRAPHER_PAGES` 增补 `pages/profile/index`。
+2. **同时修输出文件名的角色冲突（否则本步无效）**：`audit_page` 目前用路由算文件名，`pages/profile/index` 在 coser 与摄影师两轮会写成**同一个** `pages_profile_index.json`，后者**覆盖**前者，导致 coser 身份的结果凭空消失、diff 也看不出。给 `audit_page` 加角色前缀：
+
+```bash
+audit_page() {  # $1=route  $2=role
+  local n; n="$2__$(printf '%s' "$1" | tr '/?=' '___')"
+  ...
+```
+
+调用处相应改为 `audit_page "$p" coser` / `audit_page "$p" photographer`。
+
+> 改名后页数由 27 变 28（新增 `photographer__pages_profile_index`）。**Task 7 的回归基线也必须用改后的 runner 重测**，否则页集不匹配（见 Task 7 Step 3 的守卫）。
+3. 两处都用 `@include on-neon-fill;`（深字）：
+   - `src/pages/profile/index.vue` 的 `.cert-badge`：`color: #fbbf24;` → `@include on-neon-fill;`（保留其 `border` / `background` / `box-shadow` 的金色标识）
+   - 同文件的 `.role-tag { &.photographer { ... } }`：`color: #fff;` → `@include on-neon-fill;`
+
+> 深字在两者的实底上均达标：`.cert-badge` 实压 ≈5.24、`.role-tag.photographer` 实压 ≈6.33；门控按纯紫算也分别是 4.95 —— 两条路都过。
+
 - [ ] **Step 3: 编译验证**
 
 Run: `npx vue-tsc --noEmit`
@@ -599,15 +644,16 @@ Expected：以下签名**全部不再出现**（括号内为修复前实测值�
 **本轮新增覆盖**（Step 2c 加的 `?id=3` / `?id=4`）也必须一并达标：
 - `pages/order/detail?id=4`（cancelled，深底 + 浅字）→ `total=0`
 - `pages/order/detail?id=3`（completed，亮底 + 深字）→ `total=0`
-- `pages/profile/index` → `total=0`（Step 2e 后）
+- `pages/profile/index` → `total=0`（Step 2e/2f 后）
+- **摄影师身份**的 `photographer__pages_profile_index` → `total=0`（Step 2g 后；修复前为 `total=2`：`.cert-badge` 2.37、`.role-tag.photographer` 3.96）
 
 且**不得出现任何新的** `rgb(10,10,26) → rgb(10,10,26)` 型 1.00:1 报告（渐变遮挡假阳性，Task 1 已修，出现即为回归），**也不得出现 `rgb(10,10,26) → rgb(18,18,42)` 型 1.07:1**（深字压深底 —— 即 `cancelled` 变体被误改的信号）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/contrast-audit.js scripts/contrast-audit.sh src/pages
-git commit -m "fix(qa,cend): F1 收口 —— 变体作用域取色 + 渐变按位置取样 + 补测 cancelled/completed 状态"
+git add scripts/contrast-audit.js scripts/contrast-audit.sh src/styles/variables.scss src/pages
+git commit -m "fix(qa,cend): F1 收口 —— 变体作用域取色 + 渐变按位置取样 + 补测 cancelled/completed/摄影师身份 + 统计行底色入 token"
 ```
 
 ---

@@ -1007,18 +1007,18 @@ Expected：
 > 1. **页集不同** —— Task 3 Step 2c 把门控从 25 页扩到 **27 页**（新增 `order/detail?id=3/id=4`）。拿 25 页基线比 27 页结果会误报缺页。
 > 2. **算法不同，更关键** —— `.audit/baseline` 是**旧测量算法**（忽略透明度、渐变取最差停靠点）测的。跨算法比较会把**工具修正**误读成代码回归。Task 3 起的所有比较都必须用**同一算法**的基线。
 >
-> 3. **页名也变了** —— Task 3 Step 2g 给输出文件名加了**角色前缀**并把页集扩到 **28 页**。旧的 27 个无前缀文件会被守卫判为"缺页"。
+> 3. **页集与页名一直在变** —— Task 3 Step 2g 加了**角色前缀**（28 页），Task 6 Step 1 又补入 5 个从未被审计的注册页（**33 页**）。用旧页集当基线会被守卫判为"缺页"，这是预期行为而非回归。
 >
-> 因此：可比的回归基线是 **`.audit/task3`**（Task 3 收口时、当前算法、28 页且文件名带角色前缀）。
+> 因此：可比的回归基线是 **`.audit/task6`**（Task 6 收口时、当前算法、**33 页**且文件名带角色前缀）。
 >
-> **`.audit/` 是 gitignore 的，会随环境丢失。** 若 `ls .audit/task3/*.json` 为空，**必须在做 Task 7 自己的改动之前**先补测：
-> `bash scripts/contrast-audit.sh .audit/task3`
+> **`.audit/` 是 gitignore 的，会随环境丢失。** 若 `ls .audit/task6/*.json` 为空，**必须在做 Task 7 自己的改动之前**先补测：
+> `bash scripts/contrast-audit.sh .audit/task6`
 > 补测只有在**改动前**执行才有意义（改动后补测得到的是"已修复态"，反映不了回归）。守卫会以非零退出拒绝在缺基线时给出「无回归」结论 —— 这是刻意的 fail-closed。
 
 ```bash
 # 守卫：.audit/ 是 gitignore 的。缺基线时 diff 会拿空字典对比并静默输出「无回归」——
 # 那正是本项目栽过的假通过。基线必须存在、非空，且页集不得比复测少。
-BASE_DIR="${BASE_DIR:-.audit/task3}"
+BASE_DIR="${BASE_DIR:-.audit/task6}"
 test -n "$(ls -A "$BASE_DIR"/*.json 2>/dev/null)" || {
   echo "FATAL: 回归基线 $BASE_DIR 为空或缺失 —— 拒绝给出「无回归」结论" >&2; exit 1; }
 python3 - "$BASE_DIR" <<'PY'
@@ -1054,6 +1054,16 @@ for p in pages/login/index pages/index/index "pages/order/detail?id=1" "pages/ph
 done
 ls -1 .audit/shots
 ```
+
+- [ ] **Step 4b: 更新 `AGENTS.md` 的暗色主题约定**
+
+在 `AGENTS.md` 的「Dark Theme Overrides」小节补入本次新增的共享层，避免后续再写出 `#fff` 压霓虹底这类代码：
+
+- `@mixin on-neon-fill` —— 压霓虹实底（青/紫/粉/渐变）的文字一律用它取深字，**不要**再写 `color: #fff` 或 `$dark-text-primary`
+- `@mixin neon-pill` —— 紫底 pill 标签一律用它（亮紫字 + `$neon-purple-dim` 底），**不要**再内联 `color: $neon-purple`
+- `$error-bright` —— 压红底（`rgba(239,68,68,.1)`）的红字用它，`$error-color` 在红底上只有 4.32:1
+- `$neon-purple-surface` —— 渐变上需要**不透明**实底面板时用（`$neon-purple-dim` 是半透明版）
+- **同色系不达标取决于色相亮度**：青 ≈5.5 / 绿 ≈5.8 / 金 ≈5.9 均达标；**紫 3.80 / 红 4.32** 不达标 → 不要盲目全局替换
 
 - [ ] **Step 5: 跑门禁**
 

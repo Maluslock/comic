@@ -33,6 +33,7 @@
           >
             <view class="item-accent"></view>
             <text class="menu-text">{{ item.label }}</text>
+            <!-- 原生高 45px ≥ 44px 触控下限：不要给 .menu-switch 加 transform/zoom 缩放（会连命中区一起缩） -->
             <switch
               class="menu-switch"
               :checked="notifications[item.key]"
@@ -348,10 +349,10 @@ function logout() {
   color: $dark-text-tertiary;
 }
 
-// 原生高 45px ≥ 44px 触控下限；此前的 scale(0.8) 会把命中区压到 36px。
-// 不得在此重新引入 transform / zoom 缩放（持续态缩放会同步收缩命中区）。
-.menu-switch {
-}
+// 注意：`switch.menu-switch` 的原生高是 45px ≥ 44px 触控下限，**不要**为它补样式。
+// 曾经这里的 `transform: scale(0.8)` 把视觉与命中区一起压到 36px（< 44px）；
+// 任何持续态 `transform` / `zoom` 缩放都会同步收缩命中区。此处刻意不留规则。
+// 详见 AGENTS.md「对比度共享层」小节。
 
 .logout-section {
   margin-top: $spacing-lg;

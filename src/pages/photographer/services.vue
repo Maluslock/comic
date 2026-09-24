@@ -369,7 +369,8 @@ function goBack() {
   &:active { transform: scale(0.97); }
   &.disabled { opacity: 0.5; }
 }
-.btn-add { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; background: $neon-gradient; color: $dark-bg-primary; border-radius: 28rpx; font-size: 26rpx; font-weight: 600; box-shadow: 0 0 16rpx $neon-purple-glow;
+.btn-add { display: inline-flex; align-items: center; justify-content: center; min-height: 88rpx; padding: 0 28rpx; background: $neon-gradient; border-radius: 28rpx; font-size: 26rpx; font-weight: 600; box-shadow: 0 0 16rpx $neon-purple-glow;
+  @include on-neon-fill;
   &:active { transform: scale(0.97); }
 }
 
@@ -388,7 +389,7 @@ function goBack() {
 .price-tag { flex-shrink: 0; font-size: 30rpx; font-weight: 700; padding: 6rpx 20rpx; border-radius: 24rpx;
   &.is-fixed { color: $neon-cyan; background: rgba(6, 182, 212, 0.12); border: 1rpx solid rgba(6, 182, 212, 0.4); }
   &.is-mutual { color: $success-color; background: rgba(34, 197, 94, 0.12); border: 1rpx solid rgba(34, 197, 94, 0.4); }
-  &.is-negotiable { color: $neon-purple-bright; background: $neon-purple-dim; border: 1rpx solid rgba(168, 85, 247, 0.4); }
+  &.is-negotiable { @include neon-pill; border: 1rpx solid rgba(168, 85, 247, 0.4); }
 }
 .service-meta { display: flex; align-items: center; gap: 16rpx; margin-top: 16rpx; }
 .meta-item { font-size: 24rpx; color: $dark-text-secondary; }
@@ -417,7 +418,8 @@ function goBack() {
 .field-error { display: block; font-size: 24rpx; color: $error-color; margin-top: 12rpx; }
 .field-input.has-error { border-color: rgba(239, 68, 68, 0.6); }
 
-.btn-submit { margin-top: 40rpx; display: flex; align-items: center; justify-content: center; min-height: 96rpx; padding: 0; background: $neon-gradient; color: $dark-bg-primary; border-radius: 44rpx; font-size: 30rpx; font-weight: 700; box-shadow: 0 0 24rpx $neon-purple-glow;
+.btn-submit { margin-top: 40rpx; display: flex; align-items: center; justify-content: center; min-height: 96rpx; padding: 0; background: $neon-gradient; border-radius: 44rpx; font-size: 30rpx; font-weight: 700; box-shadow: 0 0 24rpx $neon-purple-glow;
+  @include on-neon-fill;
   &:active { transform: scale(0.97); }
   &.disabled { opacity: 0.5; }
 }

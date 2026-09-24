@@ -9,14 +9,37 @@ API_URL="${API_URL:-http://127.0.0.1:8088}"
 OUT_DIR="${1-.audit/out}"
 AB="${AGENT_BROWSER:-agent-browser}"
 
-# 清理前拒绝无意义/危险的 OUT_DIR（见 Ruling T7-2a）：`.`、`..`、`/`、空串会把仓库根或系统根的
-# JSON（package.json / tsconfig.json …）当成本次产物删掉。
+# 清理前拒绝会命中仓库根 / 上级 / 系统根的取值（见 Ruling T7-2a）。
 case "$OUT_DIR" in
   ""|.|./|..|../|/) echo "FATAL: 拒绝 OUT_DIR='$OUT_DIR'（会删掉无关 JSON）" >&2; exit 2;;
 esac
+# 只允许写在 <repo>/.audit/ 之内（见 Ruling T7-2 Minor 3）。黑名单拦不住
+# `admin`（会删 admin/package.json、admin/tsconfig.json）、`.omo/run-continuation`、
+# `.oxfmtrc.json` 之类 —— 改成白名单：必须落在 <repo>/.audit/ 里。
+#
+# 注意顺序：审计目录通常**尚不存在**（脚本稍后才 `mkdir -p`），此时 `cd` 解析会失败，
+# 不能因此误杀。所以先按字面量前缀判定「在 `<repo>/.audit/` 之下」（`..` 之类危险穿越
+# 会在这一步被拒），目录已存在时再解析绝对路径，防止经由符号链接逃出 `.audit/`。
+_repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+_audit_abs=""
+[ -n "$_repo_root" ] && _audit_abs="$(cd "$_repo_root/.audit" 2>/dev/null && pwd -P || true)"
+# 仓库/.audit 解析不出来时必须拒绝（fail-closed）：此时白名单没有基准，放行等于放行一切
+[ -n "$_audit_abs" ] || {
+  echo "FATAL: 无法解析 <repo>/.audit（不在 git 工作树内？）—— 拒绝清理" >&2; exit 2; }
+case "$OUT_DIR" in
+  .audit/*|"$_repo_root"/.audit/*) : ;;
+  *) echo "FATAL: OUT_DIR='$OUT_DIR' 不在 <repo>/.audit/ 之内 —— 拒绝清理" >&2; exit 2;;
+esac
+# 解析真实路径，确认仍在 .audit/ 内（含符号链接逃逸防护）
 _out_abs="$(cd "$OUT_DIR" 2>/dev/null && pwd -P || true)"
-_root_abs="$(git rev-parse --show-toplevel)"
-[ "$_out_abs" != "$_root_abs" ] || { echo "FATAL: OUT_DIR 解析为仓库根目录，拒绝清理" >&2; exit 2; }
+if [ -z "$_out_abs" ]; then
+  _out_parent="$(dirname "$OUT_DIR")"
+  _out_abs="$(cd "$_out_parent" 2>/dev/null && pwd -P || true)/$(basename "$OUT_DIR")"
+fi
+case "$_out_abs/" in
+  "$_audit_abs"/*) : ;;
+  *) echo "FATAL: OUT_DIR='$OUT_DIR' 解析为 '$_out_abs'，逃出 <repo>/.audit/ —— 拒绝清理" >&2; exit 2;;
+esac
 
 command -v "$AB" >/dev/null 2>&1 || export PATH="/home/user/.nvm/versions/node/v22.16.0/bin:$PATH"
 
@@ -26,7 +49,7 @@ mkdir -p "$OUT_DIR"
 # 每次运行只保留本次页集：残留旧文件会污染后续对比（见 Ruling T7-1）
 rm -f "$OUT_DIR"/*.json "$OUT_DIR"/*.meta
 
-set_role() {  # $1=phone
+set_role() {  # $1=phone  $2=期望角色：photographer（pid≠0）| coser（pid=0）
   local resp token uid pid
   resp="$(curl -s -X POST "$API_URL/api/v1/login" -H 'Content-Type: application/json' \
     -d "{\"phone\":\"$1\",\"code\":\"123456\"}" --max-time 8)"
@@ -39,6 +62,17 @@ set_role() {  # $1=phone
   }
   uid="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["user"]["id"])')"
   pid="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["user"].get("photographerId") or 0)')"
+  # 角色必须与请求的一致（见 Ruling T7-2 Blocking 2）：dev API 会把任意合法手机号
+  # 自动注册成**普通用户**，所以打错的摄影师号会拿到 photographerId=0 —— 那样整轮
+  # 摄影师侧页面都在错误/空角色下测量，却照样输出 total=0 + OK。宁可硬停。
+  if [ "${2:-}" = "photographer" ] && [ "$pid" = "0" ]; then
+    echo "FATAL: 账号 $1 不是摄影师（photographerId=0）—— 拒绝在错误角色下测量摄影师侧页面" >&2
+    exit 1
+  fi
+  if [ "${2:-}" = "coser" ] && [ "$pid" != "0" ]; then
+    echo "FATAL: 账号 $1 已开通摄影师身份（photographerId=$pid）—— 拒绝把它当 coser 用" >&2
+    exit 1
+  fi
   # open 建立 origin，再用 reload 触发整页重载，否则 Pinia store 读不到注入的 token
   "$AB" open "$BASE_URL/#/pages/index/index" >/dev/null 2>&1
   "$AB" eval "(function(){uni.setStorageSync('token','$token');uni.setStorageSync('user',JSON.stringify({id:$uid,name:'audit',phone:'$1',avatar:'',bio:'',photographerId:$pid}));return 1;})()" >/dev/null 2>&1
@@ -91,11 +125,11 @@ pages/photographer/activate pages/photographer/profile-edit pages/photographer/c
 pages/profile/index"
 
 echo "== role=coser =="
-set_role 13800138000
+set_role 13800138000 coser
 for p in $COSER_PAGES; do audit_page "$p" coser; done
 
 echo "== role=photographer =="
-set_role 10000000001
+set_role 10000000001 photographer
 for p in $PHOTOGRAPHER_PAGES; do audit_page "$p" photographer; done
 
 # 退出码必须是有意义的通过/失败信号：任何页面测量失败 → 本次运行无效。

@@ -739,6 +739,63 @@ git commit -m "fix(qa,cend): F1 收口 —— 变体作用域取色 + 渐变按�
 
 `src/pages/search/search.vue:242` 的 `.hot-item { &:active { ... } }`，把子块内的 `background: $neon-purple-dim;` 与 `color: $neon-purple;` 替换为 `@include neon-pill;`。
 
+- [ ] **Step 4b: 补齐 brief 遗漏的 F2 来源，并统一走 mixin（见 ledger `Ruling (T4-1)`/`(T4-2)`）**
+
+**brief 的 8 块不是 36 处 F2 的来源。** 实测 DOM 追踪证明真正的源头是**共享组件**与筛选态：
+
+| 文件 | 选择器 | 说明 |
+|---|---|---|
+| `src/components/PhotographerCard.vue` | `.tag` | 卡片标签，**一处修好 3 个页面**（index、event/detail、photographer/list 各 12 处 = 36） |
+| `src/pages/photographer/list.vue` | `.filter-item { &.active { … } }` | `▼` 继承其颜色，是那 1 处 3.92 的来源 |
+
+这两处**必须用 `@include neon-pill`**（而不是内联只改 `color`）：计划的核心决策就是「收敛到共享 mixin，避免复发」，留两处内联 `color: $neon-purple-bright` 正是 mixin 要消灭的重复。代价是它们原用的 ad-hoc `rgba($neon-purple, 0.15)` 底色会归一到 token `$neon-purple-dim`（0.1）—— 差异极小，且这正是"不再有临时色值"的本意。
+
+```scss
+// PhotographerCard.vue  .tag
+// 前
+  background: rgba($neon-purple, 0.15);
+  color: $neon-purple-bright;
+// 后
+  @include neon-pill;
+
+// photographer/list.vue  .filter-item { &.active { … } }
+// 前
+  &.active {
+    background: rgba($neon-purple, 0.15);
+    color: $neon-purple-bright;
+    border-color: rgba($neon-purple, 0.3);
+  }
+// 后
+  &.active {
+    @include neon-pill;
+    border-color: rgba($neon-purple, 0.3);
+  }
+```
+
+**另补两处同族「按压态」缺陷**（同样实测不到 —— 审计不渲染按压态，但规则确实不达标）：静息时紫字压深卡片是**达标**的，按下时底色变 `$neon-purple-dim`，于是变成紫压紫。
+
+```scss
+// src/pages/comment/index.vue  .btn-outline { &:active { … } }
+// 前
+  &:active {
+    background: $neon-purple-dim;
+// 后
+  &:active {
+    @include neon-pill;
+
+// src/pages/settings/index.vue  .edit-btn { &:active { … } }
+// 前
+  &:active {
+    background: $neon-purple-dim;
+// 后
+  &:active {
+    @include neon-pill;
+```
+
+（`@include neon-pill` 已含 `background: $neon-purple-dim`，故原 background 行由 mixin 承担；`color` 由 mixin 设为亮紫。）
+
+> 这四处都**无法用审计量测**（未渲染 / 按压态）。验证方式：确认编译后的声明为 `color: #c084fc; background: rgba(168,85,247,0.1);` —— 该色对**已在别处实测为 5.7:1**，故按构造保证达标。报告里须注明「按构造验证，非量测」。
+
 - [ ] **Step 5: 编译验证**
 
 Run: `npx vue-tsc --noEmit`

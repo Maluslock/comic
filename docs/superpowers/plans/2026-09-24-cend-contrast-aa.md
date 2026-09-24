@@ -91,6 +91,19 @@
     const a = fg.a === undefined ? 1 : fg.a;
     return { r: fg.r * a + bg.r * (1 - a), g: fg.g * a + bg.g * (1 - a), b: fg.b * a + bg.b * (1 - a) };
   }
+
+  // Cumulative opacity from the element up to the root. An ancestor with opacity < 1
+  // blends the whole subtree toward the backdrop, so text contrast degrades even when
+  // the element's OWN opacity is 1 — `getComputedStyle(el).opacity` is not inherited.
+  function cumulativeOpacity(el) {
+    let o = 1, n = el;
+    while (n && n.nodeType === 1) {
+      o *= parseFloat(getComputedStyle(n).opacity);
+      if (o === 0) return 0;
+      n = n.parentElement;
+    }
+    return o;
+  }
   function extractColors(img) {
     const out = [];
     const re = /rgba?\(([^)]+)\)/g;
@@ -103,8 +116,10 @@
   }
 
   // A gradient is an opaque paint that OCCLUDES the base beneath it, so when one is
-  // present the plain base is NOT a valid background colour. Only fall back to the
-  // composited solid base when no gradient covers the text. Innermost gradient wins.
+  // present the plain base is NOT a valid background colour. The converse holds too:
+  // an OPAQUE solid occludes anything beneath it, including an outer gradient.
+  // Innermost paint wins. Only fall back to the composited solid base when nothing
+  // covers the text.
   function effectiveBackgrounds(el) {
     const stack = [];
     let n = el;
@@ -117,7 +132,12 @@
     let cands = null;
     for (let i = stack.length - 1; i >= 0; i--) {
       const s = stack[i];
-      if (s.bg && s.bg.a > 0) base = over(s.bg, base);
+      if (s.bg && s.bg.a > 0) {
+        base = over(s.bg, base);
+        // Opaque solid: clear any gradient stops inherited from an outer layer, or
+        // text on an opaque card inside a gradient region scores against stale stops.
+        if (s.bg.a >= 1) cands = null;
+      }
       if (s.img && s.img !== 'none') {
         const stops = extractColors(s.img);
         if (stops.length) cands = stops.map((st) => over(st, base));
@@ -138,15 +158,21 @@
     if (r.width < 1 || r.height < 1) continue;
 
     const cs = getComputedStyle(el);
-    if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) continue;
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const alpha = cumulativeOpacity(el);
+    if (alpha <= 0.001) continue;
     if (parseColor(cs.webkitTextFillColor || cs.color) === null) continue; // gradient-clipped text
 
     const fg = parseColor(cs.color);
     if (!fg) continue;
+    // Semi-transparent text composites toward its background, which always REDUCES
+    // contrast. Ignoring fg alpha therefore OVERESTIMATES contrast and hides real
+    // violations, so composite the effective foreground onto each candidate first.
+    const fgEff = { r: fg.r, g: fg.g, b: fg.b, a: fg.a * alpha };
 
     let worst = Infinity, worstBg = null;
     for (const bg of effectiveBackgrounds(el)) {
-      const c = ratio(fg, bg);
+      const c = ratio(over(fgEff, bg), bg);
       if (c < worst) { worst = c; worstBg = bg; }
     }
 
@@ -194,13 +220,21 @@ set_role() {  # $1=phone
   local resp token uid pid
   resp="$(curl -s -X POST "$API_URL/api/v1/login" -H 'Content-Type: application/json' \
     -d "{\"phone\":\"$1\",\"code\":\"123456\"}" --max-time 8)"
-  token="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')"
+  token="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])' 2>/dev/null || true)"
+  # 登录失败必须硬停：否则 token 为空、页面全部按**未登录态**测量，
+  # 会产出一张看起来合理但完全错误的表（正是本项目两次栽过的假通过）。
+  [ -n "$token" ] || {
+    echo "FATAL: 账号 $1 登录失败（API 挂了或账号不对）—— 拒绝在未登录态下测量" >&2
+    exit 1
+  }
   uid="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["user"]["id"])')"
   pid="$(printf '%s' "$resp" | python3 -c 'import sys,json;print(json.load(sys.stdin)["user"].get("photographerId") or 0)')"
   # open 建立 origin，再用 reload 触发整页重载，否则 Pinia store 读不到注入的 token
   "$AB" open "$BASE_URL/#/pages/index/index" >/dev/null 2>&1
   "$AB" eval "(function(){uni.setStorageSync('token','$token');uni.setStorageSync('user',JSON.stringify({id:$uid,name:'audit',phone:'$1',avatar:'',bio:'',photographerId:$pid}));return 1;})()" >/dev/null 2>&1
 }
+
+FAILED=0
 
 audit_page() {  # $1=route
   local n; n="$(printf '%s' "$1" | tr '/?=' '___')"
@@ -210,18 +244,23 @@ audit_page() {  # $1=route
   "$AB" eval "JSON.stringify({n:document.querySelectorAll('*').length,len:document.body.innerText.replace(/\s+/g,' ').trim().length})" > "$OUT_DIR/$n.meta" 2>&1
   "$AB" eval "$PAYLOAD" > "$OUT_DIR/$n.json" 2>&1
   printf '%-34s ' "$1"
-  python3 - "$OUT_DIR/$n.json" "$OUT_DIR/$n.meta" <<'PY'
+  if ! python3 - "$OUT_DIR/$n.json" "$OUT_DIR/$n.meta" <<'PY'
 import json, sys
+ok = True
 try:
     d = json.loads(json.loads(open(sys.argv[1]).read().strip()))
     print('total=%-3d worst=%-6s' % (d['total'], d['findings'][0]['ratio'] if d['findings'] else '-'), end=' ')
 except Exception:
-    print('PARSE-FAIL', end=' ')
+    print('PARSE-FAIL', end=' '); ok = False
 try:
     print('textLen=%d' % json.loads(json.loads(open(sys.argv[2]).read().strip()))['len'])
 except Exception:
-    print('')
+    print('(no meta)'); ok = False
+sys.exit(0 if ok else 1)
 PY
+  then
+    FAILED=$((FAILED + 1))
+  fi
 }
 
 COSER_PAGES="pages/index/index pages/event/detail?id=1 pages/event/list pages/photographer/list \
@@ -240,6 +279,13 @@ for p in $COSER_PAGES; do audit_page "$p"; done
 echo "== role=photographer =="
 set_role 10000000001
 for p in $PHOTOGRAPHER_PAGES; do audit_page "$p"; done
+
+# 退出码必须是有意义的通过/失败信号：任何页面测量失败 → 本次运行无效。
+if [ "$FAILED" -ne 0 ]; then
+  echo "FATAL: $FAILED 页测量失败 —— 本次运行不是有效结论，勿据此判定通过" >&2
+  exit 1
+fi
+echo "OK: 全部页面测量成功"
 ```
 
 - [ ] **Step 3: 让脚本可执行并验证能复现已知基线**

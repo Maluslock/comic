@@ -533,7 +533,7 @@ function goReviews() {
 .btn {
   padding: 8rpx 24rpx;
   background: $neon-purple;
-  color: #fff;
+  @include on-neon-fill;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
   margin-top: $spacing-xs;
@@ -638,7 +638,7 @@ function goReviews() {
 
 .btn-primary {
   background: $neon-purple;
-  color: #fff;
+  @include on-neon-fill;
   border-radius: $border-radius-lg;
   padding: $spacing-sm;
   text-align: center;

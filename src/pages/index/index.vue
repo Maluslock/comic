@@ -470,7 +470,6 @@ function onQuickNav(_url: string) {}
 
 .cta-marker {
   font-size: 20rpx;
-  opacity: 0.7;
 }
 
 .cta-primary {

@@ -19,9 +19,10 @@ import (
 // The unit tests in internal/service can only pin the parameters handed to the
 // driver, so without these the fix itself would be unverified.
 //
-// They need a live PostgreSQL and skip when TEST_DATABASE_URL is unset, so
+// Note: the DB-backed tests across this package share integrationQueries, which needs a
+// live PostgreSQL and skips when TEST_DATABASE_URL is unset, so
 // `go test ./...` stays runnable on a machine without a database.
-func pricingTestQueries(t *testing.T) (*Queries, context.Context) {
+func integrationQueries(t *testing.T) (*Queries, context.Context) {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -53,7 +54,7 @@ func insertPricingFixture(t *testing.T, q *Queries, ctx context.Context, active 
 }
 
 func TestIntegration_UpdateService_KeepsStoredShelfStateWhenOmitted(t *testing.T) {
-	q, ctx := pricingTestQueries(t)
+	q, ctx := integrationQueries(t)
 	id := insertPricingFixture(t, q, ctx, false, 5)
 
 	// An ordinary edit: the management page sends neither isActive nor sortOrder.
@@ -93,7 +94,7 @@ func TestIntegration_UpdateService_KeepsStoredShelfStateWhenOmitted(t *testing.T
 }
 
 func TestIntegration_Bookable_RejectsPackageOffTheShelf(t *testing.T) {
-	q, ctx := pricingTestQueries(t)
+	q, ctx := integrationQueries(t)
 	id := insertPricingFixture(t, q, ctx, false, 0)
 
 	// Off the shelf: indistinguishable from missing, so existence is not disclosed.
@@ -150,7 +151,7 @@ func insertServiceFixture(t *testing.T, q *Queries, ctx context.Context, photogr
 // 全是面议（price IS NULL）时 min_price 这一列整体为 NULL。这曾经让列表接口直接 500
 // ——「摄影师只挂面议套餐」是完全合法的用法，所以这条必须钉住。
 func TestIntegration_GetServicePriceSummaries_AllNegotiable(t *testing.T) {
-	q, ctx := pricingTestQueries(t)
+	q, ctx := integrationQueries(t)
 	pid := insertPhotographerFixture(t, q, ctx)
 	insertServiceFixture(t, q, ctx, pid, nil, true)
 	insertServiceFixture(t, q, ctx, pid, nil, true)
@@ -183,7 +184,7 @@ func TestIntegration_GetServicePriceSummaries_AllNegotiable(t *testing.T) {
 
 // 互勉（0 元）不能把最低价拉成 0，也不能漏掉 hasFree。
 func TestIntegration_GetServicePriceSummaries_FreeDoesNotLowerMinPrice(t *testing.T) {
-	q, ctx := pricingTestQueries(t)
+	q, ctx := integrationQueries(t)
 	pid := insertPhotographerFixture(t, q, ctx)
 	zero := int32(0)
 	cheap := int32(399)

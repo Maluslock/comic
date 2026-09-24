@@ -202,9 +202,14 @@ type BookingWithCoser struct {
 	CoserPhone  string `json:"coser_phone"`
 }
 
+// coser_phone 只在摄影师**已接单**（confirmed/completed）后返回。
+// 手机号是个人信息：摄影师在确认之前并没有联系对方的正当必要（想沟通走站内聊天），
+// 而接单后要赴约就必须能联系上。遮罩刻意写在 SQL 里而不是前端 —— 只藏前端的话，
+// 完整号码仍然在响应体里，抓包即得。前端据 status 决定文案（「确认接单后可见」）。
 const getBookingsByPhotographer = `-- name: GetBookingsByPhotographer :many
 SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, COALESCE(b.service_name, s.name, '') AS service_name, b.service_duration,
-       COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar, COALESCE(u.phone, '') AS coser_phone
+       COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar,
+       CASE WHEN b.status IN ('confirmed', 'completed') THEN COALESCE(u.phone, '') ELSE '' END AS coser_phone
 FROM bookings b
 LEFT JOIN users u ON u.id = b.coser_id
 LEFT JOIN services s ON s.id = b.service_id

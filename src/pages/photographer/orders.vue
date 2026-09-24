@@ -28,7 +28,7 @@
             <image :src="order.coserAvatar || ''" class="coser-avatar" mode="aspectFill" />
             <view class="order-info">
               <text class="coser-name">{{ order.coserName || `Coser${order.coserId}` }}</text>
-              <text class="coser-phone">电话：{{ order.coserPhone || '未留电话' }}</text>
+              <text class="coser-phone">{{ renderCoserPhone(order) }}</text>
               <text class="service-name">{{ order.serviceName || '服务' }} · {{ renderOrderPrice(order) }}</text>
             </view>
           </view>
@@ -104,6 +104,17 @@ async function loadOrders() {
 
 function isNegotiablePending(order: PhotographerOrder): boolean {
   return order.priceMode === 'negotiable' && (order.priceStatus === 'awaiting_quote' || order.priceStatus === 'quoted')
+}
+
+// 手机号是个人信息：摄影师在确认接单前没有联系对方的正当必要，后端据此在 SQL 层就遮罩了
+// （confirmed/completed 才返回），这里只负责把「为什么看不到」讲清楚。接单后要赴约，必须能联系上。
+const PHONE_VISIBLE_STATUSES = ['confirmed', 'completed']
+
+function renderCoserPhone(order: PhotographerOrder): string {
+  if (!PHONE_VISIBLE_STATUSES.includes(order.status)) {
+    return '电话：确认接单后可见'
+  }
+  return `电话：${order.coserPhone || '未留电话'}`
 }
 
 function canQuote(order: PhotographerOrder): boolean {

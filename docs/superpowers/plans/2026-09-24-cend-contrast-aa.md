@@ -884,6 +884,29 @@ Expected: 退出码 0
 Run: `bash scripts/contrast-audit.sh .audit/task5`
 Expected: `rgb(239, 68, 68) → rgb(44,27,41)`（原 4.32）不再出现；`pages/photographer/works` 变为 `total=0`
 
+- [ ] **Step 5b: 给门控的两处加固（见 ledger `Ruling (T7-2)`）**
+
+**a) `OUT_DIR` 清理的安全护栏（必须）。** 上一步的 `rm -f "$OUT_DIR"/*.json "$OUT_DIR"/*.meta` 有个**破坏性陷阱**：若调用者传入 `.`、`..`、`/` 或空串，就会删掉仓库根目录的 `package.json` / `package-lock.json` / `tsconfig*.json` 等无关文件。必须在清理前拦截：
+
+```bash
+OUT_DIR="${1:-.audit/out}"
+# 破坏性护栏：OUT_DIR 会先被清空，必须拒绝会命中仓库根/上级/根目录的取值
+case "$OUT_DIR" in
+  ""|.|./|..|../|/) echo "FATAL: 拒绝 OUT_DIR='$OUT_DIR'（会删掉无关 JSON）" >&2; exit 2;;
+esac
+_out_abs="$(cd "$OUT_DIR" 2>/dev/null && pwd -P || true)"
+_root_abs="$(git rev-parse --show-toplevel)"
+[ "$_out_abs" != "$_root_abs" ] || { echo "FATAL: OUT_DIR 解析为仓库根目录，拒绝清理" >&2; exit 2; }
+```
+
+同时把用法注释（文件第 2 行）改为明示 **OUT_DIR 会被清空**：`# 用法：bash scripts/contrast-audit.sh [OUT_DIR]  —— 注意 OUT_DIR 内的 *.json/*.meta 会先被清空`
+
+**b) 把回归守卫落成可执行脚本（消除「只存在于 markdown」的问题）。** 审计脚本已入库可重复运行，但「与基线逐页对比」这一步此前只是计划里的一段 bash —— 意味着 `Ruling (T7-1)` 的 extras-FATAL 保护**不被任何已提交工具强制**。新建 `scripts/contrast-regression-check.sh`：
+
+- 用法：`bash scripts/contrast-regression-check.sh <BASE_DIR> <NEW_DIR>`（默认 `.audit/task6` 与 `.audit/final`）
+- 逻辑与计划中 amend 后的守卫**逐字一致**：基线为空 → FATAL；复测缺页 → FATAL；复测含基线之外的页 → FATAL（防 OUT_DIR 残留）；任一页 `total` 上升 → 打印 REGRESSION 并 exit 1；否则打印页数与仍不达标页，exit 0
+- 两处「FATAL 分支」都要**被证明会触发**，不能只断言存在
+
 - [ ] **Step 6: Commit**
 
 ```bash

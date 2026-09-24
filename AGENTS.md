@@ -287,10 +287,30 @@ Order list/detail responses include joined photographer/service fields:
 `new Date().toISOString().split('T')[0]`** —— 后者是 UTC，东八区 00:00–08:00 会得到「昨天」
 （预约页默认日期曾因此落在过去的一天）。
 
+### 展示统计数字（迁移 000030 + `RecomputePhotographerStats`）
+
+`photographers` 的 **rating / review_count / order_count 是派生字段**，必须由事实推导，不要手工写：
+
+| 字段 | 事实来源 |
+|------|----------|
+| `rating` | `ROUND(AVG(reviews.rating), 1)`，无评价为 `0` |
+| `review_count` | `reviews` 条数 |
+| `order_count` | **仅** `status = 'completed'` 的 bookings 数（确认/待确认不算） |
+
+- 三者此前都是种子死数字，与事实脱钩（显示 4.9 分 / 234 条 / 567 单，真实 2 条 / 1 单），
+  且插评价、订单流转都不更新它们；`order_count` 还被默认排序和「接单最多」当排序键用。
+- 现在 `RecomputePhotographerStats(photographerID)` 会在**评价写入后**与**订单状态流转后**
+  （`UpdateStatus` / `AdminUpdateStatus`，含取消）被调用。它是整表重算（不是 ±1），幂等、可自我修正；
+  best-effort，失败只记日志，不影响主流程。
+- 历史数据由**迁移 000030** 一次性回填（纯派生重算，down 是空操作）。回填后数字显著变小是**预期**的 ——
+  数字要说真话。要让演示数据重新丰满，请补真实的评价/订单，**不要改回假数字**。
+- 前端约定：无评价时后端给 `rating = 0 / reviewCount = 0`，卡片与详情页显示**「暂无评分」**，
+  不要直接渲染「★ 0」（会被读成被打 0 分）。
+
 ### 评价（review_service.go + 迁移 000029）
 
 - 评价必须对应**已完成**订单（`HasCompletedBookingWith`）→ 否则 403；不能自评；`uniq_reviews_user_photographer` 唯一索引兜重复 → 23505 映射 409。
-- **评分与评价数每次评价后按 `reviews` 表重算**（`RecomputePhotographerRating`）。这两个字段此前是种子死数字（显示 4.9 分 / 234 条，真实只有 3 条评价），插入评价从不更新它们。重算是 best-effort（失败只记日志，下一条评价自我修正），不能让派生字段把已成功的评价变成「提交失败」。
+- 评价写入后调用 `RecomputePhotographerStats`（见上节「展示统计数字」）重算派生字段；best-effort，失败只记日志，不能让派生字段把已成功的评价变成「提交失败」。
 
 ### 摄影师列表排序（photographers.sql.go `SearchPhotographers` $7）
 

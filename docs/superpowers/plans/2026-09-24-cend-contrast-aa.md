@@ -893,15 +893,37 @@ git commit -m "fix(cend): F3 删除按钮红字对比度 4.32→5.86:1（新增 
 
 ---
 
-### Task 6: F4 三级文本 token 微调
+### Task 6: 补齐审计覆盖缺口 + F4 三级文本 token 微调
+
+> **本任务含一处由 controller 裁决带入的覆盖修补**（ledger `Ruling (T5-1)`）：系统比对 `src/pages.json` 与 runner 后发现 **5 个已注册页面从未进过门控** —— `pages/chat/index`、`pages/profile/edit`、`pages/settings/doc`、`pages/settings/security`、`pages/settings/blocks`。controller 已实测这 5 页**全部 `total=0`**（chat 另有 1 处豁免），即**纯覆盖缺口、未藏缺陷**。但在此之前「全站 AA」的断言名不副实，必须补齐。
 
 **Files:**
-- Modify: `src/styles/variables.scss:57`
+- Modify: `scripts/contrast-audit.sh`（`COSER_PAGES` 增补 5 页）
+- Modify: `src/styles/variables.scss`（`$dark-text-tertiary`）
 
 **Interfaces:**
+- Produces: 门控页集 28 → **33 页**（Task 7 的基线与此一致）
 - Produces: 更新后的 `$dark-text-tertiary`（影响 31 个引用文件，均为同一微调）
 
-- [ ] **Step 1: 微调 token**
+- [ ] **Step 1: 把 5 个未覆盖的注册页加入 `COSER_PAGES`**
+
+```
+pages/chat/index
+pages/profile/edit
+pages/settings/doc
+pages/settings/security
+pages/settings/blocks
+```
+
+- [ ] **Step 2: 用补齐后的 runner 重测基线（在改 token 之前）**
+
+Run: `bash scripts/contrast-audit.sh .audit/task6-before`
+
+Expected：33 页全部测量成功；这 5 页 `total=0`（其中 `pages/chat/index` 预期 `exempt=1`）。若任何一页出现新发现，**停下报告** —— 那意味着覆盖缺口里确实藏着缺陷，需要新的裁决。
+
+> **必须在改 token 之前跑**：改动后再测得到的是"已修复态"，无法反映回归。
+
+- [ ] **Step 3: 微调 token**
 
 ```scss
 // 前
@@ -912,21 +934,25 @@ $dark-text-tertiary: #7e8da6;
 
 （卡片底实测 4.49 → 4.67:1。仅为舍入边界修正，视觉几乎不可见。）
 
-- [ ] **Step 2: 编译验证**
+- [ ] **Step 4: 编译验证**
 
 Run: `npx vue-tsc --noEmit`
 Expected: 退出码 0
 
-- [ ] **Step 3: 实测验证 F4 归零**
+- [ ] **Step 5: 实测验证 F4 归零，且 33 页无上升**
 
 Run: `bash scripts/contrast-audit.sh .audit/task6`
-Expected: `rgb(123, 138, 163) → rgb(34,34,48)`（原 4.49，10 处）不再出现
 
-- [ ] **Step 4: Commit**
+Expected：
+- `rgb(123, 138, 163) → rgb(34,34,48)`（原 4.49，10 处）不再出现
+- 33 页逐页对比 `.audit/task6-before`：**无任何页面 `total` 上升**
+- 新增的 5 页仍为 `total=0`（`pages/chat/index` `exempt=1`）
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/styles/variables.scss
-git commit -m "fix(cend): F4 三级文本对比度 4.49→4.67:1（\$dark-text-tertiary #7b8aa3→#7e8da6）"
+git add scripts/contrast-audit.sh src/styles/variables.scss
+git commit -m "fix(qa,cend): 补齐 5 个未覆盖注册页 + F4 三级文本 4.49→4.67:1（\$dark-text-tertiary #7b8aa3→#7e8da6）"
 ```
 
 ---

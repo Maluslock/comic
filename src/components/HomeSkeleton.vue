@@ -5,9 +5,19 @@
       <view class="sk-block" style="width: 160rpx; height: 36rpx" />
     </view>
 
-    <!-- Banner -->
-    <view class="sk-row sk-banner">
-      <view class="sk-block" style="width: 100%; height: 320rpx" />
+    <!-- Hero -->
+    <view class="sk-hero">
+      <view class="sk-block sk-hero-fill" />
+      <view class="sk-hero-copy">
+        <view class="sk-block" style="width: 240rpx; height: 24rpx" />
+        <view class="sk-block" style="width: 360rpx; height: 56rpx; margin-top: 16rpx" />
+        <view class="sk-block" style="width: 280rpx; height: 24rpx; margin-top: 16rpx" />
+      </view>
+    </view>
+
+    <!-- Ticket -->
+    <view class="sk-row sk-ticket">
+      <view class="sk-block" style="width: 100%; height: 132rpx; border-radius: 24rpx" />
     </view>
 
     <!-- Quick actions -->
@@ -27,9 +37,7 @@
     <!-- Horizontal event cards -->
     <view class="sk-row sk-events">
       <view v-for="i in 3" :key="'e' + i" class="sk-event-card">
-        <view class="sk-block" style="width: 280rpx; height: 180rpx; border-radius: 12rpx 12rpx 0 0" />
-        <view class="sk-block" style="width: 180rpx; height: 24rpx; margin-top: 12rpx" />
-        <view class="sk-block" style="width: 120rpx; height: 20rpx; margin-top: 8rpx" />
+        <view class="sk-block" style="width: 300rpx; height: 420rpx; border-radius: 24rpx" />
       </view>
     </view>
 
@@ -71,6 +79,31 @@ export default { name: 'HomeSkeleton' }
   background: $surface-page;
   padding-top: calc(var(--status-bar-height, 44px) + $spacing-md);
   padding-bottom: 120rpx;
+}
+
+.sk-hero {
+  position: relative;
+  height: 780rpx;
+  margin-bottom: 0;
+}
+
+.sk-hero-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+}
+
+.sk-hero-copy {
+  position: absolute;
+  left: $spacing-md;
+  right: $spacing-md;
+  bottom: 140rpx;
+}
+
+.sk-ticket {
+  margin-top: -64rpx;
+  position: relative;
+  z-index: 2;
 }
 
 .sk-row {

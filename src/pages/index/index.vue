@@ -18,67 +18,62 @@
       <HomeSkeleton v-if="store.loading && !store.loaded" />
 
       <template v-else>
-        <!-- Hero Header -->
-        <view class="hero">
-          <view class="hero-top-bar">
-            <view class="city-selector" @click="goCitySelect">
-              <text class="city-dot" />
-              <text class="city-text">{{ currentCity }}</text>
-              <text class="city-arrow">▾</text>
-            </view>
-            <view class="hero-actions">
-              <view class="hero-icon-btn" @click="goSearch">
-                <image class="hero-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
-              </view>
-              <view class="hero-icon-btn" @click="goMessages">
-                <image class="hero-icon-svg" src="/static/icons/bell.svg" mode="aspectFit" />
-                <view v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
-              </view>
-            </view>
-          </view>
+        <!-- Hero Stage -->
+        <view class="hero-stage">
+          <image class="hero-media" :src="heroImage" mode="aspectFill" />
+          <view class="hero-scrim" />
+          <view class="hero-glow" />
+          <view class="hero-grain" />
+          <view class="vf-corner vf-tl" />
+          <view class="vf-corner vf-tr" />
+          <view class="vf-corner vf-bl" />
+          <view class="vf-corner vf-br" />
 
-      <view class="hero-title-block">
-        <text class="hero-title-main">米拉漫展</text>
-        <view class="hero-divider" />
-        <text class="hero-title-sub">找到你的专属摄影师</text>
-      </view>
+          <view class="hero-content">
+            <view class="hero-top-bar">
+              <view class="city-selector" @click="goCitySelect">
+                <text class="city-dot" />
+                <text class="city-text">{{ currentCity }}</text>
+                <text class="city-arrow">▾</text>
+              </view>
+              <view class="hero-actions">
+                <view class="hero-icon-btn" @click="goSearch">
+                  <image class="hero-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
+                </view>
+                <view class="hero-icon-btn" @click="goMessages">
+                  <image class="hero-icon-svg" src="/static/icons/bell.svg" mode="aspectFit" />
+                  <view v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
+                </view>
+              </view>
+            </view>
 
-          <view class="hero-cta">
-            <view class="cta-btn cta-primary" @click="goEventList">
-              <text>近期热门漫展</text>
+            <view class="hero-copy">
+              <text class="hero-eyebrow">米拉漫展 · NEXT UP</text>
+              <text class="hero-title">{{ heroEvent ? heroEvent.name : '米拉漫展' }}</text>
+              <view v-if="heroEvent" class="hero-meta">
+                <text class="hero-meta-strong">{{ store.formatDate(heroEvent.startDate) }}</text>
+                <text class="hero-meta-dot">·</text>
+                <text class="hero-meta-venue">{{ heroEvent.venue || heroEvent.location }}</text>
+              </view>
+              <view v-else class="hero-meta">
+                <text class="hero-meta-venue">找到你的专属摄影师</text>
+              </view>
             </view>
           </view>
         </view>
 
-        <!-- Countdown Highlight -->
-        <view v-if="nearestEvent" class="countdown-bar" @click="goEventDetail(nearestEvent.id)">
-          <text class="countdown-label">距 {{ nearestEvent.name }} 开展还有</text>
-          <text class="countdown-days">{{ store.countdownDays(nearestEvent.startDate) }}</text>
-          <text class="countdown-label">天</text>
-          <text class="countdown-arrow">→</text>
-        </view>
-
-        <!-- Banner Swiper -->
-        <view class="section banner-section">
-          <swiper
-            class="banner-swiper"
-            indicator-dots
-            circular
-            autoplay
-            :interval="4000"
-            indicator-active-color="#ff6b00"
-            indicator-color="rgba(255,255,255,0.2)"
-          >
-            <swiper-item v-for="(item, i) in store.banners" :key="i" @click="onBannerClick(i)">
-              <view
-                class="banner-image"
-                :style="{ backgroundImage: 'url(' + item.image + ')' }"
-              />
-              <view class="banner-overlay">
-                <text class="banner-title">{{ item.title }}</text>
-              </view>
-            </swiper-item>
-          </swiper>
+        <!-- Ticket dock -->
+        <view v-if="nearestEvent" class="ticket" @click="goEventDetail(nearestEvent.id)">
+          <view class="ticket-left">
+            <text class="ticket-label">距开展</text>
+            <text class="ticket-days">{{ store.countdownDays(nearestEvent.startDate) }}</text>
+            <text class="ticket-unit">天</text>
+          </view>
+          <view class="ticket-rip" />
+          <view class="ticket-right">
+            <text class="ticket-cta">查看漫展</text>
+            <text class="ticket-arrow">›</text>
+          </view>
         </view>
 
         <!-- Quick Action Bar -->
@@ -135,6 +130,29 @@
               @click="goSearchByTag(tag)"
             >
               {{ tag }}
+            </view>
+          </view>
+        </view>
+
+        <!-- Featured Works -->
+        <view v-if="store.featuredWorks.length" class="section">
+          <view class="section-header">
+            <text class="section-title">精选作品</text>
+            <text class="section-more" @click="goPhotographerList">更多 ›</text>
+          </view>
+          <view class="works-grid">
+            <view
+              v-for="work in store.featuredWorks.slice(0, 4)"
+              :key="work.id"
+              class="work-card"
+              @click="goWork(work)"
+            >
+              <image class="work-img" :src="work.images[0]" mode="aspectFill" />
+              <view class="work-scrim" />
+              <view class="work-meta">
+                <text class="work-title">{{ work.title }}</text>
+                <text class="work-author">{{ work.photographerName }}</text>
+              </view>
             </view>
           </view>
         </view>
@@ -214,6 +232,13 @@ const nearestEvent = computed(() => {
   return upcoming.length > 0 ? upcoming[0] : null
 })
 
+const heroEvent = computed(() => nearestEvent.value || (filteredEvents.value.length ? filteredEvents.value[0] : null))
+const heroImage = computed(() => {
+  if (heroEvent.value && (heroEvent.value as any).cover) return (heroEvent.value as any).cover
+  if (store.banners.length) return store.banners[0].image
+  return '/static/img/banner-1.jpg'
+})
+
 onMounted(() => {
   const sysInfo = uni.getSystemInfoSync()
   statusBarHeight.value = sysInfo.statusBarHeight || 44
@@ -250,6 +275,10 @@ function goEventMore() {
 
 function goEventDetail(id: string) {
   uni.navigateTo({ url: `/pages/event/detail?id=${id}` })
+}
+
+function goWork(work: { photographerId: string }) {
+  uni.navigateTo({ url: `/pages/photographer/works?id=${work.photographerId}` })
 }
 
 function goMessages() {
@@ -323,27 +352,88 @@ function onQuickNav(_url: string) {}
   height: 100vh;
 }
 
-// ===== Hero =====
-.hero {
-  background-color: $surface-page;
-  background-image: $gradient-hero;
-  padding: $spacing-sm $spacing-md $spacing-lg;
+// ===== Hero Stage =====
+.hero-stage {
+  position: relative;
+  height: 980rpx;
+  overflow: hidden;
+  background: $surface-page;
+}
+
+.hero-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(12, 13, 20, 0.72) 0%, rgba(12, 13, 20, 0) 26%),
+    linear-gradient(0deg, #0C0D14 0%, rgba(12, 13, 20, 0.92) 24%, rgba(12, 13, 20, 0.38) 55%, rgba(12, 13, 20, 0) 78%);
+}
+
+.hero-glow {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: -6%;
+  height: 72%;
+  background:
+    radial-gradient(52% 40% at 78% 12%, rgba(255, 107, 0, 0.30) 0%, rgba(255, 107, 0, 0) 70%),
+    radial-gradient(40% 30% at 6% 86%, rgba(0, 210, 211, 0.12) 0%, rgba(0, 210, 211, 0) 72%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.6) 0.5rpx, transparent 0.7rpx);
+  background-size: 3rpx 3rpx;
+}
+
+.vf-corner {
+  position: absolute;
+  width: 36rpx;
+  height: 36rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.vf-tl { top: 24rpx; left: 24rpx; border-right: 0; border-bottom: 0; border-radius: 4rpx 0 0 0; opacity: .45; }
+.vf-tr { top: 24rpx; right: 24rpx; border-left: 0; border-bottom: 0; border-radius: 0 4rpx 0 0; opacity: .6; }
+.vf-bl { bottom: 24rpx; left: 24rpx; border-right: 0; border-top: 0; border-radius: 0 0 0 4rpx; opacity: .6; }
+.vf-br { bottom: 24rpx; right: 24rpx; border-left: 0; border-top: 0; border-radius: 0 0 4rpx 0; opacity: .75; }
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24rpx 32rpx 0;
 }
 
 .hero-top-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: $spacing-lg;
 }
 
 .city-selector {
   display: flex;
   align-items: center;
-  padding: 6rpx 16rpx;
-  background: $dark-bg-card;
-  border-radius: $border-radius-xl;
-  border: 1rpx solid $dark-border;
+  height: 72rpx;
+  padding: 0 24rpx;
+  background: rgba(21, 23, 34, 0.66);
+  border-radius: 36rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
 }
 
 .city-dot {
@@ -351,13 +441,8 @@ function onQuickNav(_url: string) {}
   height: 12rpx;
   border-radius: 50%;
   background: $neon-cyan;
-  margin-right: 6rpx;
+  margin-right: 10rpx;
   box-shadow: 0 0 8rpx $neon-cyan-glow;
-}
-
-.city-icon {
-  font-size: 24rpx;
-  margin-right: 4rpx;
 }
 
 .city-text {
@@ -367,36 +452,37 @@ function onQuickNav(_url: string) {}
 }
 
 .city-arrow {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: $dark-text-tertiary;
-  margin-left: 4rpx;
+  margin-left: 8rpx;
 }
 
 .hero-actions {
   display: flex;
-  gap: $spacing-sm;
+  gap: 16rpx;
 }
 
 .hero-icon-btn {
   position: relative;
-  width: 64rpx;
-  height: 64rpx;
+  width: 80rpx;
+  height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $dark-bg-card;
+  background: rgba(21, 23, 34, 0.66);
   border-radius: 50%;
-  border: 1rpx solid $dark-border;
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
 
   &:active {
-    background: $dark-bg-card-hover;
+    background: rgba(29, 32, 47, 0.9);
   }
 }
 
 .hero-icon-svg {
   width: 36rpx;
   height: 36rpx;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .badge {
@@ -407,162 +493,147 @@ function onQuickNav(_url: string) {}
   height: 28rpx;
   line-height: 28rpx;
   text-align: center;
-  font-size: 18rpx;
+  font-size: 20rpx;
   color: #fff;
   background: $neon-pink;
   border-radius: 14rpx;
   padding: 0 6rpx;
 }
 
-.hero-title-block {
-  text-align: center;
-  padding: $spacing-lg 0 $spacing-md;
+.hero-copy {
+  margin-top: auto;
+  padding-bottom: 116rpx;
 }
 
-.hero-title-main {
+.hero-eyebrow {
   display: block;
-  font-size: 56rpx;
-  font-weight: 800;
-  letter-spacing: 2rpx;
-  background: $gradient-brand;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: $spacing-sm;
+  font-size: 22rpx;
+  letter-spacing: 4rpx;
+  color: $neon-cyan;
+  font-weight: 600;
+  margin-bottom: 16rpx;
 }
 
-.hero-title-sub {
+.hero-title {
   display: block;
-  font-size: 28rpx;
-  color: $text-2;
-  font-weight: 400;
-  letter-spacing: 2rpx;
+  font-size: 64rpx;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: -1.5rpx;
+  color: #fff;
+  text-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.45);
+  margin-bottom: 18rpx;
 }
 
-.hero-divider {
-  width: 60rpx;
-  height: 4rpx;
-  margin: $spacing-md auto;
-  background: $neon-gradient;
-  border-radius: 2rpx;
-  opacity: 0.6;
-}
-
-.hero-cta {
+.hero-meta {
   display: flex;
-  gap: $spacing-md;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 24rpx;
+  color: #9AA0B4;
 }
 
-.cta-btn {
+.hero-meta-strong {
+  color: #fff;
+  font-weight: 700;
+  font-size: 28rpx;
+}
+
+.hero-meta-dot {
+  opacity: 0.5;
+}
+
+.hero-meta-venue {
+  max-width: 460rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// ===== Ticket dock =====
+.ticket {
+  position: relative;
+  z-index: 3;
+  margin: -64rpx 32rpx 0;
+  height: 132rpx;
+  display: flex;
+  align-items: center;
+  border-radius: 24rpx;
+  background: linear-gradient(105deg, #FF8C33 0%, #FF6B00 46%, #E05A00 100%);
+  box-shadow: 0 18rpx 48rpx rgba(255, 107, 0, 0.28), inset 0 1rpx 0 rgba(255, 255, 255, 0.35);
+  color: #0C0D14;
+
+  &:active {
+    transform: scale(0.985) translateY(2rpx);
+  }
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 24rpx;
+    height: 24rpx;
+    border-radius: 50%;
+    background: $surface-page;
+    transform: translateY(-50%);
+  }
+
+  &::before { left: -12rpx; }
+  &::after { right: -12rpx; }
+}
+
+.ticket-left {
+  padding-left: 40rpx;
+  display: flex;
+  align-items: baseline;
+  padding: 0 28rpx;
+}
+
+.ticket-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-right: 8rpx;
+}
+
+.ticket-days {
+  font-size: 52rpx;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticket-unit {
+  font-size: 24rpx;
+  font-weight: 700;
+  margin-left: 6rpx;
+}
+
+.ticket-rip {
+  width: 0;
+  height: 72rpx;
+  border-left: 2rpx dashed rgba(12, 13, 20, 0.28);
+}
+
+.ticket-right {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: $spacing-xs;
-  padding: 18rpx 0;
-  border-radius: $border-radius-xl;
-  font-size: 26rpx;
-  font-weight: 600;
-  transition: all 0.2s;
-
-  .cta-icon {
-    font-size: 28rpx;
-  }
+  justify-content: space-between;
+  padding: 0 28rpx;
 }
 
-.cta-marker {
-  font-size: 20rpx;
-  opacity: 0.7;
+.ticket-cta {
+  font-size: 30rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
 }
 
-.cta-primary {
-  background: $neon-gradient;
-  color: #fff;
-  box-shadow: 0 4rpx 24rpx $neon-purple-glow;
-
-  &:active {
-    transform: scale(0.97);
-    box-shadow: 0 2rpx 12rpx $neon-purple-glow;
-  }
-}
-
-.cta-secondary {
-  background: $dark-bg-card;
-  color: $dark-text-primary;
-  border: 2rpx solid $neon-purple-glow;
-
-  &:active {
-    background: $dark-bg-card-hover;
-    border-color: $neon-purple;
-  }
-}
-
-// ===== Countdown Bar =====
-.countdown-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-xs;
-  padding: 12rpx $spacing-md;
-  margin: $spacing-sm $spacing-md 0;
-  background: $neon-purple-dim;
-  border: 1rpx solid $neon-purple-glow;
-  border-radius: $border-radius-lg;
-}
-
-.countdown-label {
-  font-size: 24rpx;
-  color: $dark-text-secondary;
-}
-
-.countdown-days {
-  font-size: 32rpx;
-  font-weight: 900;
-  color: $neon-purple;
-  margin: 0 4rpx;
-}
-
-.countdown-arrow {
-  font-size: 28rpx;
-  color: $neon-purple;
-  margin-left: 4rpx;
-}
-
-// ===== Banner =====
-.banner-section {
-  padding: 0 $spacing-md;
-  margin-top: $spacing-sm;
-}
-
-.banner-swiper {
-  width: 100%;
-  height: 340rpx;
-  border-radius: $r-lg;
-  overflow: hidden;
-  border: 1rpx solid $border-subtle;
-}
-
-.banner-image {
-  width: 100%;
-  height: 100%;
-  background-size: cover;
-  background-position: center top;
-  background-color: $dark-bg-card;
-}
-
-.banner-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: $spacing-md;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
-}
-
-.banner-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #fff;
+.ticket-arrow {
+  font-size: 40rpx;
+  font-weight: 700;
+  line-height: 1;
 }
 
 // ===== Sections (Shared) =====
@@ -634,74 +705,94 @@ function onQuickNav(_url: string) {}
 
 .event-card {
   position: relative;
-  width: 280rpx;
+  width: 300rpx;
+  height: 420rpx;
   background: $surface-1;
   border: 1rpx solid $border-subtle;
-  border-radius: $border-radius-lg;
+  border-radius: 24rpx;
   overflow: hidden;
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform 0.16s ease, border-color 0.16s ease;
 
   &:active {
-    transform: scale(0.97);
-    border-color: $neon-purple-glow;
+    transform: scale(0.975);
+    border-color: rgba(255, 107, 0, 0.5);
   }
 }
 
 .event-cover {
-  width: 280rpx;
-  height: 180rpx;
+  position: absolute;
+  inset: 0;
   background-size: cover;
-  background-position: center top;
+  background-position: center;
   background-color: $dark-bg-card;
+}
+
+.event-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12, 13, 20, 0) 38%, rgba(12, 13, 20, 0.62) 64%, rgba(12, 13, 20, 0.97) 100%);
+  pointer-events: none;
 }
 
 .event-countdown-badge {
   position: absolute;
-  top: 12rpx;
-  right: 12rpx;
-  padding: 4rpx 14rpx;
-  background: rgba(0, 0, 0, 0.7);
-  border-radius: $border-radius-sm;
+  top: 16rpx;
+  left: 16rpx;
+  z-index: 2;
+  padding: 6rpx 16rpx;
+  background: rgba(12, 13, 20, 0.62);
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
+  border-radius: 999rpx;
   font-size: 20rpx;
-  color: $neon-cyan;
-  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #FFB27A;
+  backdrop-filter: blur(12rpx);
 }
 
 .event-info {
-  padding: $spacing-sm;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 20rpx;
 }
 
 .event-name {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: $dark-text-primary;
+  white-space: normal;
+  font-size: 28rpx;
+  line-height: 1.3;
+  font-weight: 650;
+  color: #F8FAFC;
 }
 
 .event-meta {
-  margin-top: $spacing-xs;
+  margin-top: 8rpx;
 }
 
 .event-location {
   display: block;
   font-size: 22rpx;
-  color: $dark-text-tertiary;
+  color: rgba(226, 232, 240, 0.72);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .event-footer {
-  margin-top: $spacing-xs;
+  margin-top: 6rpx;
 }
 
 .event-date {
-  font-size: 22rpx;
-  color: $neon-cyan;
+  font-size: 21rpx;
+  color: #FF9A4D;
   font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 // ===== Tags =====
@@ -725,6 +816,57 @@ function onQuickNav(_url: string) {}
     border-color: $neon-purple;
     box-shadow: 0 0 16rpx $neon-purple-glow;
   }
+}
+
+// ===== Works =====
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-md;
+}
+
+.work-card {
+  position: relative;
+  height: 420rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+}
+
+.work-img {
+  width: 100%;
+  height: 100%;
+}
+
+.work-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12, 13, 20, 0) 46%, rgba(12, 13, 20, 0.9) 100%);
+}
+
+.work-meta {
+  position: absolute;
+  left: 20rpx;
+  right: 20rpx;
+  bottom: 18rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.work-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #F8FAFC;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-author {
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: rgba(226, 232, 240, 0.68);
 }
 
 // ===== Photographers =====

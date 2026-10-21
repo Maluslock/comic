@@ -1,66 +1,77 @@
-$primary-color: #6366f1;
-$primary-light: #818cf8;
-$primary-dark: #4f46e5;
+// ============================================================
+// 全局样式入口：tokens + 旧变量别名
+// 由 vite.config.ts 的 additionalData 自动注入每个 SFC，
+// 业务代码无需 import；新代码优先使用语义变量（$brand/$surface-1/$text-1…）。
+// ============================================================
+@import './tokens/primitives';
+@import './tokens/semantic';
 
-$success-color: #22c55e;
-$warning-color: #f59e0b;
-$error-color: #ef4444;
-$info-color: #3b82f6;
+// --- 旧变量兼容层（29 个页面仍在用，禁止直接删除） ---
+$primary-color: $brand;
+$primary-light: $c-amber-300;
+$primary-dark: $brand-active;
 
-$text-primary: #1f2937;
-$text-secondary: #6b7280;
-$text-tertiary: #9ca3af;
-$text-placeholder: #d1d5db;
+$success-color: $state-success;
+$warning-color: $state-warning;
+$error-color: $state-danger;
+$info-color: $state-info;
 
-$bg-primary: #ffffff;
-$bg-secondary: #f9fafb;
-$bg-tertiary: #f3f4f6;
-$bg-page: #f5f5f5;
+$text-primary: $text-1;
+$text-secondary: $text-2;
+$text-tertiary: $text-3;
+$text-placeholder: $text-disabled;
 
-$border-color: #e5e7eb;
-$border-radius-sm: 8rpx;
-$border-radius-md: 16rpx;
-$border-radius-lg: 24rpx;
-$border-radius-xl: 32rpx;
+$bg-primary: $surface-1;
+$bg-secondary: $surface-2;
+$bg-tertiary: $surface-3;
+$bg-page: $surface-page;
 
-$font-size-xs: 22rpx;
-$font-size-sm: 24rpx;
-$font-size-base: 28rpx;
-$font-size-md: 32rpx;
-$font-size-lg: 36rpx;
-$font-size-xl: 40rpx;
-$font-size-xxl: 48rpx;
+$border-color: $border-subtle;
+$border-color-strong: $border-strong;
+$border-radius-xs: $r-xs;
+$border-radius-sm: $r-sm;
+$border-radius-md: $r-md;
+$border-radius-lg: $r-lg;
+$border-radius-xl: $r-xl;
+$border-radius-full: $r-full;
 
-$spacing-xs: 8rpx;
-$spacing-sm: 16rpx;
-$spacing-md: 24rpx;
-$spacing-lg: 32rpx;
-$spacing-xl: 48rpx;
+$font-size-xs: $t-xs;
+$font-size-sm: $t-sm;
+$font-size-base: $t-base;
+$font-size-md: $t-xl;
+$font-size-lg: $t-2xl;
+$font-size-xl: $t-3xl;
+$font-size-xxl: $t-display;
 
-$shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-$shadow-md: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
-$shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
-$shadow-focus: 0 2rpx 20rpx rgba($primary-color, 0.12);
+$spacing-xs: $s-xs;
+$spacing-sm: $s-sm;
+$spacing-md: $s-md;
+$spacing-lg: $s-lg;
+$spacing-xl: $s-xl;
+
+$shadow-sm: $elev-1;
+$shadow-md: $elev-2;
+$shadow-lg: $elev-3;
+$shadow-focus: $glow-brand;
 
 $status-bar-height: 44px;
 $tab-bar-height: 50px;
-
 $safe-area-bottom: env(safe-area-inset-bottom);
 
-// === Dark Neon Theme (米拉漫展) ===
-$dark-bg-primary: #0a0a1a;
-$dark-bg-secondary: #12122a;
-$dark-bg-card: rgba(255, 255, 255, 0.05);
-$dark-bg-card-hover: rgba(255, 255, 255, 0.08);
-$dark-text-primary: #e2e8f0;
-$dark-text-secondary: #94a3b8;
-$dark-text-tertiary: #7b8aa3;
-$dark-border: rgba(255, 255, 255, 0.08);
-$neon-purple: #a855f7;
-$neon-purple-bright: #c084fc;
-$neon-purple-glow: rgba(168, 85, 247, 0.3);
-$neon-purple-dim: rgba(168, 85, 247, 0.1);
-$neon-cyan: #06b6d4;
-$neon-cyan-glow: rgba(6, 182, 212, 0.3);
-$neon-pink: #ec4899;
-$neon-gradient: linear-gradient(135deg, $neon-purple, $neon-cyan);
+// --- 旧暗色/霓虹别名（组件里大量引用，统一收敛到新品牌色） ---
+$dark-bg-primary: $surface-page;
+$dark-bg-secondary: $surface-2;
+$dark-bg-card: $surface-1;
+$dark-bg-card-hover: $surface-3;
+$dark-text-primary: $text-1;
+$dark-text-secondary: $text-2;
+$dark-text-tertiary: $text-3;
+$dark-border: $border-subtle;
+$neon-purple: $brand;
+$neon-purple-bright: $c-amber-300;
+$neon-purple-glow: rgba(255, 107, 0, 0.28);
+$neon-purple-dim: $brand-soft;
+$neon-cyan: $accent;
+$neon-cyan-glow: rgba(0, 210, 211, 0.28);
+$neon-pink: $state-danger;
+$neon-gradient: $gradient-brand;

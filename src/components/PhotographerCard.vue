@@ -1,5 +1,11 @@
 <template>
-  <view class="photographer-card" @click="goDetail">
+  <view
+    class="photographer-card"
+    :class="`variant-${variant}`"
+    hover-class="photographer-card--pressed"
+    :hover-stay-time="60"
+    @click="goDetail"
+  >
     <image :src="photographer.avatar" class="avatar" mode="aspectFill" />
     <view class="info">
       <view class="header">
@@ -14,21 +20,20 @@
       </view>
       <text v-if="photographer.description" class="desc">{{ photographer.description }}</text>
       <view class="tags" v-if="photographer.tags.length">
-        <text
-          v-for="tag in photographer.tags.slice(0, 3)"
+        <MTag
+          v-for="tag in photographer.tags.slice(0, variant === 'grid' ? 2 : 3)"
           :key="tag"
-          class="tag"
-        >{{ tag }}</text>
+          variant="neutral"
+        >{{ tag }}</MTag>
       </view>
       <view class="footer">
-        <text class="location">{{ photographer.location }}</text>
+        <view class="footer-left">
+          <MPriceTag v-if="price.text" :text="price.text" :tone="price.tone" size="md" />
+          <text v-if="!price.text" class="muted">暂未设置</text>
+        </view>
         <view class="footer-right">
-          <text class="count">{{ photographer.orderCount }}单已接</text>
-          <text
-            v-if="price.text"
-            class="price"
-            :class="`price-${price.tone}`"
-          >{{ price.text }}</text>
+          <text class="meta">{{ photographer.location }}</text>
+          <text v-if="variant === 'row'" class="meta">{{ photographer.orderCount }}单已接</text>
         </view>
       </view>
     </view>
@@ -39,17 +44,22 @@
 import { computed } from 'vue'
 import type { Photographer } from '@/types'
 import { describePrice } from '@/utils/price'
+import MPriceTag from '@/components/MPriceTag.vue'
+import MTag from '@/components/MTag.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   photographer: Photographer
-}>()
+  /** row：列表横卡（默认）；grid：首页双列竖卡 */
+  variant?: 'row' | 'grid'
+}>(), {
+  variant: 'row'
+})
 
-// 评分现在按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0。
-// 显示「★ 0」会让人以为被打了 0 分，所以无评价时改文案。
+// 评分按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0，
+// 显示「★ 0」会让人以为被打 0 分，故无评价时改文案。
 const hasRating = computed(() => (props.photographer.reviewCount ?? 0) > 0)
 
-// 价格文案取「最低可成交价」（闲鱼/淘宝多 SKU 惯例）；
-// 接口没返回价格汇总时 describePrice 给空串，这里直接不渲染。
+// 价格取最低可成交价；接口没返回汇总时 describePrice 给空串，这里不渲染。
 const price = computed(() => describePrice(props.photographer))
 
 function goDetail() {
@@ -62,31 +72,30 @@ function goDetail() {
 <style lang="scss" scoped>
 .photographer-card {
   display: flex;
-  background: $dark-bg-card;
-  border-radius: $border-radius-lg;
-  padding: $spacing-sm;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.3);
-  border-left: 4rpx solid $neon-purple;
-  transition: transform 0.15s, box-shadow 0.15s;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+  border-radius: $r-lg;
+  padding: $s-sm;
+  transition: transform $motion-fast, background $motion-fast;
+}
 
-  &:active {
-    background: $dark-bg-card-hover;
-    transform: scale(0.98);
-    box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.2);
-  }
+.photographer-card--pressed {
+  background: $surface-2;
+  transform: scale(0.985);
 }
 
 .avatar {
-  width: 100rpx;
-  height: 100rpx;
-  border-radius: 50%;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: $r-full;
   flex-shrink: 0;
-  border: 3rpx solid rgba($neon-purple, 0.3);
+  border: 2rpx solid rgba(255, 255, 255, 0.1);
+  background: $surface-2;
 }
 
 .info {
   flex: 1;
-  margin-left: $spacing-sm;
+  margin-left: $s-sm;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -96,18 +105,17 @@ function goDetail() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $s-xs;
 }
 
 .name {
-  display: block;
-  font-size: $font-size-md;
+  font-size: $t-xl;
   font-weight: 600;
-  color: $dark-text-primary;
+  color: $text-1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
-  margin-right: $spacing-xs;
 }
 
 .rating {
@@ -117,26 +125,26 @@ function goDetail() {
 }
 
 .star {
-  color: $warning-color;
-  font-size: 24rpx;
+  color: $state-warning;
+  font-size: $t-sm;
 }
 
 .score {
-  color: $warning-color;
-  font-size: 22rpx;
+  color: $state-warning;
+  font-size: $t-xs;
   margin-left: 2rpx;
 }
 
 .no-rating {
-  color: $dark-text-tertiary;
-  font-size: 20rpx;
+  color: $text-3;
+  font-size: $t-xs;
 }
 
 .desc {
-  font-size: 22rpx;
-  color: $dark-text-secondary;
-  margin-top: 4rpx;
-  line-height: 1.3;
+  font-size: $t-sm;
+  color: $text-2;
+  margin-top: 6rpx;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
@@ -146,64 +154,52 @@ function goDetail() {
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4rpx;
-  margin-top: 6rpx;
-}
-
-.tag {
-  padding: 2rpx 10rpx;
-  background: rgba($neon-purple, 0.15);
-  color: $neon-purple;
-  font-size: 20rpx;
-  border-radius: $border-radius-sm;
+  gap: $s-2xs;
+  margin-top: $s-xs;
 }
 
 .footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $s-xs;
   margin-top: auto;
-  padding-top: 6rpx;
+  padding-top: $s-xs;
 }
 
+.footer-left,
 .footer-right {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
-  gap: 10rpx;
+  gap: $s-xs;
+  min-width: 0;
 }
 
-.location {
-  font-size: 20rpx;
-  color: $dark-text-tertiary;
+.meta {
+  font-size: $t-xs;
+  color: $text-3;
+  white-space: nowrap;
 }
 
-.count {
-  font-size: 20rpx;
-  color: $dark-text-tertiary;
+.muted {
+  font-size: $t-sm;
+  color: $text-3;
 }
 
-// 价格是卡片上最需要被扫到的信息，故比同行的元信息略大、加粗。
-// 四个色都实测过在卡片底（含按下态 rgba(255,255,255,0.08) 叠加）上 ≥ 4.5:1。
-.price {
-  font-size: 24rpx;
-  font-weight: 600;
+/* 首页双列竖卡 */
+.variant-grid {
+  flex-direction: column;
+  padding: $s-md;
+  gap: $s-xs;
 }
 
-.price-price {
-  color: $warning-color; // 固定价：金钱色
+.variant-grid .avatar {
+  width: 88rpx;
+  height: 88rpx;
 }
 
-.price-free {
-  color: $success-color; // 互勉
-}
-
-.price-negotiable {
-  color: $neon-cyan; // 面议
-}
-
-.price-muted {
-  color: $dark-text-tertiary; // 暂未设置
-  font-weight: 400;
+.variant-grid .info {
+  margin-left: 0;
+  margin-top: 0;
 }
 </style>

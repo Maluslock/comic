@@ -189,17 +189,17 @@
   "globalStyle": {
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "米拉漫展",
-    "navigationBarBackgroundColor": "#0a0a1a",
-    "backgroundColor": "#0a0a1a",
+    "navigationBarBackgroundColor": "#0C0D14",
+    "backgroundColor": "#0C0D14",
     "app-plus": {
-      "background": "#0a0a1a"
+      "background": "#0C0D14"
     }
   },
   "tabBar": {
     "color": "#64748b",
-    "selectedColor": "#a855f7",
+    "selectedColor": "#ff6b00",
     "borderStyle": "black",
-    "backgroundColor": "#12122a",
+    "backgroundColor": "#151722",
     "list": [
       {
         "pagePath": "pages/index/index",

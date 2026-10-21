@@ -5,11 +5,6 @@
       <view class="sk-block" style="width: 160rpx; height: 36rpx" />
     </view>
 
-    <!-- Search bar -->
-    <view class="sk-row sk-search">
-      <view class="sk-block" style="width: 100%; height: 72rpx; border-radius: 36rpx" />
-    </view>
-
     <!-- Banner -->
     <view class="sk-row sk-banner">
       <view class="sk-block" style="width: 100%; height: 320rpx" />
@@ -59,16 +54,6 @@
       </view>
     </view>
 
-    <!-- Work cards grid -->
-    <view class="sk-row sk-section-title">
-      <view class="sk-block" style="width: 140rpx; height: 32rpx" />
-    </view>
-    <view class="sk-row sk-works">
-      <view v-for="i in 4" :key="'w' + i" class="sk-work-card">
-        <view class="sk-block" style="width: 100%; height: 240rpx; border-radius: 8rpx 8rpx 0 0" />
-        <view class="sk-block" style="width: 80%; height: 22rpx; margin-top: 12rpx" />
-      </view>
-    </view>
   </view>
 </template>
 
@@ -83,7 +68,7 @@ export default { name: 'HomeSkeleton' }
 <style lang="scss" scoped>
 .skeleton-page {
   min-height: 100vh;
-  background: $dark-bg-primary;
+  background: $surface-page;
   padding-top: calc(var(--status-bar-height, 44px) + $spacing-md);
   padding-bottom: 120rpx;
 }
@@ -167,10 +152,11 @@ export default { name: 'HomeSkeleton' }
 .sk-photographer-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 24rpx;
-  padding: $spacing-md;
+  align-items: flex-start;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+  border-radius: $r-lg;
+  padding: $s-md;
 }
 
 .sk-works {
@@ -179,10 +165,4 @@ export default { name: 'HomeSkeleton' }
   gap: $spacing-md;
 }
 
-.sk-work-card {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16rpx;
-  padding-bottom: $spacing-sm;
-  overflow: hidden;
-}
 </style>

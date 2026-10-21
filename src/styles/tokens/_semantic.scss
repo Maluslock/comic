@@ -1,0 +1,51 @@
+// ============================================================
+// 米拉漫展 · 语义层（semantic）
+// 页面/组件只引用这里的变量，不直接用 primitives
+// ============================================================
+
+// 背景
+$surface-page: $c-obsidian-900;
+$surface-1: $c-obsidian-800;
+$surface-2: $c-obsidian-700;
+$surface-3: $c-obsidian-600;
+$surface-glass: rgba(21, 23, 34, 0.86);
+
+// 品牌
+$brand: $c-amber-500;
+$brand-active: $c-amber-600;
+$brand-soft: rgba(255, 107, 0, 0.12);
+$accent: $c-cyan-400;
+$accent-soft: rgba(0, 210, 211, 0.12);
+
+// 状态
+$state-success: $c-green-500;
+$state-warning: $c-yellow-400;
+$state-danger: $c-rose-500;
+$state-info: $c-blue-400;
+
+// 文本
+$text-1: $c-slate-50;
+$text-2: $c-slate-400;
+$text-3: $c-slate-500;
+$text-disabled: $c-slate-600;
+
+// 描边
+$border-subtle: rgba(255, 255, 255, 0.06);
+$border-strong: rgba(255, 255, 255, 0.12);
+$border-focus: rgba(255, 107, 0, 0.45);
+
+// 阴影
+$elev-1: 0 4rpx 16rpx rgba(0, 0, 0, 0.35), 0 0 0 1rpx rgba(255, 255, 255, 0.05);
+$elev-2: 0 8rpx 32rpx rgba(0, 0, 0, 0.45), 0 0 0 1rpx rgba(255, 255, 255, 0.08);
+$elev-3: 0 16rpx 48rpx rgba(0, 0, 0, 0.65), 0 -1rpx 0 rgba(255, 255, 255, 0.08);
+$glow-brand: 0 6rpx 24rpx rgba(255, 107, 0, 0.35);
+
+// 渐变
+$gradient-brand: linear-gradient(135deg, #ff8c33 0%, #ff6b00 55%, #e05a00 100%);
+$gradient-hero: radial-gradient(120% 90% at 15% 0%, rgba(255, 107, 0, 0.28) 0%, rgba(12, 13, 20, 0) 60%),
+  radial-gradient(90% 70% at 95% 10%, rgba(0, 210, 211, 0.18) 0%, rgba(12, 13, 20, 0) 55%);
+$gradient-cover: linear-gradient(180deg, rgba(12, 13, 20, 0) 35%, rgba(12, 13, 20, 0.85) 100%);
+
+// 动效
+$motion-fast: 120ms cubic-bezier(0.2, 0, 0, 1);
+$motion-base: 180ms cubic-bezier(0.2, 0, 0, 1);

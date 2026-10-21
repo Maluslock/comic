@@ -6,7 +6,7 @@
       class="action-item"
       @click="handleTap(item)"
     >
-      <text class="action-icon">{{ item.icon }}</text>
+      <image class="action-icon" :src="item.icon" mode="aspectFit" />
       <text class="action-label">{{ item.label }}</text>
     </view>
   </view>
@@ -25,10 +25,10 @@ const props = withDefaults(defineProps<{
   items?: QuickAction[]
 }>(), {
   items: () => [
-    { icon: '◇', label: '漫展日历', url: '/pages/calendar/index' },
-    { icon: '○', label: '摄影师', url: '/pages/photographer/list' },
-    { icon: '△', label: '风格标签', url: '/pages/search/search' },
-    { icon: '□', label: '我的预约', url: '/pages/order/list' },
+    { icon: '/static/icons/action-calendar.png', label: '漫展日历', url: '/pages/calendar/index' },
+    { icon: '/static/icons/action-camera.png', label: '摄影师', url: '/pages/photographer/list' },
+    { icon: '/static/icons/action-tag.png', label: '风格标签', url: '/pages/search/search' },
+    { icon: '/static/icons/action-order.png', label: '我的预约', url: '/pages/order/list' },
   ],
 })
 
@@ -58,15 +58,21 @@ function handleTap(item: QuickAction) {
   padding: 0 $spacing-md;
 }
 
+.action-icon {
+  width: 44rpx;
+  height: 44rpx;
+  margin-bottom: 8rpx;
+}
+
 .action-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: $spacing-sm $spacing-xs;
-  background: $dark-bg-card;
-  border: 2rpx solid $neon-purple-glow;
-  border-radius: $border-radius-lg;
+  padding: 20rpx $spacing-xs;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+  border-radius: $r-md;
   transition: all 0.2s ease;
 
   &:active {

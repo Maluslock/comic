@@ -484,7 +484,7 @@ onShow(() => {
 .week-day {
   text-align: center;
   font-size: $font-size-sm;
-  color: $dark-text-tertiary;
+  color: $text-secondary;
 }
 
 .day-grid {
@@ -500,12 +500,12 @@ onShow(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: $border-radius-md;
+  border-radius: $border-radius-sm;
   border: 2rpx solid transparent;
-  background: $dark-bg-card;
+  background: transparent;
 
   &:active {
-    background: $dark-bg-card-hover;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   &.other-month {
@@ -513,13 +513,23 @@ onShow(() => {
   }
 
   &.today {
-    border-color: $neon-cyan;
-    box-shadow: 0 0 12rpx $neon-cyan-glow;
+    border-color: $brand;
+    box-shadow: 0 0 0 2rpx rgba(255, 107, 0, 0.22);
+
+    .day-number {
+      color: $brand;
+      font-weight: 700;
+    }
   }
 
   &.selected {
-    border-color: $neon-purple;
-    box-shadow: 0 0 12rpx $neon-purple-glow;
+    border-color: $brand;
+    background: rgba(255, 107, 0, 0.14);
+
+    .day-number {
+      color: $brand;
+      font-weight: 700;
+    }
   }
 }
 
@@ -533,9 +543,8 @@ onShow(() => {
   width: 12rpx;
   height: 12rpx;
   border-radius: 50%;
-  background: $neon-purple;
+  background: $brand;
   margin-top: 8rpx;
-  box-shadow: 0 0 8rpx $neon-purple-glow;
 }
 
 .event-panel {

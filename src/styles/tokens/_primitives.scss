@@ -1,0 +1,55 @@
+// ============================================================
+// 米拉漫展 · 原始色板 / 尺度（primitives）
+// 只放"物理值"，不带业务语义；业务语义见 _semantic.scss
+// 375 设计稿，1px = 2rpx
+// ============================================================
+
+// 中性色（暗房基调）
+$c-obsidian-900: #0c0d14; // 页面底
+$c-obsidian-800: #151722; // 一级容器
+$c-obsidian-700: #1d202f; // 二级容器
+$c-obsidian-600: #24283b; // 抬升层
+$c-obsidian-500: #2e3348; // 描边/分隔
+
+// 品牌：琉珀橙（快门 / 约拍行动色）
+$c-amber-500: #ff6b00;
+$c-amber-600: #e05a00;
+$c-amber-300: #ff8c33;
+
+// 辅助：电泳薄荷青（展会日程 / 面议）
+$c-cyan-400: #00d2d3;
+
+// 语义色
+$c-green-500: #10b981;
+$c-yellow-400: #fbbf24;
+$c-rose-500: #f43f5e;
+$c-blue-400: #38bdf8;
+
+// 文本
+$c-slate-50: #f8fafc;
+$c-slate-400: #94a3b8;
+$c-slate-500: #64748b;
+$c-slate-600: #475569;
+
+// 尺度
+$s-2xs: 4rpx;
+$s-xs: 8rpx;
+$s-sm: 16rpx;
+$s-md: 24rpx;
+$s-lg: 32rpx;
+$s-xl: 48rpx;
+
+$r-xs: 6rpx;
+$r-sm: 12rpx;
+$r-md: 20rpx;
+$r-lg: 28rpx;
+$r-xl: 40rpx;
+$r-full: 9999rpx;
+
+$t-xs: 20rpx;
+$t-sm: 24rpx;
+$t-base: 28rpx;
+$t-xl: 32rpx;
+$t-2xl: 36rpx;
+$t-3xl: 44rpx;
+$t-display: 56rpx;

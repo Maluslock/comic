@@ -45,7 +45,6 @@
 
           <view class="hero-cta">
             <view class="cta-btn cta-primary" @click="goEventList">
-              <text class="cta-marker">◆</text>
               <text>近期热门漫展</text>
             </view>
           </view>
@@ -67,7 +66,7 @@
             circular
             autoplay
             :interval="4000"
-            indicator-active-color="#a855f7"
+            indicator-active-color="#ff6b00"
             indicator-color="rgba(255,255,255,0.2)"
           >
             <swiper-item v-for="(item, i) in store.banners" :key="i" @click="onBannerClick(i)">
@@ -151,6 +150,7 @@
               v-for="p in filteredPhotographers.slice(0, 4)"
               :key="p.id"
               :photographer="p"
+              variant="grid"
             />
           </view>
         </view>
@@ -306,7 +306,7 @@ function onQuickNav(_url: string) {}
 <style lang="scss" scoped>
 .page {
   min-height: 100vh;
-  background: $dark-bg-primary;
+  background: $surface-page;
 }
 
 .status-bar {
@@ -315,7 +315,8 @@ function onQuickNav(_url: string) {}
   left: 0;
   right: 0;
   z-index: 100;
-  background: transparent;
+  background: $surface-glass;
+  backdrop-filter: blur(20px);
 }
 
 .scroll-content {
@@ -324,7 +325,8 @@ function onQuickNav(_url: string) {}
 
 // ===== Hero =====
 .hero {
-  background: linear-gradient(180deg, $dark-bg-secondary 0%, $dark-bg-primary 100%);
+  background-color: $surface-page;
+  background-image: $gradient-hero;
   padding: $spacing-sm $spacing-md $spacing-lg;
 }
 
@@ -420,9 +422,9 @@ function onQuickNav(_url: string) {}
 .hero-title-main {
   display: block;
   font-size: 56rpx;
-  font-weight: 900;
-  letter-spacing: 4rpx;
-  background: $neon-gradient;
+  font-weight: 800;
+  letter-spacing: 2rpx;
+  background: $gradient-brand;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -432,9 +434,9 @@ function onQuickNav(_url: string) {}
 .hero-title-sub {
   display: block;
   font-size: 28rpx;
-  color: $dark-text-secondary;
+  color: $text-2;
   font-weight: 400;
-  letter-spacing: 6rpx;
+  letter-spacing: 2rpx;
 }
 
 .hero-divider {
@@ -534,9 +536,10 @@ function onQuickNav(_url: string) {}
 
 .banner-swiper {
   width: 100%;
-  height: 320rpx;
-  border-radius: $border-radius-lg;
+  height: 340rpx;
+  border-radius: $r-lg;
   overflow: hidden;
+  border: 1rpx solid $border-subtle;
 }
 
 .banner-image {
@@ -586,7 +589,7 @@ function onQuickNav(_url: string) {}
 
 .section-title {
   position: relative;
-  font-size: $font-size-lg;
+  font-size: $t-2xl;
   font-weight: 700;
   color: $dark-text-primary;
   padding-left: 20rpx;
@@ -605,8 +608,8 @@ function onQuickNav(_url: string) {}
 }
 
 .section-more {
-  font-size: $font-size-sm;
-  color: $neon-cyan;
+  font-size: $t-sm;
+  color: $accent;
   font-weight: 500;
 
   &:active { opacity: 0.6; }
@@ -632,8 +635,8 @@ function onQuickNav(_url: string) {}
 .event-card {
   position: relative;
   width: 280rpx;
-  background: $dark-bg-card;
-  border: 1rpx solid $dark-border;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
   border-radius: $border-radius-lg;
   overflow: hidden;
   transition: transform 0.15s, border-color 0.15s;

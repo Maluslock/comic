@@ -1434,7 +1434,7 @@ C 端图片上传（头像 / 作品图 / 认证样片），针对「服务器无
 ## 容器化开发环境 + 两个修复（2026-10-21，fnOS NAS）
 
 本机把整套开发环境放进 Docker（宿主机不装 Go/Node/PG/Redis），细节见工作区 `.devenv/README.md`：
-容器 `comic-dev-{pg,redis,api,h5,admin}`，端口 15433/16379/8088/5173/5174，日志在 `.devenv/logs/`。
+容器 `comic-dev-{pg,redis,api,h5,admin}`，端口 5433/6380/8088/5173/5174，日志在 `.devenv/logs/`。
 
 为容器内互通做了两处**向后兼容**的配置化改动（默认值不变，不影响原有 localhost 用法）：
 

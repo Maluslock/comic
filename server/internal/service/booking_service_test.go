@@ -4,12 +4,18 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/Maluslock/comic/server/internal/repository"
 )
+
+// futureDate 返回相对今天偏移的日期，避免用例固定日期随真实时间推移而失效。
+func futureDate(days int) string {
+	return time.Now().AddDate(0, 0, days).Format("2006-01-02")
+}
 
 func TestCanTransition(t *testing.T) {
 	cases := []struct {
@@ -99,7 +105,7 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 		PhotographerID: 2,
 		CoserID:        5,
 		ServiceID:      1,
-		Date:           "2026-10-20",
+		Date:           futureDate(1),
 		Time:           "10:00",
 	}); err != nil {
 		t.Fatalf("Create unexpected error: %v", err)
@@ -133,7 +139,7 @@ func TestCreateBooking_ServiceMissingReturnsInvalidReference(t *testing.T) {
 		PhotographerID: 2,
 		CoserID:        5,
 		ServiceID:      999,
-		Date:           "2026-10-21",
+		Date:           futureDate(2),
 		Time:           "11:00",
 	})
 	if !errors.Is(err, ErrInvalidReference) {
@@ -154,7 +160,7 @@ func TestCreateBooking_TransientDBErrorNotMasked(t *testing.T) {
 		PhotographerID: 2,
 		CoserID:        5,
 		ServiceID:      99,
-		Date:           "2026-10-23",
+		Date:           futureDate(4),
 		Time:           "10:00",
 	})
 	if !errors.Is(err, transient) {
@@ -173,7 +179,7 @@ func TestCreateBooking_TemplateServiceRejected(t *testing.T) {
 	}}
 	svc := NewBookingService(repository.New(db))
 	_, err := svc.Create(context.Background(), CreateBookingRequest{
-		PhotographerID: 2, CoserID: 5, ServiceID: 1, Date: "2026-10-24", Time: "10:00",
+		PhotographerID: 2, CoserID: 5, ServiceID: 1, Date: futureDate(5), Time: "10:00",
 	})
 	if !errors.Is(err, ErrInvalidReference) {
 		t.Fatalf("want ErrInvalidReference for a template (ownerless) service, got %v", err)
@@ -191,7 +197,7 @@ func TestCreateBooking_NegotiableService(t *testing.T) {
 	}}
 	svc := NewBookingService(repository.New(db))
 	if _, err := svc.Create(context.Background(), CreateBookingRequest{
-		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: "2026-10-20", Time: "10:00",
+		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: futureDate(1), Time: "10:00",
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +224,7 @@ func TestCreateBooking_MutualService(t *testing.T) {
 	}}
 	svc := NewBookingService(repository.New(db))
 	if _, err := svc.Create(context.Background(), CreateBookingRequest{
-		PhotographerID: 2, CoserID: 5, ServiceID: 7, Date: "2026-10-22", Time: "09:00",
+		PhotographerID: 2, CoserID: 5, ServiceID: 7, Date: futureDate(3), Time: "09:00",
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,7 +292,7 @@ func TestCreateBooking_ServiceNotOwnedByPhotographer(t *testing.T) {
 	}}
 	svc := NewBookingService(repository.New(db))
 	_, err := svc.Create(context.Background(), CreateBookingRequest{
-		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: "2026-10-20", Time: "10:00",
+		PhotographerID: 2, CoserID: 5, ServiceID: 99, Date: futureDate(1), Time: "10:00",
 	})
 	if !errors.Is(err, ErrInvalidReference) {
 		t.Fatalf("want ErrInvalidReference, got %v", err)

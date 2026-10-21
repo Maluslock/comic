@@ -1,6 +1,6 @@
 -- name: GetRecommendedPhotographers :many
 SELECT p.id, p.name, p.avatar, p.description, p.location, p.rating, p.review_count, p.order_count,
-       array_agg(t.name) AS tags
+       array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL) AS tags
 FROM photographers p
 LEFT JOIN photographer_tags pt ON p.id = pt.photographer_id
 LEFT JOIN tags t ON pt.tag_id = t.id

@@ -1430,3 +1430,24 @@ C 端图片上传（头像 / 作品图 / 认证样片），针对「服务器无
 - 系统性 load-time 错误（每页 1 条 `agent-browser errors` 的 `{text:"Object"}`，登录页也有、无可见破坏、SPA 切换不触发）——**未定位**，需 CDP init-script 抓栈
 - 订单详情「拍摄时长」恒显 0 —— `BookingItem` DTO 未返回 `serviceDuration`（快照列已有值）
 - 面议被拒后**不支持重报**（单轮设计）；报价无留言/附件；套餐无排序 UI（`sort_order` 字段已留）
+
+## 容器化开发环境 + 两个修复（2026-10-21，fnOS NAS）
+
+本机把整套开发环境放进 Docker（宿主机不装 Go/Node/PG/Redis），细节见工作区 `.devenv/README.md`：
+容器 `comic-dev-{pg,redis,api,h5,admin}`，端口 15433/16379/8088/5173/5174，日志在 `.devenv/logs/`。
+
+为容器内互通做了两处**向后兼容**的配置化改动（默认值不变，不影响原有 localhost 用法）：
+
+- 根 `vite.config.ts`：代理目标改为 `process.env.VITE_API_TARGET || 'http://127.0.0.1:8088'`
+- `admin/vite.config.ts`：`/api/admin`、`/static` 代理目标改为 `process.env.ADMIN_API_TARGET || 'http://localhost:8088'`
+
+修复：
+
+- **首页 500（真实缺陷）**：`GetRecommendedPhotographers` 用 `array_agg(t.name)` 且未过滤 NULL，
+  只要存在「没有任何标签」的摄影师（种子里的「测试摄影师」就是），`HOME` 接口即 500。
+  已改为 `array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL)`（`internal/db/query/photographers.sql` +
+  生成的 `internal/repository/photographers.sql.go`）。
+- **预约服务测试日期腐烂**：`booking_service_test.go` 里固定写死 `2026-10-20 ~ 2026-10-24`，
+  过了这些日期后 3 个用例因「cannot book a date in the past」必挂。改为 `futureDate(n)` 相对今天生成。
+
+验证：`go vet ./...` + `go test ./...` 全绿；首页/摄影师/漫展/登录接口经 H5 与 admin 代理均 200；admin 登录 `admin/admin123` 成功。

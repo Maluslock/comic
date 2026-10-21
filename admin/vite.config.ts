@@ -4,6 +4,9 @@ import { defineConfig, loadEnv } from 'vite';
 import { setupVitePlugins } from './build/plugins';
 import { createViteProxy, getBuildTime } from './build/config';
 
+// 容器/远程开发：后端地址可由环境变量覆盖，默认保持 localhost 行为
+const ADMIN_API_TARGET = process.env.ADMIN_API_TARGET || 'http://localhost:8088';
+
 export default defineConfig(configEnv => {
   const viteEnv = loadEnv(configEnv.mode, process.cwd()) as unknown as Env.ImportMeta;
 
@@ -39,12 +42,12 @@ export default defineConfig(configEnv => {
         ...createViteProxy(viteEnv, enableProxy),
         // mira admin API: relative /api/admin/v1 proxied to Go backend (works for localhost AND LAN IP access)
         '/api/admin': {
-          target: 'http://localhost:8088',
+          target: ADMIN_API_TARGET,
           changeOrigin: true
         },
         // cached local images served by the Go backend (server/static/img)
         '/static': {
-          target: 'http://localhost:8088',
+          target: ADMIN_API_TARGET,
           changeOrigin: true
         }
       }

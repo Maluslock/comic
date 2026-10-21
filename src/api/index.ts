@@ -172,6 +172,57 @@ export function deleteWork(id: number) {
   return apiDelete<{ ok: boolean }>(`/v1/photographers/works/${id}`)
 }
 
+export interface MyService {
+  id: number
+  name: string
+  /** null = 面议, 0 = 互勉, >0 = 固定价 */
+  price: number | null
+  description: string
+  duration: number
+  /** 是否上架到公开页面（下架后仍在自己列表可见，但不可被下单） */
+  isActive: boolean
+  sortOrder: number
+}
+
+/** 套餐可写字段。isActive / sortOrder 省略时，后端保留数据库现值。 */
+export interface ServiceUpsertPayload {
+  name: string
+  price: number | null
+  description: string
+  duration: number
+  isActive?: boolean
+  sortOrder?: number
+}
+
+/** 平台模板只暴露预填所需字段（无 isActive / sortOrder —— 模板不可直接上架）。 */
+export interface ServiceTemplate {
+  id: number
+  name: string
+  price: number | null
+  description: string
+  duration: number
+}
+
+export function getMyServices() {
+  return apiGet<{ list: MyService[] | null }>('/v1/photographers/services/mine')
+}
+
+export function getServiceTemplates() {
+  return apiGet<ServiceTemplate[] | null>('/v1/services/templates')
+}
+
+export function createService(payload: ServiceUpsertPayload) {
+  return apiPost<{ id: number }>('/v1/photographers/services', payload)
+}
+
+export function updateService(id: number, payload: ServiceUpsertPayload) {
+  return apiPut<{ ok: boolean }>(`/v1/photographers/services/${id}`, payload)
+}
+
+export function deleteService(id: number) {
+  return apiDelete<{ ok: boolean }>(`/v1/photographers/services/${id}`)
+}
+
 export async function getHomeData(): Promise<HomeResponse> {
   return {
     banners: [

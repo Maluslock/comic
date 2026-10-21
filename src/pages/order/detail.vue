@@ -38,7 +38,7 @@
           </view>
           <view class="detail-row">
             <text class="detail-label">拍摄时长</text>
-            <text class="detail-value">{{ order.duration }}分钟</text>
+            <text class="detail-value">{{ formatDuration(order.duration) }}</text>
           </view>
           <view class="detail-row">
             <text class="detail-label">拍摄日期</text>
@@ -60,11 +60,11 @@
         <view class="price-detail">
           <view class="price-row">
             <text class="price-label">{{ order.serviceName }}</text>
-            <text class="price-value">¥{{ order.totalPrice }}</text>
+            <text class="price-value">{{ renderOrderPrice(order) }}</text>
           </view>
           <view class="price-row total">
             <text class="price-label">总计</text>
-            <text class="price-value">¥{{ order.totalPrice }}</text>
+            <text class="price-value">{{ renderOrderPrice(order) }}</text>
           </view>
         </view>
       </view>
@@ -79,7 +79,28 @@
 
     <view class="footer">
       <view 
-        v-if="order.status === 'pending' || order.status === 'confirmed'" 
+        v-if="showRespondQuote" 
+        class="btn-outline danger"
+        @click="rejectQuote"
+      >
+        拒绝
+      </view>
+      <view 
+        v-if="showRespondQuote" 
+        class="btn-primary"
+        @click="acceptQuote"
+      >
+        接受报价
+      </view>
+      <view 
+        v-if="showQuote" 
+        class="btn-primary"
+        @click="quoteOrder"
+      >
+        报价
+      </view>
+      <view 
+        v-if="(order.status === 'pending' || order.status === 'confirmed') && !showRespondQuote" 
         class="btn-outline"
         @click="cancelOrder"
       >
@@ -111,13 +132,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import type { OrderPriceFields } from '@/types'
+import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote, confirmRespondQuote } from '@/utils/quote'
+import { formatDuration } from '@/utils/duration'
 
-interface OrderDetail {
+interface OrderDetail extends OrderPriceFields {
   id: string
+  coserId?: string
   photographerId?: string
   photographerUserId?: number
   photographerName: string
@@ -125,10 +150,9 @@ interface OrderDetail {
   location: string
   serviceId?: string
   serviceName: string
-  duration: number
+  duration: number | null
   date: string
   time: string
-  totalPrice: number
   status: string
   remark: string
   createTime: string | number
@@ -142,11 +166,14 @@ const defaultOrder: OrderDetail = {
   photographerAvatar: '',
   location: '',
   serviceName: '未知服务',
-  duration: 0,
+  duration: null,
   date: '',
   time: '',
   remark: '',
   totalPrice: 0,
+  priceMode: 'fixed',
+  quotePrice: null,
+  priceStatus: 'agreed',
   status: 'pending',
   createTime: ''
 }
@@ -154,22 +181,28 @@ const defaultOrder: OrderDetail = {
 const order = ref<OrderDetail>({ ...defaultOrder })
 const userStore = useUserStore()
 
-onLoad(async (options: Record<string, string> | undefined) => {
-  const bookingId = options?.id
-  if (!bookingId) {
+const bookingId = ref('')
+
+onLoad((options: Record<string, string> | undefined) => {
+  bookingId.value = options?.id || ''
+  if (!bookingId.value) {
     uni.showToast({ title: '订单不存在', icon: 'none' })
     return
   }
+  loadOrder()
+})
 
+async function loadOrder() {
   let found: OrderDetail | undefined
 
   if (userStore.isLoggedIn && userStore.user) {
     try {
       const res = await apiGet<any[]>(`/v1/bookings/${userStore.user.id}`)
-      const serverOrder = (res || []).find((b: any) => String(b.id) === bookingId)
+      const serverOrder = (res || []).find((b: any) => String(b.id) === bookingId.value)
       if (serverOrder) {
         found = {
           id: String(serverOrder.id),
+          coserId: serverOrder.coserId === undefined || serverOrder.coserId === null ? '' : String(serverOrder.coserId),
           photographerId: String(serverOrder.photographerId),
           photographerUserId: serverOrder.photographerUserId,
           photographerName: serverOrder.photographerName || `摄影师${serverOrder.photographerId}`,
@@ -177,10 +210,13 @@ onLoad(async (options: Record<string, string> | undefined) => {
           location: serverOrder.location || '',
           serviceId: String(serverOrder.serviceId),
           serviceName: serverOrder.serviceName || `服务${serverOrder.serviceId}`,
-          duration: serverOrder.duration || 0,
+          duration: serverOrder.serviceDuration ?? null,
           date: serverOrder.date,
           time: serverOrder.time,
           totalPrice: serverOrder.totalPrice || 0,
+          priceMode: toPriceMode(serverOrder.priceMode),
+          quotePrice: serverOrder.quotePrice ?? null,
+          priceStatus: toPriceStatus(serverOrder.priceStatus),
           status: serverOrder.status || 'pending',
           remark: serverOrder.remarks || '',
           createTime: serverOrder.createdAt || Date.now()
@@ -195,7 +231,7 @@ onLoad(async (options: Record<string, string> | undefined) => {
     try {
       const storedJson = uni.getStorageSync('bookings') || '[]'
       const storedBookings: OrderDetail[] = JSON.parse(storedJson)
-      found = storedBookings.find((b: OrderDetail) => String(b.id) === bookingId)
+      found = storedBookings.find((b: OrderDetail) => String(b.id) === bookingId.value)
     } catch {
       // Ignore parse errors
     }
@@ -206,7 +242,7 @@ onLoad(async (options: Record<string, string> | undefined) => {
   } else {
     uni.showToast({ title: '订单不存在', icon: 'none' })
   }
-})
+}
 
 onMounted(() => {
   const sysInfo = uni.getSystemInfoSync()
@@ -221,6 +257,39 @@ function getStatusText(status: string): string {
     cancelled: '已取消'
   }
   return map[status] || status
+}
+
+const isOwnOrder = computed(() => {
+  if (!userStore.user) return false
+  // Stored/local rows carry no coserId but are still the user's own order.
+  if (!order.value.coserId) return true
+  return order.value.coserId === String(userStore.user.id)
+})
+
+const showRespondQuote = computed(() => (
+  order.value.priceMode === 'negotiable' && order.value.priceStatus === 'quoted' && isOwnOrder.value
+))
+
+const showQuote = computed(() => (
+  order.value.priceMode === 'negotiable' &&
+  order.value.priceStatus === 'awaiting_quote' &&
+  userStore.user?.photographerId != null &&
+  order.value.photographerId === String(userStore.user.photographerId)
+))
+
+function acceptQuote() {
+  if (!order.value.id) return
+  confirmRespondQuote(order.value.id, true, loadOrder)
+}
+
+function rejectQuote() {
+  if (!order.value.id) return
+  confirmRespondQuote(order.value.id, false, loadOrder)
+}
+
+function quoteOrder() {
+  if (!order.value.id) return
+  promptQuote(order.value.id, loadOrder)
 }
 
 function goBack() {
@@ -436,6 +505,11 @@ function goReview() {
   color: $neon-purple;
   border-radius: $border-radius-md;
   font-size: $font-size-sm;
+
+  &.danger {
+    border-color: rgba(239, 68, 68, 0.4);
+    color: $error-color;
+  }
 
   &:active {
     background: $dark-bg-card-hover;

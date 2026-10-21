@@ -18,6 +18,7 @@
         <view class="btn-go" @click="goOrders">去接单管理</view>
         <view class="btn-edit" @click="goProfileEdit">主页管理</view>
         <view class="btn-works" @click="goWorks">作品管理</view>
+        <view class="btn-services" @click="goServices">套餐管理</view>
         <view class="btn-cert" :class="{ 'is-cert': certified }" @click="goCertApply">
           <text>{{ certified ? '✓ 已认证摄影师' : '申请认证' }}</text>
         </view>
@@ -154,6 +155,10 @@ function goWorks() {
   uni.navigateTo({ url: '/pages/photographer/works' })
 }
 
+function goServices() {
+  uni.navigateTo({ url: '/pages/photographer/services' })
+}
+
 function goCertApply() {
   uni.navigateTo({ url: '/pages/photographer/cert-apply' })
 }
@@ -181,6 +186,7 @@ function goBack() {
 .btn-go { padding: 16rpx 48rpx; background: $neon-gradient; color: #fff; border-radius: 32rpx; font-size: 28rpx; box-shadow: 0 0 20rpx $neon-purple-glow; }
 .btn-edit { margin-top: 24rpx; padding: 14rpx 48rpx; background: $dark-bg-secondary; border: 2rpx solid $neon-purple; color: $neon-purple; border-radius: 32rpx; font-size: 28rpx; }
 .btn-works { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(6, 182, 212, 0.1); border: 2rpx solid $neon-cyan; color: $neon-cyan; border-radius: 32rpx; font-size: 28rpx; }
+.btn-services { margin-top: 24rpx; padding: 14rpx 48rpx; background: rgba(236, 72, 153, 0.1); border: 2rpx solid $neon-pink; color: $neon-pink; border-radius: 32rpx; font-size: 28rpx; }
 .btn-cert { margin-top: 24rpx; padding: 14rpx 48rpx; background: $neon-purple-dim; border: 2rpx solid $neon-purple; color: $neon-purple; border-radius: 32rpx; font-size: 28rpx;
   &.is-cert { background: rgba(245, 158, 11, 0.12); border-color: $warning-color; color: $warning-color; box-shadow: 0 0 12rpx rgba(245, 158, 11, 0.25); }
 }

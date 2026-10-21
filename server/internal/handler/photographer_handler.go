@@ -26,10 +26,12 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 	keyword := c.Query("keyword")
 	location := c.Query("location")
 	tag := c.Query("tags")
+	sort := c.Query("sort")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
 
-	cacheKey := "photographers:" + keyword + ":" + location + ":" + tag + ":" + strconv.Itoa(page) + ":" + strconv.Itoa(size)
+	// sort 必须进缓存键：否则切「评分最高」会命中「接单最多」的缓存，越权返回错误内容。
+	cacheKey := "photographers:" + keyword + ":" + location + ":" + tag + ":" + sort + ":" + strconv.Itoa(page) + ":" + strconv.Itoa(size)
 
 	var excludeUserIDs []int64
 	if uid := middleware.UserID(c); uid > 0 {
@@ -39,7 +41,7 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 	}
 
 	if len(excludeUserIDs) > 0 {
-		data, err := h.svc.List(c.Request.Context(), keyword, location, tag, page, size, excludeUserIDs)
+		data, err := h.svc.List(c.Request.Context(), keyword, location, tag, page, size, excludeUserIDs, sort)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
@@ -54,7 +56,7 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 		return
 	}
 
-	data, err := h.svc.List(c.Request.Context(), keyword, location, tag, page, size, excludeUserIDs)
+	data, err := h.svc.List(c.Request.Context(), keyword, location, tag, page, size, excludeUserIDs, sort)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return

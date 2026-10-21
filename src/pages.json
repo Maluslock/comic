@@ -130,6 +130,13 @@
       }
     },
     {
+      "path": "pages/photographer/services",
+      "style": {
+        "navigationBarTitleText": "我的套餐",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/photographer/profile-edit",
       "style": {
         "navigationStyle": "custom"

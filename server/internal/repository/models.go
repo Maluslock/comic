@@ -62,9 +62,11 @@ type Work struct {
 type Service struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
-	Price       int32   `json:"price"`
+	Price       *int32  `json:"price"`
 	Description *string `json:"description"`
 	Duration    int32   `json:"duration"`
+	IsActive    bool    `json:"is_active"`
+	SortOrder   int32   `json:"sort_order"`
 }
 
 type Review struct {
@@ -117,11 +119,16 @@ type Booking struct {
 	ServiceID      int32     `json:"service_id"`
 	Date           time.Time `json:"date"`
 	Time           string    `json:"time"`
-	Status         string    `json:"status"`
-	TotalPrice     int32     `json:"total_price"`
-	Remarks        *string   `json:"remarks"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Status          string    `json:"status"`
+	TotalPrice      int32     `json:"total_price"`
+	Remarks         *string   `json:"remarks"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	PriceMode       string    `json:"price_mode"`
+	QuotePrice      *int32    `json:"quote_price"`
+	PriceStatus     string    `json:"price_status"`
+	ServiceName     *string   `json:"service_name"`
+	ServiceDuration *int32    `json:"service_duration"`
 }
 
 // BookingWithDetails embeds Booking and adds joined photographer/service fields.

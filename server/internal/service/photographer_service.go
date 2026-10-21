@@ -9,11 +9,23 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// PhotographerListItem is the list-page row: the shared photographer fields plus the
+// price roll-up the card renders (「¥399 起 / 互勉 / 面议 / 暂未设置」). It is a
+// separate type on purpose — adding these to PhotographerItem itself would leak zero
+// values into the home and detail responses, which never fetch them.
+type PhotographerListItem struct {
+	PhotographerItem
+	MinPrice      *int32 `json:"minPrice"`      // 最低固定价；无固定价时 null
+	HasFree       bool   `json:"hasFree"`       // 有 0 元（互勉）套餐
+	HasNegotiable bool   `json:"hasNegotiable"` // 有面议套餐
+	ServiceCount  int32  `json:"serviceCount"`  // 上架套餐数；0 = 暂未设置
+}
+
 type PhotographerListResponse struct {
-	List     []PhotographerItem `json:"list"`
-	Total    int                `json:"total"`
-	Page     int                `json:"page"`
-	PageSize int                `json:"pageSize"`
+	List     []PhotographerListItem `json:"list"`
+	Total    int                    `json:"total"`
+	Page     int                    `json:"page"`
+	PageSize int                    `json:"pageSize"`
 }
 
 type PhotographerDetail struct {
@@ -24,12 +36,24 @@ type PhotographerDetail struct {
 	Reviews     []ReviewItem  `json:"reviews"`
 }
 
+// ServiceItem is the public shape of a package, used by the photographer detail
+// page and the platform-template list. It deliberately carries no shelf state:
+// templates are not sellable, and the detail query only returns packages that are
+// on the shelf anyway — emitting a zero-valued isActive there would be a lie.
 type ServiceItem struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
-	Price       int32  `json:"price"`
+	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
+}
+
+// MyServiceItem is what the owner sees in 我的套餐: the public fields plus shelf
+// state, so the page can render the real 上架/下架 tag and offer the toggle.
+type MyServiceItem struct {
+	ServiceItem
+	IsActive  bool  `json:"isActive"`
+	SortOrder int32 `json:"sortOrder"`
 }
 
 type ReviewItem struct {
@@ -82,6 +106,9 @@ var (
 	ErrWorkForbidden    = errors.New("work belongs to another photographer")
 	ErrInvalidMode      = errors.New("invalid mode")
 	ErrProfileNotFound  = errors.New("photographer profile not found")
+	ErrServiceNotFound  = errors.New("service not found")
+	ErrServiceForbidden = errors.New("cannot modify another photographer's service")
+	ErrInvalidPrice     = errors.New("invalid price")
 )
 
 // ProfileUpdate is the self-service profile edit payload.
@@ -92,6 +119,17 @@ type ProfileUpdate struct {
 	Mode        string  `json:"mode"`
 	MutualIntro *string `json:"mutualIntro"`
 	Avatar      string  `json:"avatar"`
+}
+
+type ServiceUpsertRequest struct {
+	Name        string `json:"name" binding:"required"`
+	Price       *int32 `json:"price"`
+	Description string `json:"description"`
+	Duration    int32  `json:"duration"`
+	// IsActive / SortOrder are optional. On update an omitted field keeps its stored
+	// value (the statement COALESCEs nil); on create it falls back to published / 0.
+	IsActive  *bool  `json:"isActive"`
+	SortOrder *int32 `json:"sortOrder"`
 }
 
 func (s *PhotographerService) Activate(ctx context.Context, userID int64, name string, mode string, intro string) (int64, error) {
@@ -195,7 +233,10 @@ func (s *PhotographerService) HiddenUserIDs(ctx context.Context, userID int64) (
 	return s.queries.ListHiddenUserIDs(ctx, userID)
 }
 
-func (s *PhotographerService) List(ctx context.Context, keyword, location, tag string, page, size int, excludeUserIDs []int64) (*PhotographerListResponse, error) {
+// List 返回摄影师列表。sort 是列表页筛选栏的排序键：
+// ""/"all" 默认（评分优先）、"hot" 热门（评价数）、"rating" 评分最高、
+// "order" 接单最多、"new" 最新入驻。未知值一律退回默认排序（不让调用方拼 SQL）。
+func (s *PhotographerService) List(ctx context.Context, keyword, location, tag string, page, size int, excludeUserIDs []int64, sort string) (*PhotographerListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -217,6 +258,11 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 	if excludeUserIDs == nil {
 		excludeUserIDs = []int64{}
 	}
+	var sortKey *string
+	switch sort {
+	case "hot", "rating", "order", "new":
+		sortKey = &sort
+	}
 
 	// For search, fetch extra to estimate total (if fewer than limit returned, total is known)
 	photographers, err := s.queries.SearchPhotographers(ctx, repository.SearchPhotographersParams{
@@ -226,6 +272,7 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		Limit:          int32(size + 1),
 		Offset:         int32(offset),
 		ExcludeUserIDs: excludeUserIDs,
+		Sort:           sortKey,
 	})
 	if err != nil {
 		return nil, err
@@ -236,7 +283,23 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		photographers = photographers[:size]
 	}
 
-	items := mapPhotographers(photographers)
+	items := make([]PhotographerListItem, 0, len(photographers))
+	for _, it := range mapPhotographers(photographers) {
+		items = append(items, PhotographerListItem{PhotographerItem: it})
+	}
+	// 一次批量取回本页的价格汇总（不是逐行查询）；无上架套餐的摄影师不会出现在结果里，
+	// 保持零值 → 前端显示「暂未设置」。
+	ids := make([]int64, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(ids) > 0 {
+		sums, err := s.queries.GetServicePriceSummaries(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		items = mergePriceSummaries(items, sums)
+	}
 
 	total := offset + len(photographers)
 	if hasMore {
@@ -251,13 +314,33 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 	}, nil
 }
 
+// mergePriceSummaries attaches the price roll-up to a page of list rows. Pure, so it
+// is unit-testable without a database.
+func mergePriceSummaries(items []PhotographerListItem, sums []repository.ServicePriceSummary) []PhotographerListItem {
+	byID := make(map[int64]repository.ServicePriceSummary, len(sums))
+	for _, s := range sums {
+		byID[s.PhotographerID] = s
+	}
+	for i := range items {
+		s, ok := byID[items[i].ID]
+		if !ok {
+			continue
+		}
+		items[i].MinPrice = s.MinPrice
+		items[i].HasFree = s.HasFree
+		items[i].HasNegotiable = s.HasNegotiable
+		items[i].ServiceCount = s.ActiveCount
+	}
+	return items
+}
+
 func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*PhotographerDetail, error) {
 	p, err := s.queries.GetPhotographerById(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	services, err := s.queries.GetServices(ctx)
+	services, err := s.queries.GetActiveServicesByPhotographer(ctx, id)
 	if err != nil {
 		services = []repository.Service{}
 	}
@@ -315,6 +398,27 @@ func mapServiceItems(services []repository.Service) []ServiceItem {
 	return items
 }
 
+// mapMyServiceItems is the owner-facing mapper: the public fields plus shelf state.
+// Only the `mine` query selects is_active / sort_order, so only this mapper may
+// read them.
+func mapMyServiceItems(services []repository.Service) []MyServiceItem {
+	items := make([]MyServiceItem, 0, len(services))
+	for _, s := range services {
+		items = append(items, MyServiceItem{
+			ServiceItem: ServiceItem{
+				ID:          s.ID,
+				Name:        s.Name,
+				Price:       s.Price,
+				Description: derefString(s.Description),
+				Duration:    s.Duration,
+			},
+			IsActive:  s.IsActive,
+			SortOrder: s.SortOrder,
+		})
+	}
+	return items
+}
+
 func mapWorkItems(works []repository.Work) []WorkItem {
 	items := make([]WorkItem, 0, len(works))
 	for _, w := range works {
@@ -347,12 +451,12 @@ func mapReviewItems(reviews []repository.Review) []ReviewItem {
 			PhotographerID:   r.PhotographerID,
 			PhotographerName: r.PhotographerName,
 			UserID:           r.UserID,
-			UserName:       derefString(r.UserName),
-			UserAvatar:     derefString(r.UserAvatar),
-			Rating:         r.Rating,
-			Content:        derefString(r.Content),
-			Images:         images,
-			CreatedAt:      r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UserName:         derefString(r.UserName),
+			UserAvatar:       derefString(r.UserAvatar),
+			Rating:           r.Rating,
+			Content:          derefString(r.Content),
+			Images:           images,
+			CreatedAt:        r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 	return items
@@ -440,4 +544,102 @@ func (s *PhotographerService) DeleteWork(ctx context.Context, userID, workID int
 		return err
 	}
 	return nil
+}
+
+func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]MyServiceItem, error) {
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return nil, ErrForbidden
+	}
+	rows, err := s.queries.GetAllServicesByPhotographer(ctx, int32(p.ID))
+	if err != nil {
+		return nil, err
+	}
+	return mapMyServiceItems(rows), nil
+}
+
+func (s *PhotographerService) CreateService(ctx context.Context, userID int64, req ServiceUpsertRequest) (int64, error) {
+	if req.Price != nil && *req.Price < 0 {
+		return 0, ErrInvalidPrice
+	}
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return 0, ErrForbidden
+	}
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	var order int32
+	if req.SortOrder != nil {
+		order = *req.SortOrder
+	}
+	return s.queries.InsertService(ctx, repository.InsertServiceParams{
+		Name:           req.Name,
+		Price:          req.Price,
+		Description:    strPtr(req.Description),
+		Duration:       req.Duration,
+		PhotographerID: int64(p.ID),
+		IsActive:       active,
+		SortOrder:      order,
+	})
+}
+
+func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, serviceID int64, req ServiceUpsertRequest) error {
+	if req.Price != nil && *req.Price < 0 {
+		return ErrInvalidPrice
+	}
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return ErrForbidden
+	}
+	// Deliberately no defaulting here: nil means "leave it as stored", which the
+	// statement COALESCEs. Substituting true / 0 is exactly what used to re-publish
+	// an unpublished package and wipe its ordering on every edit.
+	n, err := s.queries.UpdateService(ctx, repository.UpdateServiceParams{
+		ID:             serviceID,
+		PhotographerID: int64(p.ID),
+		Name:           req.Name,
+		Price:          req.Price,
+		Description:    strPtr(req.Description),
+		Duration:       req.Duration,
+		IsActive:       req.IsActive,
+		SortOrder:      req.SortOrder,
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if pid, err := s.queries.GetServicePhotographerID(ctx, serviceID); err == nil && pid != nil {
+			return ErrServiceForbidden
+		}
+		return ErrServiceNotFound
+	}
+	return nil
+}
+
+func (s *PhotographerService) DeleteService(ctx context.Context, userID int64, serviceID int64) error {
+	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
+	if err != nil {
+		return ErrForbidden
+	}
+	n, err := s.queries.DeleteService(ctx, serviceID, int64(p.ID))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		if pid, err := s.queries.GetServicePhotographerID(ctx, serviceID); err == nil && pid != nil {
+			return ErrServiceForbidden
+		}
+		return ErrServiceNotFound
+	}
+	return nil
+}
+
+func (s *PhotographerService) ListTemplates(ctx context.Context) ([]ServiceItem, error) {
+	rows, err := s.queries.GetServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapServiceItems(rows), nil
 }

@@ -126,7 +126,18 @@ function showMock(title: string) {
 }
 
 async function onLogin() {
-  if (!canLogin.value) return
+  if (!canLogin.value) {
+    // 此前这里静默 return：填完手机号+验证码点「登录」毫无反应，用户无法得知
+    // 自己漏勾了协议、还是验证码格式不对。逐项说明原因。
+    if (!canSend.value) {
+      uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
+    } else if (!/^\d{4,6}$/.test(code.value)) {
+      uni.showToast({ title: '请输入 4-6 位验证码', icon: 'none' })
+    } else {
+      uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
+    }
+    return
+  }
 
   uni.showLoading({ title: '登录中...' })
   const ok = await userStore.login(phone.value, code.value)

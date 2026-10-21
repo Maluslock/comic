@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -133,6 +134,18 @@ func TestPhotographerHandler_Detail_InvalidID(t *testing.T) {
 func TestPhotographerHandler_List_Success(t *testing.T) {
 	db := &scriptableDBTX{
 		queryFn: func(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+			// List() now issues a second batch query for the price roll-up; the fake
+			// must answer each query with its own shape, not one canned result.
+			if strings.Contains(sql, "bool_or") {
+				return &valueRows{
+					rows: [][]interface{}{
+						// 摄影师 10：有固定价 399 + 面议 → 「¥399 起」
+						{int64(10), int32Ptr(399), false, true, int32(2)},
+						// 摄影师 20：只有 0 元套餐 → 「互勉」
+						{int64(20), (*int32)(nil), true, false, int32(1)},
+					},
+				}, nil
+			}
 			return &valueRows{
 				rows: [][]interface{}{
 					{
@@ -175,6 +188,16 @@ func TestPhotographerHandler_List_Success(t *testing.T) {
 	}
 	if resp.List[1].Name != "Photographer B" {
 		t.Errorf("expected second photographer 'Photographer B', got '%s'", resp.List[1].Name)
+	}
+	// 价格汇总必须真的从第二个查询落到响应里（只断言 Name 会漏掉整条装配断链）
+	if resp.List[0].MinPrice == nil || *resp.List[0].MinPrice != 399 {
+		t.Errorf("expected photographer A minPrice 399, got %v", resp.List[0].MinPrice)
+	}
+	if !resp.List[0].HasNegotiable || resp.List[0].HasFree || resp.List[0].ServiceCount != 2 {
+		t.Errorf("unexpected A roll-up: %+v", resp.List[0])
+	}
+	if resp.List[1].MinPrice != nil || !resp.List[1].HasFree || resp.List[1].ServiceCount != 1 {
+		t.Errorf("unexpected B roll-up: %+v", resp.List[1])
 	}
 }
 

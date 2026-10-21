@@ -20,6 +20,11 @@ export interface Photographer extends User {
   reviewCount: number
   orderCount: number
   userId?: number
+  /** 价格汇总：仅列表接口（/v1/photographers）返回；其余接口为 undefined → 卡片不显示价格 */
+  minPrice?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
 }
 
 export interface Work {
@@ -36,12 +41,27 @@ export interface Work {
 export interface Service {
   id: string
   name: string
-  price: number
+  /** null = 面议/negotiable, 0 = 互勉/mutual, >0 = 固定价/fixed */
+  price: number | null
   description: string
   duration: number
 }
 
-export interface Booking {
+/** Pricing mode derived from the booked package: fixed price / mutual (free) / negotiable. */
+export type PriceMode = 'fixed' | 'mutual' | 'negotiable'
+
+/** Single-round quote lifecycle for negotiable bookings. */
+export type PriceStatus = 'agreed' | 'awaiting_quote' | 'quoted' | 'rejected'
+
+/** Fields every order view carries so the amount can be rendered by state. */
+export interface OrderPriceFields {
+  priceMode: PriceMode
+  priceStatus: PriceStatus
+  quotePrice: number | null
+  totalPrice: number
+}
+
+export interface Booking extends OrderPriceFields {
   id: string
   photographerId: string
   coserId: string
@@ -49,7 +69,6 @@ export interface Booking {
   date: string
   time: string
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  totalPrice: number
   remarks?: string
   createdAt: number
 }
@@ -138,6 +157,11 @@ export interface PhotographerItem {
   reviewCount: number
   orderCount: number
   tags: string[]
+  /** 见 Photographer.minPrice：仅列表接口返回 */
+  minPrice?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
 }
 
 export interface WorkItem {

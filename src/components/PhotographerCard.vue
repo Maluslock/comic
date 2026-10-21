@@ -5,8 +5,11 @@
       <view class="header">
         <text class="name">{{ photographer.name }}</text>
         <view class="rating">
-          <text class="star">★</text>
-          <text class="score">{{ photographer.rating }}</text>
+          <template v-if="hasRating">
+            <text class="star">★</text>
+            <text class="score">{{ photographer.rating }}</text>
+          </template>
+          <text v-else class="no-rating">暂无评分</text>
         </view>
       </view>
       <text v-if="photographer.description" class="desc">{{ photographer.description }}</text>
@@ -19,18 +22,35 @@
       </view>
       <view class="footer">
         <text class="location">{{ photographer.location }}</text>
-        <text class="count">{{ photographer.orderCount }}单已接</text>
+        <view class="footer-right">
+          <text class="count">{{ photographer.orderCount }}单已接</text>
+          <text
+            v-if="price.text"
+            class="price"
+            :class="`price-${price.tone}`"
+          >{{ price.text }}</text>
+        </view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Photographer } from '@/types'
+import { describePrice } from '@/utils/price'
 
 const props = defineProps<{
   photographer: Photographer
 }>()
+
+// 评分现在按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0。
+// 显示「★ 0」会让人以为被打了 0 分，所以无评价时改文案。
+const hasRating = computed(() => (props.photographer.reviewCount ?? 0) > 0)
+
+// 价格文案取「最低可成交价」（闲鱼/淘宝多 SKU 惯例）；
+// 接口没返回价格汇总时 describePrice 给空串，这里直接不渲染。
+const price = computed(() => describePrice(props.photographer))
 
 function goDetail() {
   uni.navigateTo({
@@ -107,6 +127,11 @@ function goDetail() {
   margin-left: 2rpx;
 }
 
+.no-rating {
+  color: $dark-text-tertiary;
+  font-size: 20rpx;
+}
+
 .desc {
   font-size: 22rpx;
   color: $dark-text-secondary;
@@ -141,6 +166,13 @@ function goDetail() {
   padding-top: 6rpx;
 }
 
+.footer-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10rpx;
+}
+
 .location {
   font-size: 20rpx;
   color: $dark-text-tertiary;
@@ -149,5 +181,29 @@ function goDetail() {
 .count {
   font-size: 20rpx;
   color: $dark-text-tertiary;
+}
+
+// 价格是卡片上最需要被扫到的信息，故比同行的元信息略大、加粗。
+// 四个色都实测过在卡片底（含按下态 rgba(255,255,255,0.08) 叠加）上 ≥ 4.5:1。
+.price {
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.price-price {
+  color: $warning-color; // 固定价：金钱色
+}
+
+.price-free {
+  color: $success-color; // 互勉
+}
+
+.price-negotiable {
+  color: $neon-cyan; // 面议
+}
+
+.price-muted {
+  color: $dark-text-tertiary; // 暂未设置
+  font-weight: 400;
 }
 </style>

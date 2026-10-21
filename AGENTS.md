@@ -270,6 +270,69 @@ Order list/detail responses include joined photographer/service fields:
 - `src/pages/order/list.vue` calls `apiPut(\`/v1/bookings/${id}/status\`, { status })` for confirm/complete/cancel and handles 409 with a toast.
 - `src/pages/booking/index.vue` loads `GET /v1/photographers/:id/timeslots` and marks occupied slots as disabled.
 
+## 完整性约束与核心不变量（2026-09-24 第二轮整体 review）
+
+第二轮 review（业务逻辑 + 核心功能）发现并修复了 6 个缺陷（报告 B-10~B-15）。以下约束是**不变量**，
+改动相关代码时不要绕过 —— 每一条都对应一次真实复现。
+
+### 订单/预约（server/migrations/000029 + booking_service.go）
+
+| 不变量 | 实现 | 为什么不能只在应用层做 |
+|--------|------|------------------------|
+| 同一摄影师同一 date+time 只能有一个未取消订单 | 部分唯一索引 `uniq_bookings_active_slot (photographer_id, date, time) WHERE status <> 'cancelled'` + `Create` 把 23505 映射成 `ErrConflict`(409) | `CountConflictBookings`(SELECT) → INSERT 是 TOCTOU。实测 12 个线程屏障对齐的并发请求曾 **7 个成功、7 条订单落同一档期**；加索引后复测 1 个 201 / 11 个 409。`WHERE status <> 'cancelled'` 是为了让取消释放时段 |
+| 不能预约过去的档期 | `isPastSlot(date, time, now)`：按**服务器本地时区**，日期是硬约束，今天的已过时刻同样拒绝；时刻不可解析时退化为只比日期 | 前端 picker 的 `:start` 只是 UX，小程序端可绕 |
+| 摄影师不能预约自己的套餐 | `Create` 比较下单人与 `GetPhotographerById().UserID` → `ErrSelfBooking`(400) | 自成交无业务含义，还会污染单量并给自评铺路 |
+
+前端配套约定：**取本地日期一律用 `src/utils/date.ts` 的 `localDateKey`/`todayKey`，不要用
+`new Date().toISOString().split('T')[0]`** —— 后者是 UTC，东八区 00:00–08:00 会得到「昨天」
+（预约页默认日期曾因此落在过去的一天）。
+
+### 展示统计数字（迁移 000030 + `RecomputePhotographerStats`）
+
+`photographers` 的 **rating / review_count / order_count 是派生字段**，必须由事实推导，不要手工写：
+
+| 字段 | 事实来源 |
+|------|----------|
+| `rating` | `ROUND(AVG(reviews.rating), 1)`，无评价为 `0` |
+| `review_count` | `reviews` 条数 |
+| `order_count` | **仅** `status = 'completed'` 的 bookings 数（确认/待确认不算） |
+
+- 三者此前都是种子死数字，与事实脱钩（显示 4.9 分 / 234 条 / 567 单，真实 2 条 / 1 单），
+  且插评价、订单流转都不更新它们；`order_count` 还被默认排序和「接单最多」当排序键用。
+- 现在 `RecomputePhotographerStats(photographerID)` 会在**评价写入后**与**订单状态流转后**
+  （`UpdateStatus` / `AdminUpdateStatus`，含取消）被调用。它是整表重算（不是 ±1），幂等、可自我修正；
+  best-effort，失败只记日志，不影响主流程。
+- 历史数据由**迁移 000030** 一次性回填（纯派生重算，down 是空操作）。回填后数字显著变小是**预期**的 ——
+  数字要说真话。要让演示数据重新丰满，请补真实的评价/订单，**不要改回假数字**。
+- 前端约定：无评价时后端给 `rating = 0 / reviewCount = 0`，卡片与详情页显示**「暂无评分」**，
+  不要直接渲染「★ 0」（会被读成被打 0 分）。
+
+### 评价（review_service.go + 迁移 000029）
+
+- 评价必须对应**已完成**订单（`HasCompletedBookingWith`）→ 否则 403；不能自评；`uniq_reviews_user_photographer` 唯一索引兜重复 → 23505 映射 409。
+- 评价写入后调用 `RecomputePhotographerStats`（见上节「展示统计数字」）重算派生字段；best-effort，失败只记日志，不能让派生字段把已成功的评价变成「提交失败」。
+
+### 摄影师列表排序（photographers.sql.go `SearchPhotographers` $7）
+
+- 排序键：`all`（默认，评分优先）/`hot`（评价数）/`rating`/`order`（接单数）/`new`（入驻时间）。用 `CASE WHEN $7::text = ...` 参数绑定，**不要拼接字符串**。
+- 每档末尾都有 `p.id DESC` 作为**稳定 tiebreaker**：排序键不唯一时 LIMIT/OFFSET 翻页会在页间重复或漏行（默认排序同样需要）。
+- **`sort` 必须进列表缓存键**（`photographer_handler.go` 的 `cacheKey`），否则切筛选会命中另一档的缓存。
+- 列表页筛选栏（热门/评分最高/接单最多/最新入驻）此前只改高亮、不传参数，四个筛选返回结果完全一致；现已接线。
+
+### 聊天
+
+- `MarkSessionRead` 现在也走 `assertParticipant`：非会话成员标记已读 → 403（与 `ListMessages`/`SendMessage` 口径一致）。此前返回 200 并给自己写一条无意义的 `chat_read_state` 行。
+
+### 越权（IDOR）现状：已核查，基本干净
+
+2026-09-24 做过一轮跨账号对抗测试：15 项「用 A 的 token 读写 B 的资源」（订单读取/改状态/报价/接受报价、
+跨摄影师读接单、非本人会话读消息与发消息、收藏/关注/通知的越权写）**全部 403/404**。
+模式是统一的：**路径/body 里的用户 id 不参与授权判断**，一律以 token 身份（`middleware.UserID(c)`）为准，
+handler 用 `assertSelf` 或 `...ForUser` 后缀的 service 方法；`POST /favorites`、`POST /follows`、
+`POST /notifications` 会直接**覆盖** body 里的 `userId`。新增接口请沿用这套模式。
+（注意：这类探针容易误报 —— `POST /favorites {userId: 别人的}` 返回 201 看着像越权，实际落库是 token 用户；
+判断越权要看**落库归属**，不能只看响应码。）
+
 ## 收藏 + 聊天模块
 
 Favorites and real chat implemented across Tasks 1-9.
@@ -423,7 +486,7 @@ Every user can activate a photographer identity (闲鱼式双角色) — one-cli
 |--------|----------|----------|
 | `POST` | `/api/v1/photographers/activate` | Auth required. `{name, mode, intro}` → 201 `{photographerId}`; **idempotent** — already-activated users get their existing id back (no field update) |
 | `GET` | `/api/v1/photographers/by-user/:userId` | Auth required. Profile by user → 200, or 404 `not activated` |
-| `GET` | `/api/v1/bookings/photographer/:photographerId` | Auth required. Orders-panel list with coser join fields (`coserName`/`coserAvatar`/`coserPhone`) |
+| `GET` | `/api/v1/bookings/photographer/:photographerId` | Auth required。接单面板列表，含 coser join 字段（`coserName`/`coserAvatar`/`coserPhone`）。**`coserPhone` 按状态遮罩**（2026-09-24，B-06）：只有 `confirmed`/`completed` 才返回号码，`pending`/`cancelled` 返回空串 —— 摄影师确认前没有联系对方的正当必要，接单后要赴约必须联系得上。遮罩在 `bookings.sql.go` 的 SQL 里（`CASE WHEN b.status IN (...)`），**不是前端隐藏**，所以号码根本不出现在响应体里；前端据 `status` 显示「确认接单后可见」。**面议单报价阶段也不可见**（`price_status=quoted` 时 `status` 仍是 `pending`）—— 即「报价 ≠ 成交」，号码在 coser 接受报价、订单转 `confirmed` 的那一刻才出现（2026-09-24 真库实测）。改动这条 SQL 时别把 `CASE` 拿掉 |
 | `PUT` | `/api/v1/bookings/:id/status` | Now takes `actorTag` (`coser` default / `photographer`). **Cross-actor guard**: `actorTag=photographer` requires the caller's own photographer id to equal the booking's `photographerId`, else **403 forbidden**; coser-tagged updates require `coserId == caller`. Actor check runs before transition validation |
 | `POST` | `/api/v1/login`, `GET /api/v1/me` | Responses include `photographerId` |
 
@@ -449,7 +512,7 @@ Every user can activate a photographer identity (闲鱼式双角色) — one-cli
 
 - `GET /photographers/by-user/:userId` omits `mode`/`certified` in its response (`GetByUser` builds `PhotographerItem` without them; `GET /photographers/:id` includes both). Follow-up: align GetByUser fields.
 - `TestPhotographerHandler_Detail_Success` panics — its mock scan order predates the `user_id`/`mode`/`certified` columns added by P2a. Follow-up: update the mock to `GetPhotographerById` scan order.
-- UI login phone regex `^1[3-9]\d{9}$` blocks API test photographer account `10000000001` (pre-existing); photographer H5 flows verified via API-token storage injection.
+- ~~UI login phone regex `^1[3-9]\d{9}$` blocks API test photographer account `10000000001`~~ **该说法已证伪（2026-09-24 实测）**：`src/pages/login/index.vue:102` 的 `canSend` 是 `^1[3-9]\d{9}$` **或** `^100\d{8}$`，`10000000001` 实际可正常 UI 登录；摄影师账号无需再靠 token 注入。另：登录按钮禁用时点击无反馈是另一个真缺陷（B-05，已修）。
 - `certified` badge is display-only — application flow is P2b scope.
 
 ## 后台管理系统（P2c）
@@ -793,7 +856,7 @@ C 端摄影师自助认证申请（提交 → 审核中 → 已通过/已驳回 
 
 - `photographer_cert_applications`：#1 approved(樱花落2)、#2 rejected(暗夜骑士3)、#3 approved(古风公子4)、#4 approved(暗夜骑士3)、#5 rejected(测试摄影师5)、#6 rejected(测试摄影师5, Task 2 测试恢复)、#7 rejected(测试摄影师5, Task 3 E2E 提交后恢复)。
 - `photographers.certified`：光影行者/樱花落/暗夜骑士/古风公子 = true；测试摄影师 = false（E2E 全程未改 certified）。
-- 测试摄影师（13800138000）处于 rejected → 可直接演示「已驳回 + 重新申请」完整流程。
+- 测试摄影师（13700000005，photographer_id=5；**不是** coser 的 13800138000）处于 rejected → 可直接演示「已驳回 + 重新申请」完整流程。2026-09-24 实测 DB：测试摄影师名下仅剩 #5 rejected（#6/#7 已在 E2E 收尾时清理）。
 
 ### 后续（不在本次）
 
@@ -1277,3 +1340,93 @@ C 端图片上传（头像 / 作品图 / 认证样片），针对「服务器无
 
 - 门禁：`go build`/`go vet`/`go test ./...` 全绿 · `vue-tsc` EXIT=0 · prod api 已重建 · `migrate.sh` 含 000025 重放 EXIT=0。
 
+
+## 摄影师自助定价 + 单轮报价
+
+摄影师可**自主维护自己的套餐与价格**（支持 互勉 / 面议），并对「面议」订单进行**单轮报价**（摄影师报价 → coser 接受/拒绝）。实现于 photographer-pricing 计划（9 个任务，commits `bf057e5`…`8b192b6`，PR [#1](https://github.com/Maluslock/comic/pull/1)），**已推 prod 并在 prod 运行**（`master` 未合并前 prod 领先于 master）。
+
+**背景**：原 `services` 是平台级 4 个固定套餐，且 `GetDetail` 无摄影师过滤 → **任意摄影师详情返回同一份列表**，摄影师表无任何价格字段，`mode`(free/pay/both) 与价格彻底脱钩。导致定价权在平台而非供给方、`mode=互勉` 的摄影师仍挂 ¥399、且无协商通道。
+
+### 三态价格语义（唯一口径）
+
+| `services.price` | 语义 | 下单后 |
+|------------------|------|--------|
+| `NULL` | **面议** | `price_mode='negotiable'`、`price_status='awaiting_quote'`、`total_price=0`（占位） |
+| `0` | **互勉** | `price_mode='mutual'`、`price_status='agreed'`、`total_price=0` |
+| `> 0` | **固定价** | `price_mode='fixed'`、`price_status='agreed'`、`total_price=价格` |
+
+> `bookings.total_price` **NOT NULL**（Go 字段 `int32`，非指针）：互勉/面议写 `0` 占位，展示靠 `price_status`；coser 接受报价时由 SQL 把 `total_price = quote_price` 落定。
+
+### 数据模型（无新表，一表两用）
+
+| Migration | 内容 |
+|-----------|------|
+| `000026_photographer_services` | `services` 加 `photographer_id`（**NULL=平台模板**，非 NULL=该摄影师套餐）、`is_active`、`sort_order`；`price DROP NOT NULL`；建索引；**把 4 个模板复制给每位现有摄影师**（幂等，重放插 0 行） |
+| `000027_booking_pricing` | `bookings` 加 `price_mode`/`quote_price`/`price_status` + **快照** `service_name`/`service_duration`；存量单回填快照 |
+| `000028_drop_bookings_service_fk` | **删掉** `bookings_service_id_fkey` —— 使「删除套餐」不被历史订单阻断（历史靠快照；归属由应用层校验） |
+
+### 后端 API
+
+| Method | Endpoint | Behavior |
+|--------|----------|----------|
+| `GET` | `/api/v1/photographers/services/mine` | Auth。我的套餐（**含未上架**）→ `{list}`，`price` 为 `number/null`；非摄影师 403 |
+| `POST` | `/api/v1/photographers/services` | Auth。`{name,price?,description?,duration,isActive?,sortOrder?}` → 201 `{id}`；`price` 空=面议、`0`=互勉；负数 400「invalid price」；非摄影师 403 |
+| `PUT` | `/api/v1/photographers/services/:id` | Auth。全量更新（SQL `WHERE id AND photographer_id`，消除 TOCTOU）→ 200 `{ok}`；**非本人 403**、不存在 404 |
+| `DELETE` | `/api/v1/photographers/services/:id` | Auth。硬删 → 200 `{ok}`；**非本人 403**、不存在 404 |
+| `GET` | `/api/v1/services/templates` | **公开**。平台模板（`photographer_id IS NULL ORDER BY sort_order,id`）→ bare array，供「一键预填」 |
+| `POST` | `/api/v1/bookings/:id/quote` | Auth。摄影师报价 `{price}`（∈(0,99999]）→ 200；非本人 403、状态不符 409、越界 400 |
+| `POST` | `/api/v1/bookings/:id/quote/respond` | Auth。coser `{accept}`（**必填**，缺 400）→ 200；非本人 403、状态不符 409 |
+
+**改造既有端点**：`GET /photographers/:id` 的 `services` 改为**该摄影师自有且上架**的（`GetActiveServicesByPhotographer`）；`POST /bookings` **请求体不变**，服务端按套餐 `price` 推导 `price_mode` + 写名称/时长快照 + **校验套餐归属**（不属于该摄影师 → 404 `ErrInvalidReference`）。
+
+### 报价状态机（不改既有 `canTransition`）
+
+```
+[固定价] 下单 → agreed                        → pending → confirmed → completed
+[互勉]   下单 → agreed, total=0                → pending → confirmed → completed
+[面议]   下单 → awaiting_quote, total=0
+                ↓ 摄影师报价(0,99999]
+              quoted (quote_price=X)
+                ↓ coser 接受            ↓ coser 拒绝
+        status=confirmed            status=cancelled
+        price_status=agreed         price_status=rejected
+        total_price=X
+```
+- **报价即接单意愿**：被接受后直接 `confirmed`（不做二次确认）
+- **status 守卫**（fix）：`UpdateStatus`/`AdminUpdateStatus` 拒绝「未定报价的面议单被直接 confirm」（409）；`Quote`/`RespondQuote` 也要求 `status='pending'` —— 否则**已取消订单可被"接受"复活**
+
+### 前端（C 端，暗色霓虹）
+
+| Piece | File | Role |
+|-------|------|------|
+| 我的套餐管理页 | `src/pages/photographer/services.vue` | list/form 双模式：`共 N 个套餐` / 一键预填 / 新增；卡片含 名称·三态价格·时长·上架·编辑·删除；表单 名称≤50(必填)、**价格留空=面议**、时长、说明≤200；403→toast「仅摄影师可管理套餐」并返回；空态带「＋ 新增套餐」CTA |
+| 三态价格渲染 | `src/utils/mappers.ts` `formatPrice()` | 统一 `¥399` / `互勉` / `面议`；用于 `ServiceCard.vue`、`photographer/detail.vue`、`booking/index.vue` |
+| 订单报价交互 | `src/utils/quote.ts` + `order/list.vue`、`order/detail.vue`、`photographer/orders.vue` | 按 `priceStatus` 渲染 `待报价`/`已报价 ¥N`/`¥N`/`已拒绝`；摄影师「报价」（`uni.showModal{editable}`，校验整数 1..99999）+ coser「接受/拒绝」（二次确认）；**409 → toast「报价状态已变化，请刷新」**并刷新 |
+| 入口 | `activate.vue` | 已激活卡新增 `.btn-services` 套餐管理 |
+| 路由 | `src/pages.json` | `pages/photographer/services` |
+
+### 实现中修复的真实缺陷（值得记）
+
+| # | 缺陷 | 根因 / 修法 |
+|---|------|-------------|
+| 1 | **Booking 字段顺序与 SQL 列顺序错位** | 计划自相矛盾（结构体插在 `UpdatedAt` 前、SQL 追加在 `updated_at` 后）→ **fake 单测全过但真实扫描必 500**。修：统一为 SQL 顺序。**教训：fakes 不能证明 SQL↔struct 对齐，必须真库验证** |
+| 2 | **无主（模板）套餐可被任意摄影师预约**（越权串价） | 归属校验写成 `ownerID != nil && ...`，跳过了 `photographer_id IS NULL` → 改为 `ownerID == nil \|\| ownerID != req.PhotographerID` 一律 404 |
+| 3 | **删除有历史订单的套餐 → FK 违约 500** | `bookings_service_id_fkey` 无 ON DELETE 且 `service_id` NOT NULL → 迁移 `000028` 删 FK + join 加 `COALESCE(s.name,'')` |
+| 4 | **报价状态机忽略订单 status → 已取消订单可被"接受"复活** | 加 `status='pending'` 守卫（服务层） |
+| 5 | **快照写了但从不读** | `ListByUser` 用 live join 的 `s.name`，改套餐名会改写历史订单名 → 改为**快照优先**、live 兜底（`COALESCE(b.service_name, s.name, '')`） |
+| 6 | `/services/templates` 返回**全部 24 条**而非 4 条模板 | `GetServices` 无 `photographer_id IS NULL` 过滤 → 补过滤 |
+| 7 | **部署地雷**：`deploy/Dockerfile.api` 拷贝 **gitignored 预编译二进制** | 单独 `docker compose build api` 会发出 crash-loop 镜像（二进制陈旧 + 动态链接 vs alpine/musl）→ **必须先 `bash deploy/build.sh`**（静态编译 + H5 build）再 compose build |
+
+### 验证
+
+- `go build`/`go vet`/`go test ./...` 全绿 · `npx vue-tsc --noEmit` EXIT=0
+- `server/scripts/smoke.sh`：**dev 78/78 ×2 + prod 78/78**，全 EXIT=0（新增套餐/报价用例组；并修掉因「模板不可预约」而失效的硬编码 `serviceId`）
+- agent-browser 实测：套餐三态渲染、面议下单→待报价→报价→接受→`¥X`/confirmed 全链路
+- 测试与 UI 文档见 `docs/qa/`（40 条用例 Excel + 测试报告 + UI 优化建议 + **多页 UI 审计**）
+
+### 后续（不在本次）
+
+- **多页 UI 审计发现的系统性配色问题未全修**（见 `docs/qa/2026-09-21-C端多页UI审计-第二批.md`）：S-1 白字+青色/渐变底 2.43:1（订单详情状态横幅、首页渐变条）、S-2 标签 pill 紫字压紫底 3.8:1（首页/漫展详情）。**目前只在「我的套餐管理页」单页修过，未在共享层收敛**
+- 系统性 load-time 错误（每页 1 条 `agent-browser errors` 的 `{text:"Object"}`，登录页也有、无可见破坏、SPA 切换不触发）——**未定位**，需 CDP init-script 抓栈
+- 订单详情「拍摄时长」恒显 0 —— `BookingItem` DTO 未返回 `serviceDuration`（快照列已有值）
+- 面议被拒后**不支持重报**（单轮设计）；报价无留言/附件；套餐无排序 UI（`sort_order` 字段已留）

@@ -29,12 +29,18 @@ type BookingItem struct {
 	Time               string `json:"time"`
 	Status             string `json:"status"`
 	TotalPrice         int32  `json:"totalPrice"`
+	PriceMode          string `json:"priceMode"`
+	QuotePrice         *int32 `json:"quotePrice"`
+	PriceStatus        string `json:"priceStatus"`
 	Remarks            string `json:"remarks"`
 	CreatedAt          string `json:"createdAt"`
 	PhotographerName   string `json:"photographerName"`
 	PhotographerAvatar string `json:"photographerAvatar"`
 	PhotographerUserID int64  `json:"photographerUserId"`
 	ServiceName        string `json:"serviceName"`
+	// ServiceDuration is the下单时冻结的时长快照（分钟）。指针对待：快照列可能为空
+	// （000027 之前的旧行），此时前端应显示「—」而不是 0 分钟。
+	ServiceDuration *int32 `json:"serviceDuration"`
 }
 
 type BookingItemWithCoser struct {
@@ -57,6 +63,13 @@ var (
 	ErrInvalidTransition = errors.New("invalid status transition")
 	ErrBookingNotFound   = errors.New("booking not found")
 	ErrForbidden         = errors.New("forbidden")
+	ErrQuoteNotAllowed   = errors.New("quote not allowed in current state")
+	// ErrPastDate：不允许预约已经过去的日期/时刻。前端选择器也把下限设成今天，
+	// 但那是 UX；这里才是权威校验（小程序端可绕）。
+	ErrPastDate = errors.New("cannot book a date in the past")
+	// ErrSelfBooking：摄影师不能预约自己的套餐。自成交没业务意义，还会污染订单数、
+	// 并为「自己给自己评价」铺路。
+	ErrSelfBooking = errors.New("cannot book your own service")
 )
 
 func canTransition(from, to string) bool {
@@ -70,18 +83,45 @@ func canTransition(from, to string) bool {
 	}
 }
 
+// isPastSlot 判断请求的档期是否已经过去，按**服务器本地时区**判断（唯一能自证的时钟）。
+// 日期是硬约束；时刻是尽力而为：今天的、已经过去的小时同样拒绝；若时刻字符串解析不了，
+// 退化为「只比日期」——宁可放行一个过期时刻，也不要误杀一个合法预约。
+func isPastSlot(date time.Time, clock string, now time.Time) bool {
+	y, m, d := date.Date()
+	if h, mm, ok := parseClock(clock); ok {
+		slot := time.Date(y, m, d, h, mm, 0, 0, now.Location())
+		return slot.Before(now)
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	return time.Date(y, m, d, 0, 0, 0, 0, now.Location()).Before(today)
+}
+
+func parseClock(s string) (int, int, bool) {
+	for _, layout := range []string{"15:04", "15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.Hour(), t.Minute(), true
+		}
+	}
+	return 0, 0, false
+}
+
 func bookingToItem(b repository.Booking) *BookingItem {
 	return &BookingItem{
-		ID:             b.ID,
-		PhotographerID: b.PhotographerID,
-		CoserID:        b.CoserID,
-		ServiceID:      b.ServiceID,
-		Date:           b.Date.Format("2006-01-02"),
-		Time:           b.Time,
-		Status:         b.Status,
-		TotalPrice:     b.TotalPrice,
-		Remarks:        derefString(b.Remarks),
-		CreatedAt:      b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:              b.ID,
+		PhotographerID:  b.PhotographerID,
+		CoserID:         b.CoserID,
+		ServiceID:       b.ServiceID,
+		Date:            b.Date.Format("2006-01-02"),
+		Time:            b.Time,
+		Status:          b.Status,
+		TotalPrice:      b.TotalPrice,
+		PriceMode:       b.PriceMode,
+		QuotePrice:      b.QuotePrice,
+		PriceStatus:     b.PriceStatus,
+		Remarks:         derefString(b.Remarks),
+		CreatedAt:       b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ServiceName:     derefString(b.ServiceName),
+		ServiceDuration: b.ServiceDuration,
 	}
 }
 
@@ -115,11 +155,20 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 	if err != nil {
 		return nil, err
 	}
+	if isPastSlot(date, req.Time, time.Now()) {
+		return nil, ErrPastDate
+	}
 
-	if profile, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil && profile.UserID != nil {
-		blocked, err := s.queries.IsBlockedPair(ctx, int64(req.CoserID), *profile.UserID)
-		if err == nil && blocked {
-			return nil, ErrForbidden
+	if profile, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil {
+		// 摄影师不能给自己下单：自成交没有业务含义，且会让「自己给自己评价」变成可能。
+		if profile.UserID != nil && *profile.UserID == int64(req.CoserID) {
+			return nil, ErrSelfBooking
+		}
+		if profile.UserID != nil {
+			blocked, err := s.queries.IsBlockedPair(ctx, int64(req.CoserID), *profile.UserID)
+			if err == nil && blocked {
+				return nil, ErrForbidden
+			}
 		}
 	}
 
@@ -136,23 +185,70 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		remarks = &req.Remarks
 	}
 
-	// 下单时按所选服务的真实价格写入订单金额；服务不存在时回退 0（不阻塞下单）。
+	// 套餐归属校验：套餐必须归属于被预约的摄影师，且**必须处于上架状态**。平台模板套餐
+	// （photographer_id IS NULL）不作为可售商品，一律拒绝；套餐不存在或已下架（ErrNoRows）
+	// 同样视为无效引用 —— 下架校验放在这里，避免「列表里看不到、下单却能成」。
+	// 不掩盖真实 DB 故障。
+	serviceID64 := int64(req.ServiceID)
+	ownerID, err := s.queries.GetBookableServicePhotographerID(ctx, serviceID64)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidReference
+		}
+		return nil, err
+	}
+	if ownerID == nil || int64(req.PhotographerID) != *ownerID {
+		return nil, ErrInvalidReference
+	}
+
+	// 按套餐价格推导定价模式，并冻结名称/时长快照。
+	// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
+	// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
 	var totalPrice int32
-	if svc, err := s.queries.GetServiceById(ctx, int64(req.ServiceID)); err == nil {
-		totalPrice = svc.Price
+	priceMode := "fixed"
+	priceStatus := "agreed"
+	var snapName *string
+	var snapDuration *int32
+	svc, err := s.queries.GetServiceById(ctx, serviceID64)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidReference
+		}
+		return nil, err
+	}
+	if svc.Price != nil {
+		totalPrice = *svc.Price
+	}
+	snapDuration = &svc.Duration
+	name := svc.Name
+	snapName = &name
+	switch {
+	case svc.Price == nil:
+		priceMode, priceStatus = "negotiable", "awaiting_quote"
+	case *svc.Price == 0:
+		priceMode = "mutual"
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{
-		PhotographerID: req.PhotographerID,
-		CoserID:        req.CoserID,
-		ServiceID:      req.ServiceID,
-		Date:           date,
-		Time:           req.Time,
-		Status:         "pending",
-		TotalPrice:     totalPrice,
-		Remarks:        remarks,
+		PhotographerID:  req.PhotographerID,
+		CoserID:         req.CoserID,
+		ServiceID:       req.ServiceID,
+		Date:            date,
+		Time:            req.Time,
+		Status:          "pending",
+		TotalPrice:      totalPrice,
+		Remarks:         remarks,
+		PriceMode:       priceMode,
+		PriceStatus:     priceStatus,
+		ServiceName:     snapName,
+		ServiceDuration: snapDuration,
 	})
 	if err != nil {
+		// 唯一约束 uniq_bookings_active_slot 是并发下的最终防线：两个请求可能都通过了上面的
+		// 冲突检查（TOCTOU），但只有一条能落库，另一条在这里被 DB 挡下 → 仍然回 409。
+		if isUniqueViolation(err) {
+			return nil, ErrConflict
+		}
 		if isForeignKeyViolation(err) {
 			return nil, ErrInvalidReference
 		}
@@ -177,7 +273,11 @@ func (s *BookingService) ListByUser(ctx context.Context, userID int32) ([]Bookin
 		item.PhotographerName = b.PhotographerName
 		item.PhotographerAvatar = b.PhotographerAvatar
 		item.PhotographerUserID = derefInt64(b.PhotographerUserID)
-		item.ServiceName = b.ServiceName
+		// 显示优先级：快照 b.service_name > 实时 join s.name（为快照回填前的旧行兜底）。
+		item.ServiceName = derefString(b.Booking.ServiceName)
+		if item.ServiceName == "" {
+			item.ServiceName = b.ServiceName
+		}
 		items = append(items, *item)
 	}
 	return items, nil
@@ -199,6 +299,11 @@ func (s *BookingService) ListByPhotographer(ctx context.Context, photographerID 
 	items := make([]BookingItemWithCoser, 0, len(rows))
 	for _, b := range rows {
 		item := bookingToItem(b.Booking)
+		// 显示优先级：快照 b.service_name > 实时 join s.name（为快照回填前的旧行兜底）。
+		item.ServiceName = derefString(b.Booking.ServiceName)
+		if item.ServiceName == "" {
+			item.ServiceName = derefString(b.ServiceName)
+		}
 		items = append(items, BookingItemWithCoser{
 			BookingItem: *item,
 			CoserName:   b.CoserName,
@@ -236,6 +341,11 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 	if !canTransition(b.Status, newStatus) {
 		return nil, ErrInvalidTransition
 	}
+	// 面议订单在价格达成一致前不得置为 confirmed：否则会跳过报价/响应流程
+	//（二者都要求 status='pending'），永远停在 total_price=0。
+	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
+		return nil, ErrInvalidTransition
+	}
 	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
 	if err != nil {
 		return nil, err
@@ -253,7 +363,18 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
 	}
 
+	// 单量（order_count）随状态流转变化：完成 +1、取消 -1。整表重算而不是加减，
+	// 幂等且能自我修正历史上的错误计数。失败只记日志，不影响订单流转结果。
+	s.recomputeStats(ctx, b.PhotographerID)
+
 	return bookingToItem(updated), nil
+}
+
+// recomputeStats 重算摄影师对外的展示数字（评分/评价数/单量）。best-effort。
+func (s *BookingService) recomputeStats(ctx context.Context, photographerID int32) {
+	if err := s.queries.RecomputePhotographerStats(ctx, int64(photographerID)); err != nil {
+		log.Printf("recompute photographer stats failed: %v", err)
+	}
 }
 
 // AdminUpdateStatus bypasses actor ownership checks; the admin is neither coser nor photographer.
@@ -267,6 +388,10 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 		return nil, err
 	}
 	if !canTransition(b.Status, newStatus) {
+		return nil, ErrInvalidTransition
+	}
+	// 面议订单在价格达成一致前不得置为 confirmed（含管理端），否则会锁死报价流程。
+	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
 		return nil, ErrInvalidTransition
 	}
 	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
@@ -283,6 +408,75 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 	case "completed":
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
 		s.notifyPhotographer(ctx, b.PhotographerID, "success", "拍摄已完成", "该预约已标记完成。", b.ID)
+	}
+	// 管理员流转同样影响单量，走同一套重算。
+	s.recomputeStats(ctx, b.PhotographerID)
+	return bookingToItem(updated), nil
+}
+
+// Quote records a single-round price offer from the booking's own photographer.
+// Allowed only while the booking is still pending and price_mode='negotiable'
+// AND price_status='awaiting_quote'; the Go-level status guard rejects non-pending
+// bookings first, and the SQL state guard reports RowsAffected==0 for anything else.
+func (s *BookingService) Quote(ctx context.Context, bookingID int64, actorUserID int64, price int32) (*BookingItem, error) {
+	if price <= 0 || price > 99999 {
+		return nil, ErrInvalidPrice
+	}
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+		return nil, ErrForbidden
+	}
+	if b.Status != "pending" {
+		return nil, ErrQuoteNotAllowed
+	}
+	n, err := s.queries.QuoteBooking(ctx, bookingID, price, b.PhotographerID)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrQuoteNotAllowed
+	}
+	updated, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	return bookingToItem(updated), nil
+}
+
+// RespondQuote lets the booking's own coser accept or reject a pending quote.
+// Accept sets total_price=quote_price, price_status='agreed', status='confirmed';
+// reject sets price_status='rejected', status='cancelled' (both atomically in SQL).
+func (s *BookingService) RespondQuote(ctx context.Context, bookingID int64, actorUserID int64, accept bool) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if int64(b.CoserID) != actorUserID {
+		return nil, ErrForbidden
+	}
+	if b.Status != "pending" {
+		return nil, ErrQuoteNotAllowed
+	}
+	n, err := s.queries.RespondBookingQuote(ctx, bookingID, b.CoserID, accept)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrQuoteNotAllowed
+	}
+	updated, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, err
 	}
 	return bookingToItem(updated), nil
 }

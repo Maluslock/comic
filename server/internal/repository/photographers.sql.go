@@ -97,7 +97,17 @@ WHERE ($1::text IS NULL OR p.name ILIKE '%' || $1 || '%' OR p.description ILIKE 
   ))
   AND (COALESCE(cardinality($6::bigint[]), 0) = 0 OR p.user_id IS NULL OR NOT (p.user_id = ANY($6::bigint[])))
 GROUP BY p.id
-ORDER BY p.rating DESC, p.order_count DESC
+-- $7 = 排序键（列表页筛选栏）。用 CASE 而非拼接字符串：排序键始终走参数绑定。
+-- 每档后面都补 p.id DESC 作为**稳定 tiebreaker**：排序键不唯一时，LIMIT/OFFSET 翻页
+-- 会在页间重复或漏行（同分的人顺序不定）。默认排序同样需要。
+ORDER BY
+  CASE WHEN $7::text = 'new' THEN p.activated_at END DESC NULLS LAST,
+  CASE WHEN $7::text = 'hot' THEN p.review_count END DESC NULLS LAST,
+  CASE WHEN $7::text = 'rating' THEN p.rating END DESC NULLS LAST,
+  CASE WHEN $7::text = 'order' THEN p.order_count END DESC NULLS LAST,
+  CASE WHEN $7 IS NULL OR $7::text = 'all' THEN p.rating END DESC NULLS LAST,
+  CASE WHEN $7 IS NULL OR $7::text = 'all' THEN p.order_count END DESC NULLS LAST,
+  p.id DESC
 LIMIT $4 OFFSET $5
 `
 
@@ -108,6 +118,7 @@ type SearchPhotographersParams struct {
 	Limit          int32   `json:"limit"`
 	Offset         int32   `json:"offset"`
 	ExcludeUserIDs []int64 `json:"exclude_user_ids"`
+	Sort           *string `json:"sort"`
 }
 
 func (q *Queries) SearchPhotographers(ctx context.Context, arg SearchPhotographersParams) ([]PhotographerWithTags, error) {
@@ -118,6 +129,7 @@ func (q *Queries) SearchPhotographers(ctx context.Context, arg SearchPhotographe
 		arg.Limit,
 		arg.Offset,
 		arg.ExcludeUserIDs,
+		arg.Sort,
 	)
 	if err != nil {
 		return nil, err

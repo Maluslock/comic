@@ -13,7 +13,7 @@
 
     <view class="section">
       <view class="section-title">选择日期</view>
-      <picker mode="date" :value="selectedDate" @change="onDateChange">
+      <picker mode="date" :value="selectedDate" :start="minDate" @change="onDateChange">
         <view class="date-picker">
           <text class="date-value">{{ selectedDate || '请选择日期' }}</text>
           <text class="date-arrow">›</text>
@@ -51,8 +51,11 @@
 
     <view class="footer">
       <view class="total">
-        <text class="total-label">合计</text>
-        <text class="total-price">¥{{ selectedService?.price || 0 }}</text>
+        <view class="total-row">
+          <text class="total-label">合计</text>
+          <text class="total-price">{{ selectedService?.price === null ? '面议' : formatPrice(selectedService?.price) }}</text>
+        </view>
+        <text v-if="selectedService?.price === null" class="quote-hint">面议套餐：提交后等待摄影师报价</text>
       </view>
       <view 
         class="btn-primary" 
@@ -72,6 +75,8 @@ import { onLoad } from '@dcloudio/uni-app'
 import ServiceCard from '@/components/ServiceCard.vue'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { formatPrice } from '@/utils/mappers'
+import { todayKey } from '@/utils/date'
 import type { Service } from '@/types'
 
 const ALL_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
@@ -85,6 +90,8 @@ const photographerName = ref('摄影师')
 const photographerAvatar = ref('')
 const photographerLocation = ref('北京')
 const selectedDate = ref('')
+// 日期选择器下限 = 今天（本地时区）。服务端也会拒过去日期，这里只是别让用户白选。
+const minDate = todayKey()
 const selectedTime = ref('')
 const timeSlots = ref<string[]>([])
 const disabledTimes = ref<string[]>([])
@@ -110,8 +117,9 @@ onMounted(() => {
 
   loadServices()
 
-  const today = new Date()
-  selectedDate.value = today.toISOString().split('T')[0]
+  // 用本地日期，不能用 toISOString（UTC）：东八区 00:00–08:00 会得到「昨天」，
+  // 默认就选中一个已过去的日期。
+  selectedDate.value = todayKey()
   loadTimeSlots(selectedDate.value)
 })
 
@@ -333,6 +341,12 @@ async function submitBooking() {
 
 .total {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.total-row {
+  display: flex;
   align-items: baseline;
 }
 
@@ -346,6 +360,12 @@ async function submitBooking() {
   font-weight: 600;
   color: $neon-purple;
   margin-left: $spacing-xs;
+}
+
+.quote-hint {
+  font-size: $font-size-xs;
+  color: $neon-cyan;
+  margin-top: 4rpx;
 }
 
 .btn-primary {

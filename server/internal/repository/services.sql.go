@@ -6,10 +6,12 @@ import (
 	"context"
 )
 
+// getServices returns platform templates (photographer_id IS NULL) only, not per-photographer services.
 const getServices = `-- name: GetServices :many
 SELECT id, name, price, description, duration
 FROM services
-ORDER BY price ASC
+WHERE photographer_id IS NULL
+ORDER BY sort_order ASC, id ASC
 `
 
 func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {
@@ -55,4 +57,194 @@ func (q *Queries) GetServiceById(ctx context.Context, id int64) (Service, error)
 		&i.Duration,
 	)
 	return i, err
+}
+
+const getServicesByPhotographer = `-- name: GetServicesByPhotographer :many
+SELECT id, name, price, description, duration
+FROM services
+WHERE photographer_id = $1 AND is_active = true
+ORDER BY sort_order ASC, id ASC
+`
+
+func (q *Queries) GetActiveServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error) {
+	rows, err := q.db.Query(ctx, getServicesByPhotographer, photographerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Service, 0)
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const getAllServicesByPhotographer = `-- name: GetAllServicesByPhotographer :many
+SELECT id, name, price, description, duration, is_active, sort_order
+FROM services
+WHERE photographer_id = $1
+ORDER BY sort_order ASC, id ASC
+`
+
+func (q *Queries) GetAllServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error) {
+	rows, err := q.db.Query(ctx, getAllServicesByPhotographer, photographerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Service, 0)
+	for rows.Next() {
+		var i Service
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration, &i.IsActive, &i.SortOrder); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+const getServicePhotographerID = `-- name: GetServicePhotographerID :one
+SELECT photographer_id FROM services WHERE id = $1
+`
+
+func (q *Queries) GetServicePhotographerID(ctx context.Context, id int64) (*int64, error) {
+	var pid *int64
+	err := q.db.QueryRow(ctx, getServicePhotographerID, id).Scan(&pid)
+	return pid, err
+}
+
+// getBookableServicePhotographerID is the booking-time ownership check. Unlike
+// GetServicePhotographerID it also requires the package to be on the shelf, so a
+// package the photographer has taken down can no longer be booked from a stale
+// page. Callers map pgx.ErrNoRows to an invalid reference, exactly as they did for
+// a missing package.
+const getBookableServicePhotographerID = `-- name: GetBookableServicePhotographerID :one
+SELECT photographer_id FROM services WHERE id = $1 AND is_active = true
+`
+
+func (q *Queries) GetBookableServicePhotographerID(ctx context.Context, id int64) (*int64, error) {
+	var pid *int64
+	err := q.db.QueryRow(ctx, getBookableServicePhotographerID, id).Scan(&pid)
+	return pid, err
+}
+
+const insertService = `-- name: InsertService :one
+INSERT INTO services (name, price, description, duration, photographer_id, is_active, sort_order)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id
+`
+
+type InsertServiceParams struct {
+	Name           string
+	Price          *int32
+	Description    *string
+	Duration       int32
+	PhotographerID int64
+	IsActive       bool
+	SortOrder      int32
+}
+
+func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (int64, error) {
+	var id int64
+	err := q.db.QueryRow(ctx, insertService,
+		arg.Name, arg.Price, arg.Description, arg.Duration,
+		arg.PhotographerID, arg.IsActive, arg.SortOrder,
+	).Scan(&id)
+	return id, err
+}
+
+const updateService = `-- name: UpdateService :execrows
+UPDATE services
+SET name = $3, price = $4, description = $5, duration = $6,
+    is_active = COALESCE($7, is_active),
+    sort_order = COALESCE($8, sort_order)
+WHERE id = $1 AND photographer_id = $2
+`
+
+// UpdateServiceParams carries the editable fields. IsActive and SortOrder are
+// pointers so that "not supplied" is distinguishable from "set to false / 0": the
+// statement COALESCEs nil back to the stored value, which is what keeps an
+// unpublished package unpublished across an ordinary edit.
+type UpdateServiceParams struct {
+	ID             int64
+	PhotographerID int64
+	Name           string
+	Price          *int32
+	Description    *string
+	Duration       int32
+	IsActive       *bool
+	SortOrder      *int32
+}
+
+func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error) {
+	tag, err := q.db.Exec(ctx, updateService,
+		arg.ID, arg.PhotographerID, arg.Name, arg.Price,
+		arg.Description, arg.Duration, arg.IsActive, arg.SortOrder,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+const deleteService = `-- name: DeleteService :execrows
+DELETE FROM services WHERE id = $1 AND photographer_id = $2
+`
+
+func (q *Queries) DeleteService(ctx context.Context, id, photographerID int64) (int64, error) {
+	tag, err := q.db.Exec(ctx, deleteService, id, photographerID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ServicePriceSummary is the per-photographer price roll-up the list page renders as
+// 「¥最低价 起 / 互勉 / 面议 / 暂未设置」. Only on-the-shelf packages count, so a
+// photographer who took everything down reads as 暂未设置 rather than showing a
+// price nobody can book.
+//
+// Fetched as ONE batch query for a page of ids — never per row — so the list page
+// stays a single round trip.
+type ServicePriceSummary struct {
+	PhotographerID int64  `json:"photographer_id"` // services.photographer_id 是 BIGINT，别窄化
+	MinPrice       *int32 `json:"min_price"`       // 最低固定价（>0）；无固定价时为 NULL
+	HasFree        bool   `json:"has_free"`        // 存在 0 元（互勉）套餐
+	HasNegotiable  bool   `json:"has_negotiable"`  // 存在面议（price IS NULL）套餐
+	ActiveCount    int32  `json:"active_count"`
+}
+
+// bool_or 会忽略 NULL 输入：当一位摄影师的在架套餐全是面议（price IS NULL）时，
+// "price = 0" 对每行都是 NULL，bool_or 便整体返回 NULL —— 扫进 Go 的 bool 会报
+// "cannot scan NULL into *bool"，让整个列表接口 500。故必须 COALESCE 兜底。
+const getServicePriceSummaries = `-- name: GetServicePriceSummaries :many
+SELECT photographer_id,
+       MIN(price) FILTER (WHERE price > 0)     AS min_price,
+       COALESCE(bool_or(price = 0), false)     AS has_free,
+       COALESCE(bool_or(price IS NULL), false) AS has_negotiable,
+       count(*)                                AS active_count
+FROM services
+WHERE is_active AND photographer_id = ANY($1::bigint[])
+GROUP BY photographer_id
+`
+
+func (q *Queries) GetServicePriceSummaries(ctx context.Context, photographerIDs []int64) ([]ServicePriceSummary, error) {
+	rows, err := q.db.Query(ctx, getServicePriceSummaries, photographerIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ServicePriceSummary, 0)
+	for rows.Next() {
+		var i ServicePriceSummary
+		if err := rows.Scan(&i.PhotographerID, &i.MinPrice, &i.HasFree, &i.HasNegotiable, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
 }

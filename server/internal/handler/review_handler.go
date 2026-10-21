@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -38,7 +39,16 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 
 	data, err := h.svc.Create(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		switch {
+		case errors.Is(err, service.ErrReviewNotAllowed):
+			c.JSON(http.StatusForbidden, gin.H{"error": "only completed shoots can be reviewed"})
+		case errors.Is(err, service.ErrReviewSelf):
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot review yourself"})
+		case errors.Is(err, service.ErrReviewDuplicate):
+			c.JSON(http.StatusConflict, gin.H{"error": "already reviewed this photographer"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
 		return
 	}
 	c.JSON(http.StatusCreated, data)

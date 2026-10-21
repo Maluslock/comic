@@ -120,3 +120,40 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 	)
 	return i, err
 }
+
+// HasCompletedBookingWith 报告该用户与摄影师之间是否存在**已完成**的订单。
+// 评价只能针对真实发生过的拍摄：此前 POST /reviews 对任何人都无条件放行。
+const hasCompletedBookingWith = `-- name: HasCompletedBookingWith :one
+SELECT EXISTS (
+  SELECT 1 FROM bookings
+  WHERE photographer_id = $1 AND coser_id = $2 AND status = 'completed'
+)
+`
+
+func (q *Queries) HasCompletedBookingWith(ctx context.Context, photographerID int64, coserID int32) (bool, error) {
+	var ok bool
+	err := q.db.QueryRow(ctx, hasCompletedBookingWith, photographerID, coserID).Scan(&ok)
+	return ok, err
+}
+
+// RecomputePhotographerStats 用真实数据重算摄影师对外的三个展示数字：
+//
+//	rating / review_count ← reviews 表
+//	order_count           ← 已完成的 bookings
+//
+// 这三个字段此前都是种子里的死数字（示例：显示 4.9 分 / 234 条评价 / 567 单，而真实只有
+// 2 条评价、1 单完成），插入评价或订单流转都从不更新它们 —— 数字对用户就没有含义了。
+// 重算是幂等的整表重算（不是 +1/-1），所以可以在任何可能影响它们的事件之后安全调用。
+const recomputePhotographerStats = `-- name: RecomputePhotographerStats :exec
+UPDATE photographers p
+SET rating = COALESCE((SELECT ROUND(AVG(r.rating)::numeric, 1) FROM reviews r WHERE r.photographer_id = p.id), 0.0),
+    review_count = (SELECT COUNT(*) FROM reviews r WHERE r.photographer_id = p.id),
+    order_count = (SELECT COUNT(*) FROM bookings b WHERE b.photographer_id = p.id AND b.status = 'completed'),
+    updated_at = NOW()
+WHERE p.id = $1
+`
+
+func (q *Queries) RecomputePhotographerStats(ctx context.Context, photographerID int64) error {
+	_, err := q.db.Exec(ctx, recomputePhotographerStats, photographerID)
+	return err
+}

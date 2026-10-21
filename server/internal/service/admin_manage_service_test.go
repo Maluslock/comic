@@ -10,6 +10,7 @@ import (
 	"github.com/Maluslock/comic/server/internal/repository"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeRow struct {
@@ -32,6 +33,37 @@ func (r fakeRow) Scan(dest ...any) error {
 	return nil
 }
 
+// fakeRows serves a canned result set for `:many` statements. Scan delegates to
+// the underlying pgx.Row so the same value-assignment rules apply.
+type fakeRows struct {
+	rows []pgx.Row
+	next int
+	err  error
+}
+
+func (r *fakeRows) Close()                                       {}
+func (r *fakeRows) Err() error                                   { return r.err }
+func (r *fakeRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *fakeRows) Conn() *pgx.Conn                              { return nil }
+func (r *fakeRows) RawValues() [][]byte                          { return nil }
+func (r *fakeRows) Values() ([]any, error)                       { return nil, nil }
+
+func (r *fakeRows) Next() bool {
+	if r.next >= len(r.rows) {
+		return false
+	}
+	r.next++
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	if r.next == 0 || r.next > len(r.rows) {
+		return errors.New("fakeRows.Scan: called outside Next()")
+	}
+	return r.rows[r.next-1].Scan(dest...)
+}
+
 func assignScan(dest any, val any) error {
 	switch d := dest.(type) {
 	case *int64:
@@ -44,6 +76,16 @@ func assignScan(dest any, val any) error {
 		v, ok := val.(int32)
 		if !ok {
 			return fmt.Errorf("assignScan: want int32 for %T", dest)
+		}
+		*d = v
+	case **int32:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.(*int32)
+		if !ok {
+			return fmt.Errorf("assignScan: want *int32 for %T", dest)
 		}
 		*d = v
 	case *string:
@@ -62,6 +104,20 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want *string for %T", dest)
 		}
 		*d = v
+	case **int64:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		if v, ok := val.(*int64); ok {
+			*d = v
+			return nil
+		}
+		v, ok := val.(int64)
+		if !ok {
+			return fmt.Errorf("assignScan: want int64 or *int64 for %T", dest)
+		}
+		*d = &v
 	case *time.Time:
 		v, ok := val.(time.Time)
 		if !ok {
@@ -74,6 +130,22 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want bool for %T", dest)
 		}
 		*d = v
+	case *pgtype.Numeric:
+		v, ok := val.(pgtype.Numeric)
+		if !ok {
+			return fmt.Errorf("assignScan: want pgtype.Numeric for %T", dest)
+		}
+		*d = v
+	case *[]string:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.([]string)
+		if !ok {
+			return fmt.Errorf("assignScan: want []string for %T", dest)
+		}
+		*d = v
 	default:
 		return fmt.Errorf("assignScan: unsupported dest %T", dest)
 	}
@@ -81,8 +153,18 @@ func assignScan(dest any, val any) error {
 }
 
 type fakeDBTX struct {
-	rows []pgx.Row
-	next int
+	rows     []pgx.Row
+	next     int
+	execRows int64
+
+	// execArgs records each Exec call's argument list so a test can assert on the
+	// contract a statement has with the database (e.g. nil in a COALESCE slot means
+	// "keep the stored value"). Read only by the tests that need it.
+	execArgs [][]any
+	// queryRows serves `:many` statements. When empty, Query keeps its historical
+	// behaviour of reporting an unexpected call.
+	queryRows []pgx.Rows
+	queryNext int
 }
 
 func (f *fakeDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
@@ -95,11 +177,17 @@ func (f *fakeDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 }
 
 func (f *fakeDBTX) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
-	return nil, errors.New("fakeDBTX: Query not expected")
+	if f.queryNext >= len(f.queryRows) {
+		return nil, errors.New("fakeDBTX: Query not expected")
+	}
+	r := f.queryRows[f.queryNext]
+	f.queryNext++
+	return r, nil
 }
 
-func (f *fakeDBTX) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("fakeDBTX: Exec not expected")
+func (f *fakeDBTX) Exec(_ context.Context, _ string, a ...any) (pgconn.CommandTag, error) {
+	f.execArgs = append(f.execArgs, a)
+	return pgconn.NewCommandTag(fmt.Sprintf("UPDATE %d", f.execRows)), nil
 }
 
 type fakeManageStore struct {
@@ -138,6 +226,7 @@ func bookingScanValues(id int64, status string) []any {
 		(*string)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
+		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 	}
 }
 

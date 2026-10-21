@@ -106,6 +106,10 @@ func (r *valueRows) Scan(dest ...interface{}) error {
 			*dp = v.([]string)
 		case **int32:
 			*dp = v.(*int32)
+		case *bool:
+			*dp = v.(bool)
+		case **bool:
+			*dp = v.(*bool)
 		case *time.Time:
 			*dp = v.(time.Time)
 		case *pgtype.Numeric:

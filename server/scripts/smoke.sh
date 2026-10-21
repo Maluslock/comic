@@ -59,11 +59,19 @@ db_ok() { docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc 'SEL
 dbq() { docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc "$1" 2>/dev/null; }
 
 cleanup() {
-  dbq "DELETE FROM notifications WHERE content LIKE '%#SMOKE%' OR content LIKE '%SMOKE%';
+  # 通知先清（含本次 SMOKE 预约产生的链接通知——其 content 不含 SMOKE，按 link_id 归属删除），
+  # 再删预约，最后删套餐（services 被 bookings FK 引用，必须后删）。
+  dbq "DELETE FROM notifications WHERE content LIKE '%#SMOKE%' OR content LIKE '%SMOKE%'
+         OR link_id IN (SELECT id FROM bookings WHERE remarks LIKE 'SMOKE%');
        DELETE FROM bookings WHERE remarks LIKE 'SMOKE%';
        DELETE FROM reviews WHERE content LIKE 'SMOKE%';
        DELETE FROM chat_messages WHERE content LIKE 'SMOKE%';
-       DELETE FROM user_blocks;" >/dev/null 2>&1
+       DELETE FROM services WHERE name LIKE 'SMOKE-%';" >/dev/null 2>&1
+  # 仅清理本脚本用到的账号相关的拉黑行，避免在 prod 上全表删除。
+  local uid="${COSER_ID:-}"
+  if [ -n "$uid" ]; then
+    dbq "DELETE FROM user_blocks WHERE user_id = $uid OR blocked_user_id = $uid;" >/dev/null 2>&1
+  fi
 }
 trap 'cleanup; echo; [ "$FAIL" -eq 0 ] && echo "PASS=$PASS FAIL=0" || echo "PASS=$PASS FAIL=$FAIL"' EXIT
 
@@ -103,9 +111,20 @@ fi
 
 cleanup
 
+# 动态解析「测试摄影师自有套餐」与「平台模板套餐」：Task 4 起模板套餐
+# （photographer_id IS NULL）不可预约，约拍用例必须用自有套餐，模板单另断言 404。
+SVC_ID=$(curl -s "$BASE_URL/api/v1/photographers/$PID" | jq -r '.services[0].id // empty')
+TPL_SVC=$(curl -s "$BASE_URL/api/v1/services/templates" | jq -r '.[0].id // empty')
+expect_true "测试摄影师自有套餐（serviceId=$SVC_ID）" "$([ -n "$SVC_ID" ] && echo ok)" "ok"
+expect_true "平台模板套餐（serviceId=$TPL_SVC）" "$([ -n "$TPL_SVC" ] && echo ok)" "ok"
+if [ -z "$SVC_ID" ] || [ -z "$TPL_SVC" ]; then
+  printf "${R}无法解析自有套餐/平台模板，无法继续约拍用例。${Z}\n"
+  exit 1
+fi
+
 section "A. 鉴权：无 token 应 401"
 expect 401 "GET  /bookings/$P2_USER" "$BASE_URL/api/v1/bookings/$P2_USER"
-expect 401 "POST /bookings" -X POST "$BASE_URL/api/v1/bookings" -H 'Content-Type: application/json' -d '{"photographerId":1,"serviceId":1,"date":"2026-12-31","time":"09:00"}'
+expect 401 "POST /bookings" -X POST "$BASE_URL/api/v1/bookings" -H 'Content-Type: application/json' -d "{\"photographerId\":1,\"serviceId\":$SVC_ID,\"date\":\"2026-12-31\",\"time\":\"09:00\"}"
 expect 401 "POST /reviews" -X POST "$BASE_URL/api/v1/reviews" -H 'Content-Type: application/json' -d '{"photographerId":1,"rating":5,"content":"x"}'
 expect 401 "GET  /follows/$P2_USER" "$BASE_URL/api/v1/follows/$P2_USER"
 expect 401 "POST /follows" -X POST "$BASE_URL/api/v1/follows" -H 'Content-Type: application/json' -d '{"eventId":1}'
@@ -136,12 +155,14 @@ expect_true "评价 userId 记为 coser" \
 section "D. 约拍状态机"
 expect 200 "时段查询" -H "Authorization: Bearer $T_COSER" "$BASE_URL/api/v1/photographers/$PID/timeslots?date=$SLOT_DATE"
 BOOK=$(curl -s -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
-  -d "{\"photographerId\":$PID,\"coserId\":1,\"serviceId\":1,\"date\":\"$SLOT_DATE\",\"time\":\"$SLOT_TIME\",\"remarks\":\"SMOKE-booking\"}")
+  -d "{\"photographerId\":$PID,\"coserId\":1,\"serviceId\":$SVC_ID,\"date\":\"$SLOT_DATE\",\"time\":\"$SLOT_TIME\",\"remarks\":\"SMOKE-booking\"}")
 BID=$(echo "$BOOK" | jq -r '.id // empty')
 expect_true "下单 201 且金额=服务价 399" "$(echo "$BOOK" | jq -r '.totalPrice // "x"')" "399"
 expect_true "伪造 coserId=1 被忽略" "$(echo "$BOOK" | jq -r '.coserId // "x"')" "$COSER_ID"
 expect 409 "同档重复下单" -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
-  -d "{\"photographerId\":$PID,\"serviceId\":1,\"date\":\"$SLOT_DATE\",\"time\":\"$SLOT_TIME\"}"
+  -d "{\"photographerId\":$PID,\"serviceId\":$SVC_ID,\"date\":\"$SLOT_DATE\",\"time\":\"$SLOT_TIME\"}"
+expect 404 "平台模板套餐（无主）不可预约" -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
+  -d "{\"photographerId\":$PID,\"serviceId\":$TPL_SVC,\"date\":\"2027-03-01\",\"time\":\"09:00\",\"remarks\":\"SMOKE-template\"}"
 expect 403 "coser 冒充摄影师确认" -X PUT "$BASE_URL/api/v1/bookings/$BID/status" -H "Authorization: Bearer $T_COSER" \
   -H 'Content-Type: application/json' -d '{"status":"confirmed","actorTag":"photographer"}'
 expect 403 "photo5 越权确认 photo2 的单" -X PUT "$BASE_URL/api/v1/bookings/$BID/status" -H "Authorization: Bearer $T_P5" \
@@ -196,7 +217,7 @@ expect 404 "拉黑不存在的用户" -X POST "$BASE_URL/api/v1/blocks" -H "Auth
 expect 403 "拉黑后向其发起会话" -X POST "$BASE_URL/api/v1/chat/sessions" -H "Authorization: Bearer $T_COSER" \
   -H 'Content-Type: application/json' -d "{\"otherUserId\":$P2_ID}"
 expect 403 "拉黑后预约该摄影师" -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" \
-  -H 'Content-Type: application/json' -d "{\"photographerId\":$PID,\"serviceId\":1,\"date\":\"2027-01-05\",\"time\":\"10:00\",\"remarks\":\"SMOKE-block\"}"
+  -H 'Content-Type: application/json' -d "{\"photographerId\":$PID,\"serviceId\":$SVC_ID,\"date\":\"2027-01-05\",\"time\":\"10:00\",\"remarks\":\"SMOKE-block\"}"
 expect 403 "反向（被拉黑方主动）" -X POST "$BASE_URL/api/v1/chat/sessions" -H "Authorization: Bearer $T_P2" \
   -H 'Content-Type: application/json' -d "{\"otherUserId\":$COSER_ID}"
 expect_true "拉黑后搜索隐藏该摄影师" \
@@ -208,6 +229,36 @@ expect_true "标签筛选下仍过滤" \
 expect 200 "解除拉黑" -X DELETE "$BASE_URL/api/v1/blocks/$P2_USER" -H "Authorization: Bearer $T_COSER"
 expect_true "解除后搜索恢复可见" \
   "$(curl -s -H "Authorization: Bearer $T_COSER" "$BASE_URL/api/v1/photographers?size=20" | jq -r "[.list[]?|select(.id==$PID)]|length")" "1"
+
+section "J. 套餐自助定价 + 单轮报价"
+expect 200 "摄影师读我的套餐" -H "Authorization: Bearer $T_P2" "$BASE_URL/api/v1/photographers/services/mine"
+NEW_SVC=$(curl -s -X POST "$BASE_URL/api/v1/photographers/services" -H "Authorization: Bearer $T_P2" \
+  -H 'Content-Type: application/json' -d '{"name":"SMOKE-面议","price":null,"description":"","duration":60}')
+NEG_SVC=$(echo "$NEW_SVC" | jq -r '.id // empty')
+expect_true "建面议套餐（price=null）" "$([ -n "$NEG_SVC" ] && echo ok)" "ok"
+expect 403 "非本人改套餐（coser）" -X PUT "$BASE_URL/api/v1/photographers/services/$NEG_SVC" \
+  -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
+  -d '{"name":"hack","price":1,"description":"","duration":60}'
+expect 403 "他摄影师改套餐（跨归属）" -X PUT "$BASE_URL/api/v1/photographers/services/$NEG_SVC" \
+  -H "Authorization: Bearer $T_P5" -H 'Content-Type: application/json' \
+  -d '{"name":"hack2","price":1,"description":"","duration":60}'
+QB=$(curl -s -X POST "$BASE_URL/api/v1/bookings" -H "Authorization: Bearer $T_COSER" -H 'Content-Type: application/json' \
+  -d "{\"photographerId\":$PID,\"serviceId\":$NEG_SVC,\"date\":\"2027-02-01\",\"time\":\"10:00\",\"remarks\":\"SMOKE-nego\"}")
+QBID=$(echo "$QB" | jq -r '.id // empty')
+expect_true "面议下单 priceStatus=awaiting_quote" "$(echo "$QB" | jq -r '.priceStatus // "none"')" "awaiting_quote"
+expect_true "面议下单 totalPrice=0（占位）" "$(echo "$QB" | jq -r '.totalPrice // "x"')" "0"
+expect 200 "摄影师报价 888" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":888}'
+expect 400 "报价越界（100000）" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":100000}'
+expect 400 "报价越界（-1）" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P2" -H 'Content-Type: application/json' -d '{"price":-1}'
+expect 403 "他摄影师报价" -X POST "$BASE_URL/api/v1/bookings/$QBID/quote" \
+  -H "Authorization: Bearer $T_P5" -H 'Content-Type: application/json' -d '{"price":1}'
+QR=$(curl -s -X POST "$BASE_URL/api/v1/bookings/$QBID/quote/respond" -H "Authorization: Bearer $T_COSER" \
+  -H 'Content-Type: application/json' -d '{"accept":true}')
+expect_true "接受后 totalPrice=888" "$(echo "$QR" | jq -r '.totalPrice // "x"')" "888"
+expect_true "接受后 status=confirmed" "$(echo "$QR" | jq -r '.status // "none"')" "confirmed"
 
 section "I. 账号安全：退出所有设备"
 T_TMP=$(login "$COSER_PHONE")

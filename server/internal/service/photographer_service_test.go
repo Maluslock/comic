@@ -334,3 +334,42 @@ func TestMyProfile_NotPhotographer(t *testing.T) {
 		t.Fatalf("MyProfile want ErrNotPhotographer, got %v", err)
 	}
 }
+
+func newServiceTestSvc(store worksStore, db repository.DBTX) *PhotographerService {
+	return &PhotographerService{queries: repository.New(db), works: store}
+}
+
+func TestCreateService_NotPhotographer(t *testing.T) {
+	svc := newServiceTestSvc(&fakeWorksStore{profileErr: pgx.ErrNoRows}, &fakeDBTX{})
+	_, err := svc.CreateService(context.Background(), 99, ServiceUpsertRequest{Name: "x", Duration: 60})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want ErrForbidden, got %v", err)
+	}
+}
+
+func TestCreateService_NegativePrice(t *testing.T) {
+	neg := int32(-1)
+	svc := newServiceTestSvc(
+		&fakeWorksStore{profile: repository.PhotographerWithTags{ID: 3}},
+		&fakeDBTX{},
+	)
+	_, err := svc.CreateService(context.Background(), 9, ServiceUpsertRequest{Name: "x", Price: &neg, Duration: 60})
+	if !errors.Is(err, ErrInvalidPrice) {
+		t.Fatalf("want ErrInvalidPrice, got %v", err)
+	}
+}
+
+func TestUpdateService_NotOwner(t *testing.T) {
+	owner := int64(42)
+	svc := newServiceTestSvc(
+		&fakeWorksStore{profile: repository.PhotographerWithTags{ID: 7}},
+		&fakeDBTX{
+			execRows: 0, // UPDATE 命中 0 行（归属不符）
+			rows:     []pgx.Row{fakeRow{values: []any{owner}}}, // GetServicePhotographerID -> 42
+		},
+	)
+	err := svc.UpdateService(context.Background(), 99, 5, ServiceUpsertRequest{Name: "x", Duration: 60})
+	if !errors.Is(err, ErrServiceForbidden) {
+		t.Fatalf("want ErrServiceForbidden, got %v", err)
+	}
+}

@@ -36,10 +36,12 @@
               <text class="service-name">{{ order.serviceName }}</text>
               <text class="order-time">{{ order.date }} {{ order.time }}</text>
             </view>
-            <text class="order-price">¥{{ order.totalPrice }}</text>
+            <text class="order-price">{{ renderOrderPrice(order) }}</text>
           </view>
 
           <view class="order-footer" @click.stop>
+            <view v-if="isQuotedOwn(order)" class="btn-outline danger" @click="rejectQuote(order.id)">拒绝</view>
+            <view v-if="isQuotedOwn(order)" class="btn-primary" @click="acceptQuote(order.id)">接受报价</view>
             <view v-if="order.status === 'pending' || order.status === 'confirmed'" class="btn-outline" @click="cancelOrder(order.id)">取消预约</view>
             <view v-if="order.status === 'confirmed'" class="btn-primary" @click="confirmOrder(order.id)">确认完成</view>
             <view v-if="order.status === 'completed'" class="btn-outline" @click="goReview(order)">去评价</view>
@@ -57,9 +59,12 @@
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import type { OrderPriceFields } from '@/types'
+import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } from '@/utils/quote'
 
-interface DisplayOrder {
+interface DisplayOrder extends OrderPriceFields {
   id: string
+  coserId?: string
   photographerId?: string
   photographerUserId?: number
   photographerName: string
@@ -70,7 +75,6 @@ interface DisplayOrder {
   duration?: number
   date: string
   time: string
-  totalPrice: number
   status: string
   remark: string
   createTime: string | number
@@ -116,6 +120,7 @@ async function loadBookings() {
 
     const serverOrders = (res || []).map((b: any) => ({
       id: String(b.id),
+      coserId: b.coserId === undefined || b.coserId === null ? '' : String(b.coserId),
       photographerId: String(b.photographerId),
       photographerUserId: b.photographerUserId,
       photographerName: b.photographerName || `摄影师${b.photographerId}`,
@@ -126,6 +131,9 @@ async function loadBookings() {
       date: b.date,
       time: b.time,
       totalPrice: b.totalPrice || 0,
+      priceMode: toPriceMode(b.priceMode),
+      quotePrice: b.quotePrice ?? null,
+      priceStatus: toPriceStatus(b.priceStatus),
       status: b.status || 'pending',
       remark: b.remarks || '',
       createTime: b.createdAt || Date.now()
@@ -203,6 +211,26 @@ function confirmOrder(id: string) {
     content: '确认拍摄已完成？',
     success: (res) => { if (res.confirm) updateStatus(id, 'completed') }
   })
+}
+
+function isOwnOrder(order: DisplayOrder): boolean {
+  if (!userStore.user) return false
+  // Orders on this page are fetched for the logged-in user; stored/local rows
+  // carry no coserId but are still the user's own.
+  if (!order.coserId) return true
+  return order.coserId === String(userStore.user.id)
+}
+
+function isQuotedOwn(order: DisplayOrder): boolean {
+  return order.priceMode === 'negotiable' && order.priceStatus === 'quoted' && isOwnOrder(order)
+}
+
+function acceptQuote(id: string) {
+  confirmRespondQuote(id, true, loadBookings)
+}
+
+function rejectQuote(id: string) {
+  confirmRespondQuote(id, false, loadBookings)
 }
 
 function goDetail(id: string) {
@@ -431,6 +459,11 @@ function goHome() {
   border-radius: $border-radius-md;
   font-size: $font-size-sm;
   color: $dark-text-secondary;
+
+  &.danger {
+    color: $error-color;
+    border-color: rgba(239, 68, 68, 0.4);
+  }
 
   &:active {
     background: $dark-bg-card-hover;

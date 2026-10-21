@@ -28,8 +28,8 @@
             <image :src="order.coserAvatar || ''" class="coser-avatar" mode="aspectFill" />
             <view class="order-info">
               <text class="coser-name">{{ order.coserName || `Coser${order.coserId}` }}</text>
-              <text class="coser-phone">电话：{{ order.coserPhone || '未留电话' }}</text>
-              <text class="service-name">{{ order.serviceName || '服务' }} · ¥{{ order.totalPrice }}</text>
+              <text class="coser-phone">{{ renderCoserPhone(order) }}</text>
+              <text class="service-name">{{ order.serviceName || '服务' }} · {{ renderOrderPrice(order) }}</text>
             </view>
           </view>
 
@@ -37,7 +37,8 @@
 
           <view class="order-footer">
             <view v-if="order.status === 'pending'" class="btn-outline danger" @click="rejectOrder(order.id)">拒绝</view>
-            <view v-if="order.status === 'pending'" class="btn-primary" @click="updateStatus(order.id, 'confirmed')">确认接单</view>
+            <view v-if="order.status === 'pending' && !isNegotiablePending(order)" class="btn-primary" @click="updateStatus(order.id, 'confirmed')">确认接单</view>
+            <view v-if="canQuote(order)" class="btn-primary" @click="quoteOrder(order.id)">报价</view>
             <view v-if="order.status === 'confirmed'" class="btn-primary" @click="updateStatus(order.id, 'completed')">完成拍摄</view>
           </view>
         </view>
@@ -51,8 +52,10 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { apiGet, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import type { OrderPriceFields } from '@/types'
+import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote } from '@/utils/quote'
 
-interface PhotographerOrder {
+interface PhotographerOrder extends OrderPriceFields {
   id: number
   photographerId: number
   coserId: number
@@ -60,7 +63,6 @@ interface PhotographerOrder {
   date: string
   time: string
   status: string
-  totalPrice: number
   remarks?: string
   serviceName?: string
   coserName?: string
@@ -87,12 +89,40 @@ async function loadOrders() {
   }
   try {
     const res = await apiGet<PhotographerOrder[]>(`/v1/bookings/photographer/${userStore.user.photographerId}`)
-    orders.value = res || []
+    orders.value = (res || []).map((o) => ({
+      ...o,
+      priceMode: toPriceMode(o.priceMode),
+      priceStatus: toPriceStatus(o.priceStatus),
+      quotePrice: o.quotePrice ?? null,
+    }))
   } catch {
     orders.value = []
   } finally {
     loading.value = false
   }
+}
+
+function isNegotiablePending(order: PhotographerOrder): boolean {
+  return order.priceMode === 'negotiable' && (order.priceStatus === 'awaiting_quote' || order.priceStatus === 'quoted')
+}
+
+// 手机号是个人信息：摄影师在确认接单前没有联系对方的正当必要，后端据此在 SQL 层就遮罩了
+// （confirmed/completed 才返回），这里只负责把「为什么看不到」讲清楚。接单后要赴约，必须能联系上。
+const PHONE_VISIBLE_STATUSES = ['confirmed', 'completed']
+
+function renderCoserPhone(order: PhotographerOrder): string {
+  if (!PHONE_VISIBLE_STATUSES.includes(order.status)) {
+    return '电话：确认接单后可见'
+  }
+  return `电话：${order.coserPhone || '未留电话'}`
+}
+
+function canQuote(order: PhotographerOrder): boolean {
+  return order.priceMode === 'negotiable' && order.priceStatus === 'awaiting_quote'
+}
+
+function quoteOrder(id: number) {
+  promptQuote(id, loadOrders)
 }
 
 async function updateStatus(id: number, status: string) {

@@ -70,6 +70,9 @@ const total = ref(0)
 const loading = ref(false)
 const currentFilter = ref('all')
 
+// 与后端 SearchPhotographers 的排序键一一对应（$7）：
+// all=评分优先（默认）/ hot=评价数最多 / rating=评分最高 / order=接单最多 / new=最新入驻。
+// 此前这些按钮只改了高亮、不传任何参数，四个筛选返回的结果完全一样。
 const filters = [
   { key: 'all', label: '全部' },
   { key: 'hot', label: '热门' },
@@ -88,6 +91,7 @@ async function loadData(page = 1) {
     const res = await apiGet<PhotographerListResponse>('/v1/photographers', {
       page: String(page),
       size: '10',
+      sort: currentFilter.value,
     })
     const mapped = (res.list || []).map(mapPhotographerItem)
     photographers.value = page === 1 ? mapped : [...photographers.value, ...mapped]

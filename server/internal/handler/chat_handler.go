@@ -111,7 +111,14 @@ func (h *ChatHandler) MarkRead(c *gin.Context) {
 		return
 	}
 	if err := h.svc.MarkSessionRead(c.Request.Context(), sessionID, middleware.UserID(c)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		switch {
+		case errors.Is(err, service.ErrForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		case errors.Is(err, service.ErrSessionNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})

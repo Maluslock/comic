@@ -6,16 +6,18 @@
     <view class="info">
       <view class="header">
         <text class="name">{{ service.name }}</text>
-        <text class="price">¥{{ service.price }}</text>
+        <text class="price">{{ formatPrice(service.price) }}</text>
       </view>
       <text class="desc">{{ service.description }}</text>
-      <text class="duration">{{ service.duration }}分钟</text>
+      <text class="duration">{{ formatDuration(service.duration) }}</text>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import type { Service } from '@/types'
+import { formatPrice } from '@/utils/mappers'
+import { formatDuration } from '@/utils/duration'
 
 defineProps<{
   service: Service

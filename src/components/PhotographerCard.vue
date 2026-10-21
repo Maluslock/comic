@@ -6,7 +6,8 @@
     :hover-stay-time="60"
     @click="goDetail"
   >
-    <image :src="photographer.avatar" class="avatar" mode="aspectFill" />
+    <image v-if="showAvatar" :src="photographer.avatar" class="avatar" mode="aspectFill" />
+    <view v-else class="avatar avatar-fallback"><text class="avatar-initial">{{ initial }}</text></view>
     <view class="info">
       <view class="header">
         <text class="name">{{ photographer.name }}</text>
@@ -55,6 +56,9 @@ const props = withDefaults(defineProps<{
   variant: 'row'
 })
 
+const initial = computed(() => (props.photographer.name || '?').slice(0, 1))
+const showAvatar = computed(() => !!props.photographer.avatar && /\.(jpe?g|png|webp)$/i.test(props.photographer.avatar))
+
 // 评分按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0，
 // 显示「★ 0」会让人以为被打 0 分，故无评价时改文案。
 const hasRating = computed(() => (props.photographer.reviewCount ?? 0) > 0)
@@ -82,6 +86,21 @@ function goDetail() {
 .photographer-card--pressed {
   background: $surface-2;
   transform: scale(0.985);
+}
+
+.avatar.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.22), rgba(255, 162, 77, 0.08));
+  border-color: rgba(255, 107, 0, 0.35);
+}
+
+.avatar-initial {
+  font-size: 40rpx;
+  font-weight: 900;
+  color: #FFB27A;
+  line-height: 1;
 }
 
 .avatar {

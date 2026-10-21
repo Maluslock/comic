@@ -87,6 +87,15 @@
             <text class="section-title">近期漫展</text>
             <text class="section-more" @click="goEventMore">更多 ›</text>
           </view>
+          <view class="range-chips">
+            <view
+              v-for="opt in rangeOptions"
+              :key="opt.key"
+              class="range-chip"
+              :class="{ active: eventRange === opt.key }"
+              @click="eventRange = opt.key"
+            >{{ opt.label }}</view>
+          </view>
           <scroll-view scroll-x class="event-scroll" :show-scrollbar="false">
             <view class="event-list">
               <view
@@ -134,24 +143,24 @@
           </view>
         </view>
 
-        <!-- Featured Works -->
-        <view v-if="store.featuredWorks.length" class="section">
+        <!-- Poster Wall -->
+        <view v-if="posterWall.length" class="section">
           <view class="section-header">
-            <text class="section-title">精选作品</text>
-            <text class="section-more" @click="goPhotographerList">更多 ›</text>
+            <text class="section-title">漫展海报</text>
+            <text class="section-more" @click="goEventMore">更多 ›</text>
           </view>
           <view class="works-grid">
             <view
-              v-for="work in store.featuredWorks.slice(0, 4)"
-              :key="work.id"
+              v-for="ev in posterWall"
+              :key="ev.id"
               class="work-card"
-              @click="goWork(work)"
+              @click="goEventDetail(ev)"
             >
-              <image class="work-img" :src="work.images[0]" mode="aspectFill" />
+              <image class="work-img" :src="ev.cover" mode="aspectFill" />
               <view class="work-scrim" />
               <view class="work-meta">
-                <text class="work-title">{{ work.title }}</text>
-                <text class="work-author">{{ work.photographerName }}</text>
+                <text class="work-title">{{ ev.name }}</text>
+                <text class="work-author">{{ formatShortDate(ev.startDate) }} · {{ ev.location }}</text>
               </view>
             </view>
           </view>
@@ -222,6 +231,12 @@ const store = useHomeStore()
 const { cityOptions } = storeToRefs(store)
 const statusBarHeight = ref(44)
 const currentCity = ref('全部')
+const eventRange = ref<'all' | 'week' | 'month'>('all')
+const rangeOptions = [
+  { key: 'all' as const, label: '全部' },
+  { key: 'week' as const, label: '本周' },
+  { key: 'month' as const, label: '本月' },
+]
 const unreadCount = ref(3)
 const showCityPicker = ref(false)
 
@@ -310,9 +325,25 @@ function lockPageScroll(lock: boolean) {
 }
 
 const filteredEvents = computed(() => {
-  if (currentCity.value === '全部') return store.upcomingEvents
-  return store.events.filter(e => e.status === 'upcoming' && e.location === currentCity.value).slice(0, 6)
+  const base = currentCity.value === '全部'
+    ? store.upcomingEvents
+    : store.events.filter(e => e.status === 'upcoming' && e.location === currentCity.value).slice(0, 6)
+  if (eventRange.value === 'all') return base
+  const days = eventRange.value === 'week' ? 7 : 30
+  const limit = Date.now() + days * 24 * 3600 * 1000
+  return base.filter(e => e.startDate <= limit)
 })
+
+const posterWall = computed(() => {
+  const list = store.events.filter(e => e.status === 'upcoming')
+  const rest = list.length > 6 ? list.slice(6) : list
+  return rest.slice(0, 4)
+})
+
+const formatShortDate = (ts: number) => {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
 
 const filteredPhotographers = computed(() => {
   if (currentCity.value === '全部') return store.photographers
@@ -515,14 +546,17 @@ function onQuickNav(_url: string) {}
 }
 
 .hero-title {
-  display: block;
-  font-size: 64rpx;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 56rpx;
   font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: -1.5rpx;
+  line-height: 1.16;
+  letter-spacing: -1rpx;
   color: #fff;
   text-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.45);
-  margin-bottom: 18rpx;
+  margin-bottom: 16rpx;
 }
 
 .hero-meta {
@@ -687,6 +721,29 @@ function onQuickNav(_url: string) {}
 }
 
 // ===== Events =====
+.range-chips {
+  display: flex;
+  gap: 12rpx;
+  padding: 0 $spacing-md $spacing-sm;
+}
+
+.range-chip {
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $border-subtle;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 22rpx;
+  color: $text-3;
+  line-height: 1.2;
+}
+
+.range-chip.active {
+  border-color: rgba(255, 107, 0, 0.55);
+  background: rgba(255, 107, 0, 0.14);
+  color: #FFB27A;
+  font-weight: 600;
+}
+
 .event-scroll {
   white-space: nowrap;
   padding-bottom: $spacing-xs;

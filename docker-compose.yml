@@ -20,7 +20,8 @@ services:
     image: redis:7-alpine
     container_name: comic-redis
     ports:
-      - "6379:6379"
+      # 宿主 6380 -> 容器 6379（与 server/.env.example 的 REDIS_PORT=6380 对齐）
+      - "6380:6379"
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -34,7 +35,8 @@ services:
       dockerfile: Dockerfile
     container_name: comic-api
     ports:
-      - "8080:8080"
+      # 宿主 8088 -> 容器 8080（前端 vite 代理写死 127.0.0.1:8088；宿主 8080 常被其他服务占用）
+      - "8088:8080"
     depends_on:
       postgres:
         condition: service_healthy

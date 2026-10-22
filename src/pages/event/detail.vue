@@ -107,6 +107,7 @@
                 v-for="p in photographers"
                 :key="p.id"
                 :photographer="p"
+                variant="grid"
               />
             </view>
             <view v-else class="empty-hint">暂无摄影师报名参展</view>

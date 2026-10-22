@@ -110,15 +110,15 @@
     <view class="footer">
       <view class="footer-left">
         <view class="footer-btn" @click="goChat">
-          <text class="footer-icon">◇</text>
+          <image class="footer-icon-img" src="/static/icons/chat.svg" mode="aspectFit" />
           <text>聊天</text>
         </view>
         <view class="footer-btn" @click="collect">
-          <text class="footer-icon">{{ collected ? '★' : '☆' }}</text>
+          <image class="footer-icon-img" :src="collected ? '/static/icons/star-filled.svg' : '/static/icons/star.svg'" mode="aspectFit" />
           <text>收藏</text>
         </view>
         <view class="footer-btn" @click="blockPhotographer">
-          <text class="footer-icon">⊘</text>
+          <image class="footer-icon-img" src="/static/icons/block.svg" mode="aspectFit" />
           <text>拉黑</text>
         </view>
       </view>
@@ -312,9 +312,15 @@ function goReviews() {
   background: $dark-bg-primary;
 }
 
+.footer-icon-img {
+  width: 34rpx;
+  height: 34rpx;
+  margin-bottom: 4rpx;
+}
+
 .content {
   height: 100vh;
-  padding-bottom: 140rpx;
+  padding-bottom: 240rpx;
 }
 
 .header {
@@ -396,39 +402,34 @@ function goReviews() {
 
 .mode-tag {
   padding: 6rpx 16rpx;
-  border: 2rpx solid $neon-purple;
-  color: $neon-purple;
+  border: 1rpx solid rgba(255, 107, 0, 0.5);
+  background: rgba(255, 107, 0, 0.10);
+  color: $brand;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
-  box-shadow: 0 0 8rpx $neon-purple-glow;
 
-  &.pay {
-    border-color: $neon-cyan;
-    color: $neon-cyan;
-    box-shadow: 0 0 8rpx $neon-cyan-glow;
-  }
-
+  &.pay,
   &.both {
-    border-color: $neon-pink;
-    color: $neon-pink;
-    box-shadow: 0 0 8rpx rgba(236, 72, 153, 0.3);
+    border-color: rgba(255, 107, 0, 0.5);
+    background: rgba(255, 107, 0, 0.10);
+    color: $brand;
   }
 }
 
 .cert-badge {
   padding: 6rpx 16rpx;
-  border: 2rpx solid $warning-color;
-  background: rgba(245, 158, 11, 0.12);
-  color: $warning-color;
+  border: 1rpx solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #FBBF24;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
-  box-shadow: 0 0 8rpx rgba(245, 158, 11, 0.25);
 }
 
 .tag {
   padding: 6rpx 16rpx;
-  background: $neon-purple-dim;
-  color: $neon-purple;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  color: $dark-text-secondary;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
 }
@@ -507,18 +508,21 @@ function goReviews() {
 }
 
 .service-name {
+  display: block;
   font-size: $font-size-base;
   font-weight: 500;
   color: $dark-text-primary;
 }
 
 .service-desc {
+  display: block;
   font-size: $font-size-xs;
   color: $dark-text-secondary;
   margin-top: 4rpx;
 }
 
 .service-duration {
+  display: block;
   font-size: $font-size-xs;
   color: $dark-text-tertiary;
   margin-top: 4rpx;

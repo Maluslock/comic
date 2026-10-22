@@ -38,37 +38,37 @@
     <view class="menu-section">
       <view class="menu-group">
         <view class="menu-item" @click="goOrders">
-          <text class="menu-marker">◆</text>
+          <image class="menu-icon" src="/static/icons/menu-order.svg" mode="aspectFit" />
           <text class="menu-text">我的订单</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="goFavorites">
-          <text class="menu-marker fav">★</text>
+          <image class="menu-icon" src="/static/icons/menu-fav.svg" mode="aspectFit" />
           <text class="menu-text">我的收藏</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="goFollows">
-          <text class="menu-marker">◇</text>
+          <image class="menu-icon" src="/static/icons/menu-calendar.svg" mode="aspectFit" />
           <text class="menu-text">关注的漫展</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="goWorks">
-          <text class="menu-marker">◇</text>
+          <image class="menu-icon" src="/static/icons/menu-image.svg" mode="aspectFit" />
           <text class="menu-text">我的作品</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="goReviews">
-          <text class="menu-marker">◆</text>
+          <image class="menu-icon" src="/static/icons/menu-chat.svg" mode="aspectFit" />
           <text class="menu-text">我的评价</text>
           <text class="menu-arrow">›</text>
         </view>
         <view v-if="isPhotographer" class="menu-item" @click="goPhotographerOrders">
-          <text class="menu-marker cam">◈</text>
+          <image class="menu-icon" src="/static/icons/menu-camera.svg" mode="aspectFit" />
           <text class="menu-text">接单管理</text>
           <text class="menu-arrow">›</text>
         </view>
         <view v-else class="menu-item" @click="goActivate">
-          <text class="menu-marker cam">◈</text>
+          <image class="menu-icon" src="/static/icons/menu-camera.svg" mode="aspectFit" />
           <text class="menu-text">我是摄影师</text>
           <text class="menu-arrow">›</text>
         </view>
@@ -76,17 +76,17 @@
 
       <view class="menu-group">
         <view class="menu-item" @click="goSettings">
-          <text class="menu-marker">◇</text>
+          <image class="menu-icon" src="/static/icons/menu-settings.svg" mode="aspectFit" />
           <text class="menu-text">设置</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="goHelp">
-          <text class="menu-marker">?</text>
+          <image class="menu-icon" src="/static/icons/menu-help.svg" mode="aspectFit" />
           <text class="menu-text">帮助与反馈</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="logout">
-          <text class="menu-marker exit">→</text>
+          <image class="menu-icon" src="/static/icons/menu-logout.svg" mode="aspectFit" />
           <text class="menu-text">退出登录</text>
           <text class="menu-arrow">›</text>
         </view>
@@ -412,6 +412,13 @@ function logout() {
   &:active {
     background: $dark-bg-card-hover;
   }
+}
+
+.menu-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: $spacing-sm;
+  flex-shrink: 0;
 }
 
 .menu-marker {

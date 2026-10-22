@@ -67,8 +67,27 @@
         </view>
       </view>
 
-      <view v-if="selectedEvents.length === 0" class="empty-hint">
-        <text>点击日历中的日期查看当天漫展</text>
+      <view v-if="selectedEvents.length === 0" class="month-preview">
+        <view class="preview-header">
+          <text class="preview-title">{{ monthLabel }} · 本月漫展</text>
+          <text class="preview-count">{{ monthPreview.length }} 场</text>
+        </view>
+        <view
+          v-for="evt in monthPreview"
+          :key="evt.id"
+          class="preview-row"
+          @click="goDetail(evt.id)"
+        >
+          <image class="preview-cover" :src="evt.cover" mode="aspectFill" />
+          <view class="preview-info">
+            <text class="preview-name">{{ evt.name }}</text>
+            <text class="preview-meta">{{ formatRange(evt.startDate, evt.endDate) }} · {{ evt.location }}</text>
+          </view>
+          <text class="preview-arrow">&#x203a;</text>
+        </view>
+        <view v-if="!monthPreview.length" class="empty-hint">
+          <text>本月暂无漫展，看看其他月份吧</text>
+        </view>
       </view>
       <view class="bottom-space" />
     </scroll-view>
@@ -196,6 +215,17 @@ const grid = computed<DayCell[]>(() => {
 const selectedEvents = computed(() => {
   if (!selectedKey.value) return []
   return eventMap.value.get(selectedKey.value) || []
+})
+
+const monthPreview = computed(() => {
+  const y = current.value.getFullYear()
+  const m = current.value.getMonth()
+  const start = new Date(y, m, 1).getTime()
+  const end = new Date(y, m + 1, 0, 23, 59, 59).getTime()
+  return events.value
+    .filter((e) => e.startDate <= end && e.endDate >= start)
+    .sort((a, b) => a.startDate - b.startDate)
+    .slice(0, 4)
 })
 
 const selectedLabel = computed(() => {
@@ -367,9 +397,9 @@ onShow(() => {
 
 .today-btn {
   font-size: $font-size-sm;
-  color: $neon-cyan;
+  color: $brand;
   padding: $spacing-xs $spacing-md;
-  border: 1rpx solid $neon-cyan-glow;
+  border: 1rpx solid rgba(255, 107, 0, 0.4);
   border-radius: $border-radius-xl;
 
   &:active {
@@ -674,6 +704,82 @@ onShow(() => {
   border: 4rpx solid $dark-border;
   border-top-color: $neon-cyan;
   animation: spin 1s linear infinite;
+}
+
+.month-preview {
+  margin: $spacing-md;
+  padding: $spacing-md;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+  border-radius: $border-radius-lg;
+}
+
+.preview-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: $spacing-sm;
+}
+
+.preview-title {
+  font-size: $font-size-md;
+  font-weight: 700;
+  color: $dark-text-primary;
+}
+
+.preview-count {
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+}
+
+.preview-row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm 0;
+  border-top: 1rpx solid $border-subtle;
+}
+
+.preview-row:first-of-type {
+  border-top: 0;
+}
+
+.preview-cover {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: $border-radius-sm;
+  flex-shrink: 0;
+  background: $surface-2;
+}
+
+.preview-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.preview-name {
+  font-size: $font-size-sm;
+  font-weight: 600;
+  color: $dark-text-primary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-meta {
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-arrow {
+  color: $dark-text-tertiary;
+  font-size: 32rpx;
 }
 
 .empty-hint {

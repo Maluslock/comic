@@ -2,7 +2,7 @@
 SELECT id, allcpp_id, name, location, venue, start_date, end_date, cover_url, tags, type_name, status
 FROM comic_events
 WHERE status = 'upcoming' AND del_flag = false
-ORDER BY start_date ASC
+ORDER BY start_date ASC, id ASC
 LIMIT $1;
 
 -- name: GetEventById :one
@@ -42,7 +42,7 @@ FROM comic_events
 WHERE ($1::text IS NULL OR location ILIKE '%' || $1 || '%')
   AND ($2::text IS NULL OR status = $2)
   AND del_flag = false
-ORDER BY start_date ASC
+ORDER BY start_date ASC, id ASC
 LIMIT $3 OFFSET $4;
 
 -- name: UpsertEventFromIngest :one

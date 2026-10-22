@@ -386,7 +386,7 @@ function onQuickNav(_url: string) {}
 // ===== Hero Stage =====
 .hero-stage {
   position: relative;
-  height: 980rpx;
+  height: 900rpx;
   overflow: hidden;
   background: $surface-page;
 }
@@ -402,8 +402,8 @@ function onQuickNav(_url: string) {}
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(12, 13, 20, 0.72) 0%, rgba(12, 13, 20, 0) 26%),
-    linear-gradient(0deg, #0C0D14 0%, rgba(12, 13, 20, 0.92) 24%, rgba(12, 13, 20, 0.38) 55%, rgba(12, 13, 20, 0) 78%);
+    linear-gradient(180deg, rgba(12, 13, 20, 0.74) 0%, rgba(12, 13, 20, 0.10) 30%, rgba(12, 13, 20, 0) 44%),
+    linear-gradient(0deg, #0C0D14 0%, rgba(12, 13, 20, 0.97) 30%, rgba(12, 13, 20, 0.86) 48%, rgba(12, 13, 20, 0.46) 68%, rgba(12, 13, 20, 0.12) 84%, rgba(12, 13, 20, 0) 94%);
 }
 
 .hero-glow {
@@ -555,7 +555,7 @@ function onQuickNav(_url: string) {}
   line-height: 1.16;
   letter-spacing: -1rpx;
   color: #fff;
-  text-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.45);
+  text-shadow: 0 2rpx 2rpx rgba(0, 0, 0, 0.35), 0 8rpx 32rpx rgba(0, 0, 0, 0.65);
   margin-bottom: 16rpx;
 }
 
@@ -588,8 +588,10 @@ function onQuickNav(_url: string) {}
 .ticket {
   position: relative;
   z-index: 3;
-  margin: -64rpx 32rpx 0;
+  margin: -64rpx auto 0;
+  width: calc(100% - 48rpx);
   height: 132rpx;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   border-radius: 24rpx;
@@ -899,7 +901,13 @@ function onQuickNav(_url: string) {}
 .work-scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(12, 13, 20, 0) 46%, rgba(12, 13, 20, 0.9) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(12, 13, 20, 0) 24%,
+    rgba(12, 13, 20, 0.55) 46%,
+    rgba(12, 13, 20, 0.94) 72%,
+    rgba(12, 13, 20, 1) 100%
+  );
 }
 
 .work-meta {

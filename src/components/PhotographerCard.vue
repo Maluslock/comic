@@ -203,22 +203,54 @@ function goDetail() {
 .muted {
   font-size: $t-sm;
   color: $text-3;
+  white-space: nowrap;
 }
 
-/* 首页双列竖卡 */
+/* 首页 / 详情页双列竖卡 */
 .variant-grid {
   flex-direction: column;
+  align-items: flex-start;
   padding: $s-md;
   gap: $s-xs;
 }
 
 .variant-grid .avatar {
-  width: 88rpx;
-  height: 88rpx;
+  width: 96rpx;
+  height: 96rpx;
 }
 
 .variant-grid .info {
   margin-left: 0;
   margin-top: 0;
+  width: 100%;
+}
+
+.variant-grid .header {
+  width: 100%;
+}
+
+.variant-grid .desc {
+  -webkit-line-clamp: 2;
+}
+
+.variant-grid .tags {
+  min-height: 36rpx;
+}
+
+.variant-grid .footer {
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2rpx;
+}
+
+.variant-grid .footer-left,
+.variant-grid .footer-right {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.variant-grid .footer-right {
+  gap: $s-2xs;
 }
 </style>

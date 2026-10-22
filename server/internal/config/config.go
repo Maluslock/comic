@@ -18,6 +18,10 @@ type Config struct {
 	RedisPort     string `mapstructure:"REDIS_PORT"`
 	ServerPort    string `mapstructure:"SERVER_PORT"`
 	AllcppBaseURL string `mapstructure:"ALLCPP_BASE_URL"`
+	AppEnv        string `mapstructure:"APP_ENV"`
+	WXAppID       string `mapstructure:"WX_APPID"`
+	WXAppSecret   string `mapstructure:"WX_APP_SECRET"`
+	WXAPIBase     string `mapstructure:"WX_API_BASE"`
 }
 
 // DSN returns the PostgreSQL connection string.
@@ -52,6 +56,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("REDIS_PORT", "6379")
 	viper.SetDefault("SERVER_PORT", "8080")
 	viper.SetDefault("ALLCPP_BASE_URL", "https://www.allcpp.cn")
+	viper.SetDefault("APP_ENV", "development")
+	viper.SetDefault("WX_APPID", "")
+	viper.SetDefault("WX_APP_SECRET", "")
+	viper.SetDefault("WX_API_BASE", "https://api.weixin.qq.com")
 
 	// Read .env file again to pick up values from the file
 	_ = viper.ReadInConfig()

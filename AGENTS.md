@@ -1451,3 +1451,16 @@ C 端图片上传（头像 / 作品图 / 认证样片），针对「服务器无
   过了这些日期后 3 个用例因「cannot book a date in the past」必挂。改为 `futureDate(n)` 相对今天生成。
 
 验证：`go vet ./...` + `go test ./...` 全绿；首页/摄影师/漫展/登录接口经 H5 与 admin 代理均 200；admin 登录 `admin/admin123` 成功。
+
+## 微信小程序登录（2026-10-22）
+
+新增 `POST /api/v1/auth/wechat/login`：入参 `{code, nickName?, avatar?}`，服务端用 `jscode2session`
+把 `wx.login` 的 code 换成 openid，按 `users.wx_openid` 建号/登录并签发既有 token（7 天）。
+
+- 迁移 `000031_wechat_login`：`users.phone` 改为可空，新增 `wx_openid`（唯一）、`wx_unionid`。
+  微信用户默认没有手机号，`phone` 返回空串；绑定手机号的流程后续再加。
+- 配置：`WX_APPID` / `WX_APP_SECRET` / `WX_API_BASE`。**留空时使用 mock 客户端**，只接受
+  `mock_` 开头的 code（openid 即 code 本身），方便本地与 H5 联调。
+- `APP_ENV=production` 时 `POST /api/v1/login`（手机号 + 1234 开头假验证码）直接返回 403，
+  生产只允许微信登录；接真实短信后需再调整。
+- 小程序端登录页新增「微信一键登录」（`#ifdef MP-WEIXIN`），H5 仍保留手机号表单用于演示。

@@ -26,11 +26,17 @@ func (f *fakeAdminUserStore) SetUserStatus(_ context.Context, _ int64, _ string)
 }
 
 type fakeAuthUserStore struct {
-	user repository.User
-	err  error
+	user       repository.User
+	err        error
+	lastOpenID string
 }
 
 func (f *fakeAuthUserStore) UpsertByPhone(_ context.Context, _, _, _ string) (repository.User, error) {
+	return f.user, f.err
+}
+
+func (f *fakeAuthUserStore) UpsertByWeChat(_ context.Context, openid, _, _, _ string) (repository.User, error) {
+	f.lastOpenID = openid
 	return f.user, f.err
 }
 

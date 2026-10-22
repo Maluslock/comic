@@ -10,6 +10,16 @@
         <text class="hero-tagline">找到你的专属摄影师</text>
       </view>
 
+      <!-- 微信一键登录（仅小程序端） -->
+      <!-- #ifdef MP-WEIXIN -->
+      <view class="wechat-card">
+        <view class="wechat-btn" :class="{ disabled: !agreed }" @click="onWeChatLogin">
+          <text class="wechat-btn-text">微信一键登录</text>
+        </view>
+        <text class="wechat-tip">使用微信身份快速登录，无需注册</text>
+      </view>
+      <!-- #endif -->
+
       <!-- Login Form -->
       <view class="form-card">
         <view class="input-group">
@@ -121,6 +131,32 @@ function sendCode() {
   }, 1000)
 }
 
+async function onWeChatLogin() {
+  if (!agreed.value) {
+    uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
+    return
+  }
+  uni.showLoading({ title: '登录中...' })
+  try {
+    const loginRes = await new Promise<UniApp.LoginRes>((resolve, reject) => {
+      uni.login({ provider: 'weixin', success: resolve, fail: reject })
+    })
+    if (!loginRes.code) throw new Error('no code')
+    const ok = await userStore.loginWeChat(loginRes.code)
+    uni.hideLoading()
+    if (!ok) {
+      uni.showToast({ title: '微信登录失败，请重试', icon: 'none' })
+      return
+    }
+    uni.showToast({ title: '登录成功', icon: 'success' })
+    setTimeout(() => uni.switchTab({ url: '/pages/profile/index' }), 600)
+  } catch (e) {
+    uni.hideLoading()
+    console.error('[Login] wechat login error:', e)
+    uni.showToast({ title: '微信登录已取消', icon: 'none' })
+  }
+}
+
 function showMock(title: string) {
   uni.showToast({ title: `${title}（模拟）`, icon: 'none' })
 }
@@ -214,6 +250,41 @@ async function onLogin() {
   font-size: $font-size-md;
   color: $dark-text-secondary;
   letter-spacing: 6rpx;
+}
+
+// ===== WeChat =====
+.wechat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: $spacing-lg;
+}
+
+.wechat-btn {
+  width: 100%;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $border-radius-lg;
+  background: #07c160;
+  box-shadow: 0 8rpx 24rpx rgba(7, 193, 96, 0.28);
+
+  &.disabled {
+    opacity: 0.5;
+  }
+}
+
+.wechat-btn-text {
+  font-size: $font-size-md;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.wechat-tip {
+  margin-top: $spacing-sm;
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
 }
 
 // ===== Form =====

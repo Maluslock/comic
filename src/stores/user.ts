@@ -28,6 +28,25 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // 微信小程序登录：code 由 uni.login 获取，一次性有效。
+  async function loginWeChat(code: string, profile?: { nickName?: string; avatar?: string }): Promise<boolean> {
+    try {
+      const res = await apiPost<LoginResponse>('/v1/auth/wechat/login', {
+        code,
+        nickName: profile?.nickName || '',
+        avatar: profile?.avatar || '',
+      })
+      token.value = res.token
+      user.value = mapLoginUser(res.user)
+      uni.setStorageSync('token', res.token)
+      uni.setStorageSync('user', JSON.stringify(user.value))
+      return true
+    } catch (e) {
+      console.error('[UserStore] wechat login failed:', e)
+      return false
+    }
+  }
+
   function logout() {
     user.value = null
     token.value = ''
@@ -48,5 +67,5 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  return { user, token, isLoggedIn, login, logout, init }
+  return { user, token, isLoggedIn, login, loginWeChat, logout, init }
 })

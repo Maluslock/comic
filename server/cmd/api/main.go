@@ -180,9 +180,20 @@ func main() {
 		router.GET("/api/v1/reviews/:photographerId", reviewH.ListByPhotographer)
 
 		// Auth
-		authSvc := service.NewAuthService(userRepo, queries)
+		var wxClient service.WeChatClient
+		if cfg.WXAppID == "" {
+			// 本地/演示：没有小程序 AppID 时用 mock，只认 mock_ 开头的 code。
+			wxClient = service.NewMockWeChatClient()
+			log.Println("wechat login: WX_APPID empty, using mock client (accepts mock_* codes)")
+		} else {
+			wxClient = service.NewWeChatClient(cfg.WXAppID, cfg.WXAppSecret, cfg.WXAPIBase)
+			log.Printf("wechat login: appid=%s***", cfg.WXAppID[:min(4, len(cfg.WXAppID))])
+		}
+		authSvc := service.NewAuthService(userRepo, queries, wxClient)
+		authSvc.SetMockLoginAllowed(cfg.AppEnv != "production")
 		authH := handler.NewAuthHandler(authSvc)
 		router.POST("/api/v1/login", authH.Login)
+		router.POST("/api/v1/auth/wechat/login", authH.WeChatLogin)
 		router.GET("/api/v1/me", middleware.AuthRequired(userRepo), func(c *gin.Context) {
 			u, err := userRepo.GetByID(c.Request.Context(), middleware.UserID(c))
 			if err != nil {

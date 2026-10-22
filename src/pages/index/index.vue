@@ -96,7 +96,11 @@
               @click="eventRange = opt.key"
             >{{ opt.label }}</view>
           </view>
-          <scroll-view scroll-x class="event-scroll" :show-scrollbar="false">
+          <view v-if="!filteredEvents.length" class="empty-inline">
+            <text class="empty-inline-title">{{ eventRange === 'all' ? '这个城市还没有漫展' : '这段时间还没有漫展' }}</text>
+            <text class="empty-inline-sub" @click="eventRange = 'all'">看看全部漫展 ›</text>
+          </view>
+          <scroll-view v-else scroll-x class="event-scroll" :show-scrollbar="false">
             <view class="event-list">
               <view
                 v-for="event in filteredEvents"
@@ -154,7 +158,7 @@
               v-for="ev in posterWall"
               :key="ev.id"
               class="work-card"
-              @click="goEventDetail(ev)"
+              @click="goEventDetail(ev.id)"
             >
               <image class="work-img" :src="ev.cover" mode="aspectFill" />
               <view class="work-scrim" />
@@ -172,13 +176,17 @@
             <text class="section-title">推荐摄影师</text>
             <text class="section-more" @click="goPhotographerList">更多 ›</text>
           </view>
-          <view class="photographer-grid">
+          <view v-if="filteredPhotographers.length" class="photographer-grid">
             <PhotographerCard
               v-for="p in filteredPhotographers.slice(0, 4)"
               :key="p.id"
               :photographer="p"
               variant="grid"
             />
+          </view>
+          <view v-else class="empty-inline">
+            <text class="empty-inline-title">{{ currentCity }} 暂无入驻摄影师</text>
+            <text class="empty-inline-sub" @click="selectCity('全部')">看看全部摄影师 ›</text>
           </view>
         </view>
 
@@ -226,8 +234,11 @@ import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
 import HomeSkeleton from '@/components/HomeSkeleton.vue'
 import { useHomeStore } from '@/stores/home'
+import { useUserStore } from '@/stores/user'
+import { apiGet } from '@/api/client'
 
 const store = useHomeStore()
+const userStore = useUserStore()
 const { cityOptions } = storeToRefs(store)
 const statusBarHeight = ref(44)
 const currentCity = ref('全部')
@@ -237,7 +248,7 @@ const rangeOptions = [
   { key: 'week' as const, label: '本周' },
   { key: 'month' as const, label: '本月' },
 ]
-const unreadCount = ref(3)
+const unreadCount = ref(0)
 const showCityPicker = ref(false)
 
 const nearestEvent = computed(() => {
@@ -260,7 +271,21 @@ onMounted(() => {
   if (!store.loaded) {
     store.fetchHomeData()
   }
+  loadUnread()
 })
+
+async function loadUnread() {
+  if (!userStore.isLoggedIn || !userStore.user) {
+    unreadCount.value = 0
+    return
+  }
+  try {
+    const res = await apiGet<{ count: number }>(`/v1/chat/unread/${userStore.user.id}`)
+    unreadCount.value = res.count || 0
+  } catch {
+    unreadCount.value = 0
+  }
+}
 
 function onRefresh() {
   store.refresh()
@@ -335,9 +360,16 @@ const filteredEvents = computed(() => {
 })
 
 const posterWall = computed(() => {
-  const list = store.events.filter(e => e.status === 'upcoming')
-  const rest = list.length > 6 ? list.slice(6) : list
-  return rest.slice(0, 4)
+  // 只展示当前城市、且没被「近期漫展」占用档期的漫展，避免同一场出现两次。
+  const pool = store.events
+    .filter(e => e.status === 'upcoming' && (currentCity.value === '全部' || e.location === currentCity.value))
+    .sort((a, b) => a.startDate - b.startDate)
+  const recentDays = new Set<string>()
+  for (const e of pool) {
+    if (recentDays.size >= 6) break
+    recentDays.add(new Date(e.startDate).toDateString())
+  }
+  return pool.filter(e => !recentDays.has(new Date(e.startDate).toDateString())).slice(0, 4)
 })
 
 const formatShortDate = (ts: number) => {
@@ -386,7 +418,7 @@ function onQuickNav(_url: string) {}
 // ===== Hero Stage =====
 .hero-stage {
   position: relative;
-  height: 900rpx;
+  height: 820rpx;
   overflow: hidden;
   background: $surface-page;
 }
@@ -403,7 +435,7 @@ function onQuickNav(_url: string) {}
   inset: 0;
   background:
     linear-gradient(180deg, rgba(12, 13, 20, 0.74) 0%, rgba(12, 13, 20, 0.10) 30%, rgba(12, 13, 20, 0) 44%),
-    linear-gradient(0deg, #0C0D14 0%, rgba(12, 13, 20, 0.97) 30%, rgba(12, 13, 20, 0.86) 48%, rgba(12, 13, 20, 0.46) 68%, rgba(12, 13, 20, 0.12) 84%, rgba(12, 13, 20, 0) 94%);
+    linear-gradient(0deg, #0C0D14 0%, rgba(12, 13, 20, 0.97) 32%, rgba(12, 13, 20, 0.92) 50%, rgba(12, 13, 20, 0.62) 70%, rgba(12, 13, 20, 0.18) 86%, rgba(12, 13, 20, 0) 96%);
 }
 
 .hero-glow {
@@ -595,9 +627,10 @@ function onQuickNav(_url: string) {}
   display: flex;
   align-items: center;
   border-radius: 24rpx;
-  background: linear-gradient(105deg, #FF8C33 0%, #FF6B00 46%, #E05A00 100%);
-  box-shadow: 0 18rpx 48rpx rgba(255, 107, 0, 0.28), inset 0 1rpx 0 rgba(255, 255, 255, 0.35);
-  color: #0C0D14;
+  background: linear-gradient(120deg, rgba(36, 40, 59, 0.96) 0%, rgba(21, 23, 34, 0.98) 100%);
+  border: 1rpx solid rgba(255, 107, 0, 0.34);
+  box-shadow: 0 18rpx 44rpx rgba(0, 0, 0, 0.46), inset 0 1rpx 0 rgba(255, 255, 255, 0.06);
+  color: $text-1;
 
   &:active {
     transform: scale(0.985) translateY(2rpx);
@@ -629,7 +662,7 @@ function onQuickNav(_url: string) {}
 .ticket-label {
   font-size: 24rpx;
   font-weight: 600;
-  opacity: 0.75;
+  color: rgba(248, 250, 252, 0.62);
   margin-right: 8rpx;
 }
 
@@ -637,12 +670,14 @@ function onQuickNav(_url: string) {}
   font-size: 52rpx;
   font-weight: 900;
   line-height: 1;
+  color: $brand;
   font-variant-numeric: tabular-nums;
 }
 
 .ticket-unit {
   font-size: 24rpx;
   font-weight: 700;
+  color: $brand;
   margin-left: 6rpx;
 }
 
@@ -661,15 +696,20 @@ function onQuickNav(_url: string) {}
 }
 
 .ticket-cta {
-  font-size: 30rpx;
+  font-size: 26rpx;
   font-weight: 800;
   letter-spacing: 1rpx;
+  color: #0C0D14;
+  background: $brand;
+  padding: 14rpx 28rpx;
+  border-radius: 999rpx;
 }
 
 .ticket-arrow {
-  font-size: 40rpx;
+  font-size: 32rpx;
   font-weight: 700;
   line-height: 1;
+  color: rgba(248, 250, 252, 0.55);
 }
 
 // ===== Sections (Shared) =====
@@ -1050,5 +1090,24 @@ function onQuickNav(_url: string) {}
   color: $neon-cyan;
   font-size: $font-size-md;
   font-weight: 700;
+}
+
+.empty-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 56rpx 32rpx;
+  background: $surface-1;
+  border: 1rpx solid $border-subtle;
+  border-radius: $r-lg;
+}
+.empty-inline-title {
+  font-size: 28rpx;
+  color: $text-secondary;
+}
+.empty-inline-sub {
+  font-size: 26rpx;
+  color: $brand;
 }
 </style>

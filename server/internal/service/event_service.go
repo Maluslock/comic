@@ -90,9 +90,31 @@ func (s *EventService) GetDetail(ctx context.Context, id int64) (*EventDetail, e
 		works = []repository.FeaturedWork{}
 	}
 
+	items := mapPhotographers(photographers)
+	if len(items) > 0 {
+		ids := make([]int64, 0, len(items))
+		for _, p := range items {
+			ids = append(ids, p.ID)
+		}
+		if sums, err := s.queries.GetServicePriceSummaries(ctx, ids); err == nil {
+			byID := make(map[int64]repository.ServicePriceSummary, len(sums))
+			for _, sum := range sums {
+				byID[sum.PhotographerID] = sum
+			}
+			for i := range items {
+				if sum, ok := byID[items[i].ID]; ok {
+					items[i].MinPrice = sum.MinPrice
+					items[i].HasFree = sum.HasFree
+					items[i].HasNegotiable = sum.HasNegotiable
+					items[i].ServiceCount = sum.ActiveCount
+				}
+			}
+		}
+	}
+
 	return &EventDetail{
 		EventItem:     mapSingleEvent(event),
-		Photographers: mapPhotographers(photographers),
+		Photographers: items,
 		FeaturedWorks: mapFeaturedWorks(works),
 	}, nil
 }

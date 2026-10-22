@@ -20,6 +20,7 @@
           <view v-if="!item.read" class="unread-dot"></view>
         </view>
       </view>
+      <view v-if="!notifications.length" class="empty-tip">暂无系统通知</view>
     </view>
 
     <view class="section">
@@ -44,6 +45,7 @@
           </view>
         </view>
       </view>
+      <view v-if="!sessions.length" class="empty-tip">暂无聊天会话</view>
     </view>
   </view>
 </template>
@@ -364,5 +366,12 @@ function goChat(session: any) {
   justify-content: center;
   padding: 0 8rpx;
   box-shadow: 0 0 8rpx rgba($neon-pink, 0.3);
+}
+
+.empty-tip {
+  padding: 24rpx 0;
+  text-align: center;
+  font-size: 26rpx;
+  color: $text-tertiary;
 }
 </style>

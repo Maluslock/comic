@@ -15,7 +15,7 @@
 
     <scroll-view scroll-y class="content">
       <view v-if="orders.length === 0" class="empty">
-        <text class="empty-icon">◇</text>
+        <image class="empty-icon" src="/static/icons/menu-order.svg" mode="aspectFit" />
         <text class="empty-text">暂无订单</text>
         <view class="empty-btn" @click="goHome">去逛逛</view>
       </view>
@@ -322,8 +322,9 @@ function goHome() {
 }
 
 .empty-icon {
-  font-size: 100rpx;
-  color: $neon-purple;
+  width: 96rpx;
+  height: 96rpx;
+  opacity: 0.6;
   margin-bottom: $spacing-md;
 }
 

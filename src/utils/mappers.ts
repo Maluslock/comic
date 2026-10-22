@@ -113,6 +113,7 @@ export function mapWorkItem(w: any): Work {
     description: '',
     tags: [],
     createdAt: Date.now(),
+    photographerName: w.photographerName || '',
   }
 }
 

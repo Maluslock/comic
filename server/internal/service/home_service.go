@@ -62,6 +62,12 @@ type PhotographerItem struct {
 	MutualIntro string   `json:"mutualIntro"`
 	Certified   bool     `json:"certified"`
 	Tags        []string `json:"tags"`
+
+	// 价格汇总（与摄影师列表一致）；无上架套餐时保持零值 → 前端显示「暂未设置」
+	MinPrice      *int32 `json:"minPrice"`
+	HasFree       bool   `json:"hasFree"`
+	HasNegotiable bool   `json:"hasNegotiable"`
+	ServiceCount  int32  `json:"serviceCount"`
 }
 
 type WorkItem struct {
@@ -95,11 +101,35 @@ func (s *HomeService) GetHomeData(ctx context.Context) (*HomeResponse, error) {
 
 	events := mapEvents(data.UpcomingEvents)
 
+	photographers := mapPhotographers(data.RecommendedPhotographers)
+	if len(photographers) > 0 {
+		ids := make([]int64, 0, len(photographers))
+		for _, p := range photographers {
+			ids = append(ids, p.ID)
+		}
+		sums, err := s.repo.GetServicePriceSummaries(ctx, ids)
+		if err != nil {
+			return nil, fmt.Errorf("home service: price summaries: %w", err)
+		}
+		byID := make(map[int64]repository.ServicePriceSummary, len(sums))
+		for _, s := range sums {
+			byID[s.PhotographerID] = s
+		}
+		for i := range photographers {
+			if s, ok := byID[photographers[i].ID]; ok {
+				photographers[i].MinPrice = s.MinPrice
+				photographers[i].HasFree = s.HasFree
+				photographers[i].HasNegotiable = s.HasNegotiable
+				photographers[i].ServiceCount = s.ActiveCount
+			}
+		}
+	}
+
 	return &HomeResponse{
 		Banners:                  mapBanners(data.Banners),
 		UpcomingEvents:           events,
 		HotTags:                  mapTags(data.HotTags),
-		RecommendedPhotographers: mapPhotographers(data.RecommendedPhotographers),
+		RecommendedPhotographers: photographers,
 		FeaturedWorks:            mapWorks(data.FeaturedWorks),
 	}, nil
 }

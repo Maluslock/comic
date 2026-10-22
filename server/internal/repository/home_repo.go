@@ -24,6 +24,11 @@ func NewHomeRepository(queries *Queries) *HomeRepository {
 	return &HomeRepository{queries: queries}
 }
 
+// GetServicePriceSummaries returns the price roll-up for the given photographers.
+func (r *HomeRepository) GetServicePriceSummaries(ctx context.Context, photographerIDs []int64) ([]ServicePriceSummary, error) {
+	return r.queries.GetServicePriceSummaries(ctx, photographerIDs)
+}
+
 // GetHomeData fetches all home page data
 func (r *HomeRepository) GetHomeData(ctx context.Context) (*HomeData, error) {
 	data := &HomeData{}

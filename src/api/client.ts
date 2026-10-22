@@ -1,4 +1,6 @@
-const BASE = '/api'
+// H5 走 vite 代理用相对路径 /api；小程序没有同源概念，需要在构建时给绝对地址，
+// 例如：VITE_API_BASE_URL=http://192.168.124.7:8088/api npm run dev:mp-weixin
+const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 function authHeader(): Record<string, string> {
   const token = uni.getStorageSync('token') as string

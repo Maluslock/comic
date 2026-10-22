@@ -35,6 +35,8 @@ func (h *AuthHandler) WeChatLogin(c *gin.Context) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "wechat login is not configured"})
 		case errors.Is(err, service.ErrWeChatCodeBad):
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid wechat code"})
+		case errors.Is(err, service.ErrWeChatConfig):
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "wechat credentials are not configured correctly"})
 		default:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "wechat login failed"})
 		}

@@ -20,6 +20,8 @@ type WeChatClient interface {
 var (
 	ErrWeChatDisabled = errors.New("wechat login is not configured")
 	ErrWeChatCodeBad  = errors.New("invalid wechat code")
+	// ErrWeChatConfig 表示 AppID/AppSecret 不匹配（40125）等配置问题，和「用户 code 过期」要区分开。
+	ErrWeChatConfig = errors.New("wechat appid or secret is invalid")
 )
 
 // HTTPWeChatClient 调 https://api.weixin.qq.com/sns/jscode2session。
@@ -73,6 +75,13 @@ func (c *HTTPWeChatClient) Code2Session(ctx context.Context, code string) (strin
 		return "", "", fmt.Errorf("wechat decode: %w", err)
 	}
 	if body.ErrCode != 0 {
+		// 40029/40163：code 无效或已被使用；40125：AppSecret 错误。
+		switch body.ErrCode {
+		case 40029, 40163:
+			return "", "", ErrWeChatCodeBad
+		case 40125:
+			return "", "", ErrWeChatConfig
+		}
 		return "", "", fmt.Errorf("wechat errcode=%d errmsg=%s", body.ErrCode, body.ErrMsg)
 	}
 	if body.OpenID == "" {

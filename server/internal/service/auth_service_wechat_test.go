@@ -36,3 +36,12 @@ func TestWeChatLogin_NotConfigured(t *testing.T) {
 		t.Fatalf("want ErrWeChatDisabled, got %v", err)
 	}
 }
+
+func TestPhoneLogin_DisabledInProduction(t *testing.T) {
+	svc := NewAuthService(&fakeAuthUserStore{}, nil)
+	svc.SetMockLoginAllowed(false)
+	_, err := svc.Login(context.Background(), LoginRequest{Phone: "13800138000", Code: "123456"})
+	if !errors.Is(err, ErrPhoneLoginDisabled) {
+		t.Fatalf("want ErrPhoneLoginDisabled, got %v", err)
+	}
+}

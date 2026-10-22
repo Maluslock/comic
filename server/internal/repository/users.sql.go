@@ -44,12 +44,14 @@ func (r *UserRepo) UpsertByWeChat(ctx context.Context, openid, unionid, name, av
 	if unionid != "" {
 		union = &unionid
 	}
+	// 空昵称/头像表示「本次没带资料」：插入时给默认值，冲突时保留库里已有的，
+	// 否则用户第二次静默登录会把微信昵称覆盖成「微信用户xxxx」。
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO users (wx_openid, wx_unionid, name, avatar)
-		VALUES ($1, $2, $3, $4)
+		VALUES ($1, $2, COALESCE(NULLIF($3, ''), '微信用户'), $4)
 		ON CONFLICT (wx_openid) DO UPDATE
-		SET name = EXCLUDED.name,
-		    avatar = EXCLUDED.avatar,
+		SET name = COALESCE(NULLIF($3, ''), users.name),
+		    avatar = COALESCE(NULLIF($4, ''), users.avatar),
 		    wx_unionid = COALESCE(EXCLUDED.wx_unionid, users.wx_unionid)
 		RETURNING id, COALESCE(phone, ''), name, avatar, bio, status, created_at`,
 		openid, union, name, avatar,

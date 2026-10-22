@@ -104,18 +104,9 @@ func (s *AuthService) WeChatLogin(ctx context.Context, req WeChatLoginRequest) (
 		return nil, err
 	}
 
+	// 空字符串交给 SQL：插入时落默认昵称，冲突时保留已有资料。
 	name := strings.TrimSpace(req.NickName)
-	if name == "" {
-		suffix := openid
-		if len(suffix) > 4 {
-			suffix = suffix[len(suffix)-4:]
-		}
-		name = "微信用户" + suffix
-	}
 	avatar := strings.TrimSpace(req.Avatar)
-	if avatar == "" {
-		avatar = "/static/img/avatar-user.svg"
-	}
 
 	u, err := s.users.UpsertByWeChat(ctx, openid, unionid, name, avatar)
 	if err != nil {

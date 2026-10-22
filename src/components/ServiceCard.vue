@@ -92,12 +92,14 @@ defineEmits<{
 }
 
 .desc {
+  display: block;
   font-size: $font-size-sm;
   color: $dark-text-secondary;
   margin-top: $spacing-xs;
 }
 
 .duration {
+  display: block;
   font-size: $font-size-xs;
   color: $dark-text-tertiary;
   margin-top: $spacing-xs;

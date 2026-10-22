@@ -330,6 +330,7 @@ async function submitBooking() {
   bottom: 0;
   left: 0;
   right: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   padding: $spacing-md;
@@ -340,6 +341,7 @@ async function submitBooking() {
 }
 
 .total {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -370,6 +372,8 @@ async function submitBooking() {
 
 .btn-primary {
   flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
   background: $neon-gradient;
   color: #fff;
   border-radius: $border-radius-lg;

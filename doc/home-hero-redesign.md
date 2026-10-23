@@ -100,23 +100,25 @@ opacity: .05; mix-blend-mode: overlay; pointer-events: none;
   border:1rpx solid rgba(0,210,211,.7); }   /* 只在入场时闪一次，常驻时 opacity:0 */
 ```
 
-**票根（L6）**
+**票根（L6）— 已实现版本**
 ```scss
 .ticket {
-  margin: -64rpx 32rpx 0; height: 132rpx; border-radius: 24rpx;
-  background: linear-gradient(105deg, #FF8C33 0%, #FF6B00 46%, #E05A00 100%);
-  box-shadow: 0 18rpx 48rpx rgba(255,107,0,.28),
-              inset 0 1rpx 0 rgba(255,255,255,.35);
-  color: #0C0D14;                      /* 6.79:1，替掉现在的白字 2.86:1 */
+  margin: -64rpx auto 0; width: calc(100% - 48rpx); height: 132rpx; border-radius: 24rpx;
+  background: linear-gradient(90deg, rgba(36,40,59,.98) 0%, rgba(26,28,41,.98) 58%, rgba(19,21,31,.99) 100%);
+  border: 1rpx solid rgba(255,107,0,.18);        /* 边缘只留品牌暗示，橙色留给数字和 CTA */
+  box-shadow: 0 12rpx 28rpx rgba(0,0,0,.30), 0 3rpx 8rpx rgba(0,0,0,.16),
+              inset 0 1rpx 0 rgba(255,255,255,.055);
 }
-.ticket::before, .ticket::after {      /* 打孔缺口 */
-  content:''; position:absolute; top:50%; width:24rpx; height:24rpx;
-  border-radius:50%; background:#0C0D14; transform:translateY(-50%);
+.ticket-rip {                                    /* 撕口：贯穿卡高 */
+  align-self: stretch; width: 0; margin: 0 4rpx;
+  border-left: 2rpx dashed rgba(248,250,252,.16);
 }
-.ticket::before { left:-12rpx; }  .ticket::after { right:-12rpx; }
-.ticket__rip { width:0; height:72rpx; border-left:2rpx dashed rgba(12,13,20,.28); margin:0 24rpx; }
 ```
-内容：左「距开展 **12** 天」（数字 52rpx/900/tabular-nums），虚线，右「查看漫展 ›」30rpx/800。
+- **不做左右半圆缺口**：票根上移 64rpx 后，缺口正好横跨 hero 底边（上半压图、下半压页面底色），纯色圆片对不上底图必留接缝；`mask-composite` 在微信 webview（iOS WKWebView / Android X5）不可靠，失效时整张卡片会被裁空。缺口需下移到纯色区域才值得做。
+- 撕口不放"打孔小圆点"：脱离缺口后读起来就是两个游离黑点。
+- hero 取景框只保留上面两个角标（`.vf-tl` / `.vf-tr`）：下面两个会被票根压住并露出灰色细线。
+
+内容：左「距开展 **1** 天」（数字 52rpx/900/tabular-nums），虚线，右橙色胶囊「查看漫展」+ 箭头。
 
 **标题（L5）**
 ```scss

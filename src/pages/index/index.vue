@@ -26,8 +26,6 @@
           <view class="hero-grain" />
           <view class="vf-corner vf-tl" />
           <view class="vf-corner vf-tr" />
-          <view class="vf-corner vf-bl" />
-          <view class="vf-corner vf-br" />
 
           <view class="hero-content">
             <view class="hero-top-bar">
@@ -468,8 +466,6 @@ function onQuickNav(_url: string) {}
 
 .vf-tl { top: 24rpx; left: 24rpx; border-right: 0; border-bottom: 0; border-radius: 4rpx 0 0 0; opacity: .45; }
 .vf-tr { top: 24rpx; right: 24rpx; border-left: 0; border-bottom: 0; border-radius: 0 4rpx 0 0; opacity: .6; }
-.vf-bl { bottom: 24rpx; left: 24rpx; border-right: 0; border-top: 0; border-radius: 0 0 0 4rpx; opacity: .6; }
-.vf-br { bottom: 24rpx; right: 24rpx; border-left: 0; border-top: 0; border-radius: 0 0 4rpx 0; opacity: .75; }
 
 .hero-content {
   position: relative;
@@ -625,36 +621,20 @@ function onQuickNav(_url: string) {}
   display: flex;
   align-items: center;
   border-radius: 24rpx;
-  background: linear-gradient(120deg, rgba(36, 40, 59, 0.96) 0%, rgba(21, 23, 34, 0.98) 100%);
-  border: 1rpx solid rgba(255, 107, 0, 0.34);
-  box-shadow: 0 18rpx 44rpx rgba(0, 0, 0, 0.46), inset 0 1rpx 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(90deg, rgba(36, 40, 59, 0.98) 0%, rgba(26, 28, 41, 0.98) 58%, rgba(19, 21, 31, 0.99) 100%);
+  border: 1rpx solid rgba(255, 107, 0, 0.18);
+  box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.3), 0 3rpx 8rpx rgba(0, 0, 0, 0.16), inset 0 1rpx 0 rgba(255, 255, 255, 0.055);
   color: $text-1;
 
   &:active {
     transform: scale(0.985) translateY(2rpx);
   }
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 24rpx;
-    height: 24rpx;
-    border-radius: 50%;
-    background: $surface-page;
-    transform: translateY(-50%);
-  }
-
-  &::before { left: -12rpx; }
-  &::after { right: -12rpx; }
 }
 
 .ticket-left {
-  padding-left: 40rpx;
   display: flex;
   align-items: baseline;
-  padding: 0 28rpx;
+  padding: 0 28rpx 0 40rpx;
 }
 
 .ticket-label {
@@ -680,9 +660,12 @@ function onQuickNav(_url: string) {}
 }
 
 .ticket-rip {
+  /* 撕口：贯穿卡片高度的浅色虚线。不用左右半圆缺口——它横跨 hero 底边，
+     纯色圆片对不上底图必留接缝；也不放“孔洞”装饰，读起来像游离的黑点。 */
+  align-self: stretch;
   width: 0;
-  height: 72rpx;
-  border-left: 2rpx dashed rgba(12, 13, 20, 0.28);
+  margin: 0 4rpx;
+  border-left: 2rpx dashed rgba(248, 250, 252, 0.16);
 }
 
 .ticket-right {

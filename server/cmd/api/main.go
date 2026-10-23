@@ -347,12 +347,13 @@ func main() {
 		adminGroup.PUT("/banners/:id", adminBannerH.Update)
 		adminGroup.PUT("/banners/:id/status", adminBannerH.SetStatus)
 
-		// Admin account management
+		// Admin account management — super admin only (see middleware.RequireSuper)
 		adminAdminH := handler.NewAdminAdminHandler(adminSvc)
-		adminGroup.GET("/admins", adminAdminH.List)
-		adminGroup.POST("/admins", adminAdminH.Create)
-		adminGroup.PUT("/admins/:id/status", adminAdminH.SetStatus)
-		adminGroup.PUT("/admins/:id/password", adminAdminH.ResetPassword)
+		adminAccounts := adminGroup.Group("/admins", middleware.RequireSuper())
+		adminAccounts.GET("", adminAdminH.List)
+		adminAccounts.POST("", adminAdminH.Create)
+		adminAccounts.PUT("/:id/status", adminAdminH.SetStatus)
+		adminAccounts.PUT("/:id/password", adminAdminH.ResetPassword)
 
 		// Notification broadcast (admin)
 		notifAdminSvc := service.NewNotificationAdminService(queries, notificationSvc, userRepo)

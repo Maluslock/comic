@@ -90,11 +90,19 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     return false;
   }
 
+  /**
+   * Backend roles are `admin` / `super`. Route meta roles use the same strings,
+   * so a plain admin is filtered out of super-only pages (e.g. admin accounts).
+   */
+  function rolesOf(admin: Api.Auth.AdminUser) {
+    return [admin.role === 'super' ? 'super' : 'admin'];
+  }
+
   function updateUserInfo(admin: Api.Auth.AdminUser) {
     Object.assign(userInfo, {
       userId: String(admin.id),
       userName: admin.username,
-      roles: ['admin'],
+      roles: rolesOf(admin),
       buttons: []
     });
 
@@ -155,7 +163,7 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
         Object.assign(userInfo, {
           userId: String(admin.id),
           userName: admin.username,
-          roles: ['admin'],
+          roles: rolesOf(admin),
           buttons: []
         });
       }

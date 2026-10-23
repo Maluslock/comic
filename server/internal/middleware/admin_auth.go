@@ -23,8 +23,28 @@ func AdminAuthRequired(admins *repository.AdminRepo) gin.HandlerFunc {
 			return
 		}
 		c.Set("admin_id", a.ID)
+		c.Set("admin_role", a.Role)
 		c.Next()
 	}
+}
+
+// RequireSuper must run after AdminAuthRequired. Admin-account management
+// (create / disable / reset password) is a super-admin-only capability: a plain
+// admin must not be able to mint accounts or take over another admin's session.
+func RequireSuper() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if AdminRole(c) != "super" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "super admin required"})
+			return
+		}
+		c.Next()
+	}
+}
+
+func AdminRole(c *gin.Context) string {
+	v, _ := c.Get("admin_role")
+	role, _ := v.(string)
+	return role
 }
 
 func AdminID(c *gin.Context) int64 {

@@ -10,6 +10,13 @@ import { transformElegantRoutesToVueRoutes } from '../elegant/transform';
  */
 const customRoutes: CustomRoute[] = [];
 
+/**
+ * Pages only `role=super` may open. The backend enforces the same rule on
+ * /api/admin/v1/admins (middleware.RequireSuper); this list only keeps the menu
+ * and the route guard honest for plain admins.
+ */
+const superOnlyRouteNames = new Set<string>(['admin-accounts']);
+
 /** create routes when the auth route mode is static */
 export function createStaticRoutes() {
   const constantRoutes: ElegantRoute[] = [];
@@ -19,6 +26,8 @@ export function createStaticRoutes() {
   [...customRoutes, ...generatedRoutes].forEach(item => {
     if (item.meta?.constant) {
       constantRoutes.push(item);
+    } else if (item.name && superOnlyRouteNames.has(item.name)) {
+      authRoutes.push({ ...item, meta: { ...item.meta, roles: ['super'] } });
     } else {
       authRoutes.push(item);
     }

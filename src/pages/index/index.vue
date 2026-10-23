@@ -12,7 +12,6 @@
       :refresher-triggered="store.refreshing"
       :refresher-threshold="80"
       @refresherrefresh="onRefresh"
-      @scrolltolower="onLoadMore"
     >
       <!-- Skeleton Loading -->
       <HomeSkeleton v-if="store.loading && !store.loaded" />
@@ -106,10 +105,7 @@
                 class="event-card"
                 @click="goEventDetail(event.id)"
               >
-                <view
-                  class="event-cover"
-                  :style="{ backgroundImage: 'url(' + event.cover + ')' }"
-                />
+                <image class="event-cover" :src="event.cover" mode="aspectFill" />
                 <view class="event-countdown-badge">
                   <text>{{ store.countdownDays(event.startDate) }}天后</text>
                 </view>
@@ -285,11 +281,12 @@ async function loadUnread() {
   }
 }
 
-function onRefresh() {
-  store.refresh()
+async function onRefresh() {
+  await store.refresh()
+  if (store.error) {
+    uni.showToast({ title: '刷新失败，请稍后再试', icon: 'none' })
+  }
 }
-
-function onLoadMore() {}
 
 function goSearch() {
   uni.navigateTo({ url: '/pages/search/search' })
@@ -313,10 +310,6 @@ function goEventMore() {
 
 function goEventDetail(id: string) {
   uni.navigateTo({ url: `/pages/event/detail?id=${id}` })
-}
-
-function goWork(work: { photographerId: string }) {
-  uni.navigateTo({ url: `/pages/photographer/works?id=${work.photographerId}` })
 }
 
 function goMessages() {
@@ -839,8 +832,8 @@ function onQuickNav(_url: string) {}
 .event-cover {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: center;
+  width: 100%;
+  height: 100%;
   background-color: $dark-bg-card;
 }
 

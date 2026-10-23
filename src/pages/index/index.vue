@@ -360,16 +360,14 @@ const filteredEvents = computed(() => {
 })
 
 const posterWall = computed(() => {
-  // 只展示当前城市、且没被「近期漫展」占用档期的漫展，避免同一场出现两次。
-  const pool = store.events
+  // 只展示当前城市、且没被「近期漫展」实际展示过的漫展，避免同一场出现两次。
+  // 按 id 去重而不是按日期：数据只有几个档期时按日期会把整段海报墙清空。
+  const shownIds = new Set(store.upcomingEvents.map(e => e.id))
+  return store.events
     .filter(e => e.status === 'upcoming' && (currentCity.value === '全部' || e.location === currentCity.value))
+    .filter(e => !shownIds.has(e.id))
     .sort((a, b) => a.startDate - b.startDate)
-  const recentDays = new Set<string>()
-  for (const e of pool) {
-    if (recentDays.size >= 6) break
-    recentDays.add(new Date(e.startDate).toDateString())
-  }
-  return pool.filter(e => !recentDays.has(new Date(e.startDate).toDateString())).slice(0, 4)
+    .slice(0, 4)
 })
 
 const formatShortDate = (ts: number) => {

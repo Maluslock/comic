@@ -20,21 +20,27 @@ export const useHomeStore = defineStore('home', () => {
   const error = ref<string | null>(null)
 
   // --- Computed ---
-  /** Dedupe by calendar day so 6 cards cover 6 distinct dates — same-day
-   *  events (nyato lists many per day) would otherwise fill all 6 slots. */
-  const upcomingEvents = computed(() =>
-    events.value
+  /** 先按日期去重保证卡片覆盖不同档期，再用同日的其他漫展补足到 8 张。
+   *  只按日期去重会在「只有 4 个档期」时只剩 4 张，看起来像数据缺失。 */
+  const upcomingEvents = computed(() => {
+    const sorted = events.value
       .filter(e => e.status === 'upcoming' && e.startDate > Date.now())
       .sort((a, b) => a.startDate - b.startDate)
-      .reduce<ComicEvent[]>((acc, e) => {
-        const day = new Date(e.startDate).toDateString()
-        if (!acc.some(x => new Date(x.startDate).toDateString() === day)) {
-          acc.push(e)
-        }
-        return acc
-      }, [])
-      .slice(0, 6)
-  )
+
+    const picked: ComicEvent[] = []
+    const rest: ComicEvent[] = []
+    const seenDays = new Set<string>()
+    for (const e of sorted) {
+      const day = new Date(e.startDate).toDateString()
+      if (seenDays.has(day)) {
+        rest.push(e)
+      } else {
+        seenDays.add(day)
+        picked.push(e)
+      }
+    }
+    return [...picked, ...rest].slice(0, 8)
+  })
 
   const ongoingEvents = computed(() =>
     events.value.filter(e => e.status === 'ongoing')

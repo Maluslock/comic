@@ -103,22 +103,32 @@ opacity: .05; mix-blend-mode: overlay; pointer-events: none;
 **票根（L6）— 已实现版本**
 ```scss
 .ticket {
-  margin: -64rpx auto 0; width: calc(100% - 48rpx); height: 132rpx; border-radius: 24rpx;
-  background: linear-gradient(90deg, rgba(36,40,59,.98) 0%, rgba(26,28,41,.98) 58%, rgba(19,21,31,.99) 100%);
-  border: 1rpx solid rgba(255,107,0,.18);        /* 边缘只留品牌暗示，橙色留给数字和 CTA */
+  margin: -64rpx auto 0; width: calc(100% - 48rpx); min-height: 132rpx; border-radius: 24rpx;
+  /* 一层淡暖底把「票」和下面纯色四宫格分开；主渐变仍走冷色 */
+  background:
+    linear-gradient(90deg, rgba(255,107,0,.07) 0%, rgba(255,107,0,.02) 46%, rgba(255,107,0,0) 72%),
+    linear-gradient(90deg, rgba(36,40,59,.98) 0%, rgba(26,28,41,.98) 58%, rgba(19,21,31,.99) 100%);
+  border: 1rpx solid rgba(255,107,0,.18);
   box-shadow: 0 12rpx 28rpx rgba(0,0,0,.30), 0 3rpx 8rpx rgba(0,0,0,.16),
               inset 0 1rpx 0 rgba(255,255,255,.055);
 }
-.ticket-rip {                                    /* 撕口：贯穿卡高 */
-  align-self: stretch; width: 0; margin: 0 4rpx;
-  border-left: 2rpx dashed rgba(248,250,252,.16);
+.ticket + .section-compact { margin-top: 44rpx; }   /* 上紧下松：卡贴 hero，四宫格另起一段 */
+
+.ticket-stub { flex: 1; padding: 18rpx 0 18rpx 34rpx; }  /* 左：距开展 + 一行票面信息 */
+.ticket-rip {                                            /* 撕口：3rpx 暖色齿线，8:8 齿距 */
+  align-self: center; width: 3rpx; height: 92rpx; margin: 0 10rpx;
+  background: repeating-linear-gradient(180deg,
+    rgba(255,107,0,.34) 0 8rpx, rgba(255,107,0,0) 8rpx 16rpx);
 }
+.ticket-right { flex: 1; justify-content: center; }       /* 右：胶囊居中，箭头并进胶囊 */
 ```
 - **不做左右半圆缺口**：票根上移 64rpx 后，缺口正好横跨 hero 底边（上半压图、下半压页面底色），纯色圆片对不上底图必留接缝；`mask-composite` 在微信 webview（iOS WKWebView / Android X5）不可靠，失效时整张卡片会被裁空。缺口需下移到纯色区域才值得做。
-- 撕口不放"打孔小圆点"：脱离缺口后读起来就是两个游离黑点。
+- **撕口不触边、不用中性浅色**：触边等距的中性虚线读作 `border-left`（把卡劈成两半），不是压痕。暖色 + 8:8 齿 + 上下各内缩 20rpx 才读作齿孔。
+- **左右各占一半**：撕口落在 50%，左「票面」右「票根联」；CTA 胶囊在右半居中，箭头并进胶囊（此前箭头孤悬在卡右缘，读不成一个按钮）。
+- **票面信息替代缺口当第二支柱**：左栏第二行 20rpx `10/24 · 猫柠mall`（日期 + 场馆），hero 标题下方不再重复同一行。
 - hero 取景框只保留上面两个角标（`.vf-tl` / `.vf-tr`）：下面两个会被票根压住并露出灰色细线。
 
-内容：左「距开展 **1** 天」（数字 52rpx/900/tabular-nums），虚线，右橙色胶囊「查看漫展」+ 箭头。
+内容：左「距开展 **1** 天」（数字 52rpx/900/tabular-nums）+ 票面信息，齿线，右橙色胶囊「查看漫展 ›」。
 
 **标题（L5）**
 ```scss

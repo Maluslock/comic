@@ -48,12 +48,7 @@
             <view class="hero-copy">
               <text class="hero-eyebrow">米拉漫展 · NEXT UP</text>
               <text class="hero-title">{{ heroEvent ? heroEvent.name : '米拉漫展' }}</text>
-              <view v-if="heroEvent" class="hero-meta">
-                <text class="hero-meta-strong">{{ store.formatDate(heroEvent.startDate) }}</text>
-                <text class="hero-meta-dot">·</text>
-                <text class="hero-meta-venue">{{ heroEvent.venue || heroEvent.location }}</text>
-              </view>
-              <view v-else class="hero-meta">
+              <view v-if="!heroEvent" class="hero-meta">
                 <text class="hero-meta-venue">找到你的专属摄影师</text>
               </view>
             </view>
@@ -62,15 +57,20 @@
 
         <!-- Ticket dock -->
         <view v-if="nearestEvent" class="ticket" @click="goEventDetail(nearestEvent.id)">
-          <view class="ticket-left">
-            <text class="ticket-label">距开展</text>
-            <text class="ticket-days">{{ store.countdownDays(nearestEvent.startDate) }}</text>
-            <text class="ticket-unit">天</text>
+          <view class="ticket-stub">
+            <view class="ticket-stub-row">
+              <text class="ticket-label">距开展</text>
+              <text class="ticket-days">{{ store.countdownDays(nearestEvent.startDate) }}</text>
+              <text class="ticket-unit">天</text>
+            </view>
+            <text class="ticket-meta">{{ store.formatDate(nearestEvent.startDate) }} · {{ nearestEvent.venue || nearestEvent.location }}</text>
           </view>
           <view class="ticket-rip" />
           <view class="ticket-right">
-            <text class="ticket-cta">查看漫展</text>
-            <text class="ticket-arrow">›</text>
+            <view class="ticket-cta">
+              <text>查看漫展</text>
+              <text class="ticket-arrow">›</text>
+            </view>
           </view>
         </view>
 
@@ -616,12 +616,15 @@ function onQuickNav(_url: string) {}
   z-index: 3;
   margin: -64rpx auto 0;
   width: calc(100% - 48rpx);
-  height: 132rpx;
+  min-height: 132rpx;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   border-radius: 24rpx;
-  background: linear-gradient(90deg, rgba(36, 40, 59, 0.98) 0%, rgba(26, 28, 41, 0.98) 58%, rgba(19, 21, 31, 0.99) 100%);
+  /* 一层淡暖底：把「票」和下面纯色四宫格区分开；主渐变仍走冷色，避免整卡发橙 */
+  background:
+    linear-gradient(90deg, rgba(255, 107, 0, 0.07) 0%, rgba(255, 107, 0, 0.02) 46%, rgba(255, 107, 0, 0) 72%),
+    linear-gradient(90deg, rgba(36, 40, 59, 0.98) 0%, rgba(26, 28, 41, 0.98) 58%, rgba(19, 21, 31, 0.99) 100%);
   border: 1rpx solid rgba(255, 107, 0, 0.18);
   box-shadow: 0 12rpx 28rpx rgba(0, 0, 0, 0.3), 0 3rpx 8rpx rgba(0, 0, 0, 0.16), inset 0 1rpx 0 rgba(255, 255, 255, 0.055);
   color: $text-1;
@@ -631,10 +634,23 @@ function onQuickNav(_url: string) {}
   }
 }
 
-.ticket-left {
+/* 票根下半段间距单独放宽，让卡和四宫格各自成组（上紧下松） */
+.ticket + .section-compact {
+  margin-top: 44rpx;
+}
+
+.ticket-stub {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 18rpx 0 18rpx 34rpx;
+}
+
+.ticket-stub-row {
   display: flex;
   align-items: baseline;
-  padding: 0 28rpx 0 40rpx;
 }
 
 .ticket-label {
@@ -659,38 +675,56 @@ function onQuickNav(_url: string) {}
   margin-left: 6rpx;
 }
 
+.ticket-meta {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: rgba(248, 250, 252, 0.5);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .ticket-rip {
-  /* 撕口：贯穿卡片高度的浅色虚线。不用左右半圆缺口——它横跨 hero 底边，
-     纯色圆片对不上底图必留接缝；也不放“孔洞”装饰，读起来像游离的黑点。 */
-  align-self: stretch;
-  width: 0;
-  margin: 0 4rpx;
-  border-left: 2rpx dashed rgba(248, 250, 252, 0.16);
+  /* 撕口：3rpx 暖色齿线，上下各内缩 20rpx 不触边；
+     用 repeating-gradient 控制 8:8 的 dash/gap——border dashed 的间距由浏览器定，且贴边时读作分栏线。 */
+  align-self: center;
+  width: 3rpx;
+  height: 92rpx;
+  margin: 0 10rpx;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 107, 0, 0.34) 0,
+    rgba(255, 107, 0, 0.34) 8rpx,
+    rgba(255, 107, 0, 0) 8rpx,
+    rgba(255, 107, 0, 0) 16rpx
+  );
 }
 
 .ticket-right {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 28rpx;
+  justify-content: center;
 }
 
 .ticket-cta {
+  display: flex;
+  align-items: center;
   font-size: 26rpx;
   font-weight: 800;
   letter-spacing: 1rpx;
   color: #0C0D14;
   background: $brand;
-  padding: 14rpx 28rpx;
+  padding: 14rpx 24rpx 14rpx 28rpx;
   border-radius: 999rpx;
 }
 
 .ticket-arrow {
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 700;
   line-height: 1;
-  color: rgba(248, 250, 252, 0.55);
+  margin-left: 10rpx;
+  color: rgba(12, 13, 20, 0.72);
 }
 
 // ===== Sections (Shared) =====

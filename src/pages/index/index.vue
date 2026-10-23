@@ -350,7 +350,10 @@ function lockPageScroll(lock: boolean) {
 const filteredEvents = computed(() => {
   const base = currentCity.value === '全部'
     ? store.upcomingEvents
-    : store.events.filter(e => e.status === 'upcoming' && e.location === currentCity.value).slice(0, 6)
+    : store.events
+      .filter(e => e.status === 'upcoming' && e.location === currentCity.value)
+      .sort((a, b) => a.startDate - b.startDate)
+      .slice(0, 8)
   if (eventRange.value === 'all') return base
   const days = eventRange.value === 'week' ? 7 : 30
   const limit = Date.now() + days * 24 * 3600 * 1000

@@ -20,26 +20,39 @@ export const useHomeStore = defineStore('home', () => {
   const error = ref<string | null>(null)
 
   // --- Computed ---
-  /** 先按日期去重保证卡片覆盖不同档期，再用同日的其他漫展补足到 8 张。
-   *  只按日期去重会在「只有 4 个档期」时只剩 4 张，看起来像数据缺失。 */
+  /** 按开场时间升序，且每天最多 ceil(8/档期数) 张 —— 顺序与覆盖同时成立。
+   *  「先按日去重再把同日补到末尾」会把顺序打乱成 1天/7天/1天（用户实测报告）；
+   *  纯按时间排又会被同一天的 12 场占满。配额法两头都兼顾，结果天然单调。 */
   const upcomingEvents = computed(() => {
     const sorted = events.value
       .filter(e => e.status === 'upcoming' && e.startDate > Date.now())
       .sort((a, b) => a.startDate - b.startDate)
+    if (!sorted.length) return []
 
+    const dayOf = (e: ComicEvent) => new Date(e.startDate).toDateString()
+    const distinctDays = new Set(sorted.map(dayOf)).size
+    const perDay = Math.max(1, Math.ceil(8 / distinctDays))
+
+    const dayCount = new Map<string, number>()
     const picked: ComicEvent[] = []
-    const rest: ComicEvent[] = []
-    const seenDays = new Set<string>()
     for (const e of sorted) {
-      const day = new Date(e.startDate).toDateString()
-      if (seenDays.has(day)) {
-        rest.push(e)
-      } else {
-        seenDays.add(day)
+      const day = dayOf(e)
+      const n = dayCount.get(day) ?? 0
+      if (n < perDay) {
+        dayCount.set(day, n + 1)
         picked.push(e)
       }
+      if (picked.length === 8) break
     }
-    return [...picked, ...rest].slice(0, 8)
+
+    // 档期极少时配额也补不满（例如只剩 2 天），再从剩余里按时间补，补完重排保持单调
+    if (picked.length < 8) {
+      const chosen = new Set(picked.map(e => e.id))
+      const rest = sorted.filter(e => !chosen.has(e.id))
+      picked.push(...rest.slice(0, 8 - picked.length))
+      picked.sort((a, b) => a.startDate - b.startDate)
+    }
+    return picked.slice(0, 8)
   })
 
   const ongoingEvents = computed(() =>

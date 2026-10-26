@@ -3,6 +3,7 @@
     "es6": true,
     "postcss": true,
     "minified": true,
+    "ignoreUploadUnusedFiles": true,
     "uglifyFileName": false,
     "enhance": true,
     "packNpmRelationList": [],

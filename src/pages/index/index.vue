@@ -272,7 +272,9 @@ const heroEvent = computed(() => nearestEvent.value || (filteredEvents.value.len
 const heroImage = computed(() => {
   if (heroEvent.value?.cover) return heroEvent.value.cover
   if (store.banners.length) return store.banners[0].image
-  return '/static/img/banner-1.jpg'
+  // 不再兜底到不存在的 /static/img/banner-1.jpg（死链）：
+  // 无封面时返回空串，image 组件渲染占位而非加载失败。
+  return ''
 })
 
 onShow(() => {

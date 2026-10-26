@@ -6,7 +6,8 @@
     "dev:h5": "uni",
     "build:h5": "uni build",
     "dev:mp-weixin": "uni -p mp-weixin",
-    "build:mp-weixin": "uni build -p mp-weixin"
+    "build:mp-weixin": "uni build -p mp-weixin",
+    "build:mp": "uni build -p mp-weixin && node scripts/fix-mp-project-config.mjs"
   },
   "dependencies": {
     "@babel/core": "^7.29.7",

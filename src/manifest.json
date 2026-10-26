@@ -19,7 +19,8 @@
     "setting": {
       "urlCheck": false,
       "ignoreDevUnusedFiles": false,
-      "ignoreUploadUnusedFiles": false
+      "ignoreUploadUnusedFiles": true,
+      "minified": true
     },
     "usingComponents": true,
     "mergeVirtualHostAttributes": true,

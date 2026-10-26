@@ -78,7 +78,14 @@ export const useHomeStore = defineStore('home', () => {
     try {
       data = await apiGet<HomeResponse>('/v1/home')
     } catch (e) {
-      // Fallback to mock data during development
+      // 只有开发环境才回退 mock：生产环境展示假漫展/假摄影师会比报错更糟
+      if (!import.meta.env.DEV) {
+        const msg = e instanceof Error ? e.message : String(e)
+        error.value = msg || '加载失败'
+        loading.value = false
+        refreshing.value = false
+        return
+      }
       console.log('[HomeStore] Backend unavailable, using mock data')
       try {
         data = await getHomeData()

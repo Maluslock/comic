@@ -84,7 +84,7 @@
 
         <!-- Quick Action Bar -->
         <view class="section-compact">
-          <QuickActionBar @navigate="onQuickNav" />
+          <QuickActionBar />
         </view>
 
         <!-- Upcoming Events -->
@@ -198,7 +198,7 @@
     </scroll-view>
 
     <!-- City Selector Popup -->
-    <view v-if="showCityPicker" class="city-popup-mask" @click="closeCityPicker">
+    <view v-if="showCityPicker" class="city-popup-mask" @click="closeCityPicker" @touchmove.stop.prevent>
       <view class="city-popup" @click.stop>
         <view class="city-popup-header">
           <text class="city-popup-title">选择城市</text>
@@ -223,6 +223,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
@@ -257,6 +258,10 @@ const heroImage = computed(() => {
   if (heroEvent.value?.cover) return heroEvent.value.cover
   if (store.banners.length) return store.banners[0].image
   return '/static/img/banner-1.jpg'
+})
+
+onShow(() => {
+  loadUnread()
 })
 
 onMounted(() => {
@@ -314,26 +319,15 @@ function goMessages() {
 
 function goCitySelect() {
   showCityPicker.value = true
-  lockPageScroll(true)
 }
 
 function closeCityPicker() {
   showCityPicker.value = false
-  lockPageScroll(false)
 }
 
 function selectCity(city: string) {
   currentCity.value = city
   closeCityPicker()
-}
-
-function lockPageScroll(lock: boolean) {
-  // #ifdef H5
-  const pageEl = document.querySelector('.scroll-content') as HTMLElement | null
-  if (pageEl) {
-    pageEl.style.overflow = lock ? 'hidden' : ''
-  }
-  // #endif
 }
 
 const filteredEvents = computed(() => {

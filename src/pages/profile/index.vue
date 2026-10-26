@@ -94,7 +94,7 @@
     </view>
 
     <view class="bottom-info">
-      <text class="version">版本 1.0.0</text>
+      <text class="version" @longpress="onVersionLongPress">版本 1.0.0 · 长按切换接口</text>
       <text class="copyright">© 2024 米拉漫展</text>
     </view>
   </view>
@@ -106,6 +106,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
 import { getMyPhotographerProfile } from '@/api'
 import { useUserStore } from '@/stores/user'
+import { getApiBase, setApiBase, resetApiBase } from '@/utils/apiBase'
 
 const userStore = useUserStore()
 
@@ -248,6 +249,27 @@ function logout() {
     }
   })
 }
+function onVersionLongPress() {
+  const cur = getApiBase()
+  uni.showModal({
+    title: '接口地址',
+    editable: true,
+    content: cur,
+    placeholderText: 'http://100.64.0.16:8088/api',
+    success: (res) => {
+      if (!res.confirm) return
+      const v = (res.content || '').trim()
+      if (!v) {
+        resetApiBase()
+        uni.showToast({ title: '已恢复默认地址', icon: 'none' })
+        return
+      }
+      const saved = setApiBase(v)
+      uni.showToast({ title: '已切换：' + saved, icon: 'none', duration: 2500 })
+    }
+  })
+}
+
 </script>
 
 <style lang="scss" scoped>

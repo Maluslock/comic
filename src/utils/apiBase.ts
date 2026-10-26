@@ -1,0 +1,35 @@
+// 小程序没有同源代理，API 基址必须在运行时决定：
+// 1) 构建时 VITE_API_BASE_URL 打的默认值（H5 走 /api 相对路径）
+// 2) 运行时用 storage 覆盖 —— 换网络（内网/Tailscale/frp 域名）不必重新打包
+const KEY = 'apiBase'
+const DEFAULT_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
+
+/** 规范化用户输入：去空白、去尾部斜杠，缺 /api 时补上 */
+export function normalizeBase(raw: string): string {
+  let v = (raw || '').trim().replace(/\/+$/, '')
+  if (!v) return DEFAULT_BASE
+  if (!/\/api$/.test(v)) v += '/api'
+  return v
+}
+
+export function getApiBase(): string {
+  try {
+    const v = uni.getStorageSync(KEY)
+    if (typeof v === 'string' && v) return normalizeBase(v)
+  } catch { /* storage 不可用时退回默认 */ }
+  return DEFAULT_BASE
+}
+
+export function setApiBase(raw: string): string {
+  const v = normalizeBase(raw)
+  uni.setStorageSync(KEY, v)
+  return v
+}
+
+export function resetApiBase() {
+  uni.removeStorageSync(KEY)
+}
+
+export function defaultApiBase(): string {
+  return DEFAULT_BASE
+}

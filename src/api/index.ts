@@ -3,15 +3,14 @@ import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
 import type { HomeResponse } from '@/types'
 
 import { resolveImage } from '@/utils/mappers'
-
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
+import { getApiBase } from '@/utils/apiBase'
 
 async function uploadFile(filePath: string): Promise<string> {
   const token = uni.getStorageSync('token') as string
 
   return new Promise<string>((resolve, reject) => {
     uni.uploadFile({
-      url: `${BASE_URL}/v1/upload`,
+      url: `${getApiBase()}/v1/upload`,
       filePath,
       name: 'file',
       header: token ? { Authorization: `Bearer ${token}` } : {},

@@ -1,6 +1,6 @@
-// H5 走 vite 代理用相对路径 /api；小程序没有同源概念，需要在构建时给绝对地址，
-// 例如：VITE_API_BASE_URL=http://192.168.124.7:8088/api npm run dev:mp-weixin
-const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
+// H5 走 vite 代理用相对路径 /api；小程序没有同源概念：
+// 构建时 VITE_API_BASE_URL 给默认绝对地址，运行时可在个人中心长按版本号改（storage: apiBase）
+import { getApiBase } from '@/utils/apiBase'
 
 function authHeader(): Record<string, string> {
   const token = uni.getStorageSync('token') as string
@@ -28,7 +28,7 @@ function handleUnauthorized(res: { statusCode: number }) {
 }
 
 export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = BASE + path + (params ? '?' + new URLSearchParams(params).toString() : '')
+  const url = getApiBase() + path + (params ? '?' + new URLSearchParams(params).toString() : '')
   const res = await uni.request({ url, method: 'GET', timeout: 5000, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
@@ -37,14 +37,14 @@ export async function apiGet<T>(path: string, params?: Record<string, string>): 
 }
 
 export async function apiPost<T>(path: string, body: AnyObject): Promise<T> {
-  const res = await uni.request({ url: BASE + path, method: 'POST', data: body, timeout: 5000, header: authHeader() })
+  const res = await uni.request({ url: getApiBase() + path, method: 'POST', data: body, timeout: 5000, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode !== 200 && res.statusCode !== 201) throw new ApiError(res.statusCode, 'request failed')
   return res.data as T
 }
 
 export async function apiPut<T>(path: string, body: AnyObject): Promise<T> {
-  const res = await uni.request({ url: BASE + path, method: 'PUT', data: body, timeout: 5000, header: authHeader() })
+  const res = await uni.request({ url: getApiBase() + path, method: 'PUT', data: body, timeout: 5000, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
   if (res.statusCode !== 200) throw new ApiError(res.statusCode, 'request failed')
@@ -52,7 +52,7 @@ export async function apiPut<T>(path: string, body: AnyObject): Promise<T> {
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await uni.request({ url: BASE + path, method: 'DELETE', timeout: 5000, header: authHeader() })
+  const res = await uni.request({ url: getApiBase() + path, method: 'DELETE', timeout: 5000, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
   if (res.statusCode !== 200 && res.statusCode !== 204) throw new ApiError(res.statusCode, 'request failed')

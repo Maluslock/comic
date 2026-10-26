@@ -5,7 +5,7 @@
 
     <!-- Pull-to-Refresh Wrapper -->
     <scroll-view
-      scroll-y
+      :scroll-y="!showCityPicker"
       class="scroll-content"
       :style="{ paddingTop: statusBarHeight + 'px' }"
       :refresher-enabled="true"
@@ -15,6 +15,15 @@
     >
       <!-- Skeleton Loading -->
       <HomeSkeleton v-if="store.loading && !store.loaded" />
+
+      <!-- 首屏失败：给明确的错误态，而不是渲染一个空壳页面 -->
+      <view v-else-if="store.error && !store.loaded" class="error-state">
+        <text class="error-icon">!</text>
+        <text class="error-text">{{ store.error }}</text>
+        <view class="btn-retry" @click="store.fetchHomeData()">
+          <text>重新加载</text>
+        </view>
+      </view>
 
       <template v-else>
         <!-- Hero Stage -->
@@ -184,15 +193,6 @@
           </view>
         </view>
 
-        <!-- Error State -->
-        <view v-if="store.error && !store.loaded" class="error-state">
-          <text class="error-icon">!</text>
-          <text class="error-text">{{ store.error }}</text>
-          <view class="btn-retry" @click="store.fetchHomeData()">
-            <text>重新加载</text>
-          </view>
-        </view>
-
         <view class="bottom-space" />
       </template>
     </scroll-view>
@@ -254,7 +254,7 @@ const nearestEvent = computed(() => {
 
 const heroEvent = computed(() => nearestEvent.value || (filteredEvents.value.length ? filteredEvents.value[0] : null))
 const heroImage = computed(() => {
-  if (heroEvent.value && (heroEvent.value as any).cover) return (heroEvent.value as any).cover
+  if (heroEvent.value?.cover) return heroEvent.value.cover
   if (store.banners.length) return store.banners[0].image
   return '/static/img/banner-1.jpg'
 })
@@ -298,10 +298,6 @@ function goSearchByTag(tag: string) {
 
 function goPhotographerList() {
   uni.switchTab({ url: '/pages/photographer/list' })
-}
-
-function goEventList() {
-  uni.navigateTo({ url: '/pages/calendar/index' })
 }
 
 function goEventMore() {
@@ -356,7 +352,7 @@ const filteredEvents = computed(() => {
 const posterWall = computed(() => {
   // 只展示当前城市、且没被「近期漫展」实际展示过的漫展，避免同一场出现两次。
   // 按 id 去重而不是按日期：数据只有几个档期时按日期会把整段海报墙清空。
-  const shownIds = new Set(store.upcomingEvents.map(e => e.id))
+  const shownIds = new Set(filteredEvents.value.map(e => e.id))
   return store.events
     .filter(e => e.status === 'upcoming' && (currentCity.value === '全部' || e.location === currentCity.value))
     .filter(e => !shownIds.has(e.id))
@@ -373,16 +369,6 @@ const filteredPhotographers = computed(() => {
   if (currentCity.value === '全部') return store.photographers
   return store.photographers.filter(p => p.location === currentCity.value)
 })
-
-function onBannerClick(index: number) {
-  const banner = store.banners[index]
-  if (banner && banner.linkId) {
-    const event = store.events.find(e => String(e.id) === String(banner.linkId))
-    if (event) {
-      goEventDetail(event.id)
-    }
-  }
-}
 
 function onQuickNav(_url: string) {}
 </script>
@@ -777,7 +763,7 @@ function onQuickNav(_url: string) {}
 .range-chips {
   display: flex;
   gap: 12rpx;
-  padding: 0 $spacing-md $spacing-sm;
+  padding: 0 0 $spacing-sm;
 }
 
 .range-chip {

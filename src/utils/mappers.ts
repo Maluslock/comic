@@ -1,4 +1,5 @@
 import type { ComicEvent, Photographer, Work, User, Review } from '@/types'
+import { getApiBase } from './apiBase'
 
 /**
  * Render a service price in its tri-state form:
@@ -20,8 +21,11 @@ export function formatPrice(price: number | null | undefined): string {
 export function resolveImage(url: string): string {
   if (!url) return ''
   // 只处理后端托管的三类前缀；tab 图标等包内资源原样返回
-  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !/^\/static\/(remote|img|uploads)\//.test(url)) return url
-  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || ''
+  // 只有后端托管的 remote/uploads 需要补 origin；/static/img 是包内资源，补了反而 404。
+  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !/^\/static\/(remote|uploads)\//.test(url)) return url
+  // 构建期变量优先级更高；未注入时回落到运行时基址（storage 可切内网/域名）。
+  // 小程序包内没有 /static/remote，必须拿到绝对 origin，否则会被当成本地文件读取（500）。
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || getApiBase()
   const media = (import.meta.env.VITE_MEDIA_ORIGIN as string | undefined) || ''
   if (/^https?:\/\//.test(media)) return media.replace(/\/$/, '') + url
   if (/^https?:\/\//.test(base)) {

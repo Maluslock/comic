@@ -2,7 +2,7 @@ import { mockPhotographers, mockWorks, mockEvents, tags } from '@/data/mock'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
 import type { HomeResponse } from '@/types'
 
-const BASE_URL = '/api'
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 async function uploadFile(filePath: string): Promise<string> {
   const token = uni.getStorageSync('token') as string

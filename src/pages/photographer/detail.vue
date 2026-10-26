@@ -4,11 +4,19 @@
       <view class="header">
         <image :src="photographer?.avatar" class="avatar" mode="aspectFill" @error="onAvatarError" />
         <view class="info">
-          <text class="name">{{ photographer?.name }}</text>
+          <view class="name-row">
+            <text class="name">{{ photographer?.name }}</text>
+            <text v-if="photographer?.certified" class="cert-pill">V 认证</text>
+            <text class="more-btn" @click="onMore">···</text>
+          </view>
+          <text v-if="photographer?.location" class="name-meta">{{ photographer.location }}</text>
           <view class="stats">
             <view class="stat-item">
-              <text class="stat-value">{{ ratingText }}</text>
-              <text class="stat-label">评分</text>
+              <view class="stat-value-row">
+                <text v-if="photographer?.reviewCount" class="stat-star">★</text>
+                <text class="stat-value" :class="{ 'stat-value--warn': !!photographer?.reviewCount }">{{ ratingText }}</text>
+              </view>
+              <text class="stat-label">综合评分</text>
             </view>
             <view class="stat-divider"></view>
             <view class="stat-item">
@@ -21,10 +29,6 @@
               <text class="stat-label">接单</text>
             </view>
           </view>
-          <view class="location">
-            <text class="location-icon"></text>
-            <text>{{ photographer?.location }}</text>
-          </view>
         </view>
       </view>
 
@@ -32,7 +36,6 @@
         <view v-if="photographer?.mode === 'free'" class="mode-tag">互勉</view>
         <view v-else-if="photographer?.mode === 'pay'" class="mode-tag pay">收费</view>
         <view v-else-if="photographer?.mode" class="mode-tag both">互勉 / 收费</view>
-        <view v-if="photographer?.certified" class="cert-badge">认证摄影师</view>
         <text 
           v-for="tag in photographer?.tags" 
           :key="tag" 
@@ -65,7 +68,7 @@
             </view>
             <view class="service-price">
               <text class="price">{{ formatPrice(service.price) }}</text>
-              <text class="btn">选择</text>
+              <text class="btn-ghost">选择</text>
             </view>
           </view>
         </view>
@@ -83,7 +86,8 @@
               :key="work.id" 
               class="work-item"
             >
-              <image :src="work.images[0]" class="work-image" mode="aspectFill" />
+              <image v-if="work.images?.length" :src="work.images[0]" class="work-image" mode="aspectFill" />
+              <view v-else class="work-image work-image--empty"><text>暂无图片</text></view>
               <text class="work-title">{{ work.title }}</text>
             </view>
           </view>
@@ -116,10 +120,6 @@
         <view class="footer-btn" @click="collect">
           <image class="footer-icon-img" :src="collected ? '/static/icons/star-filled.svg' : '/static/icons/star.svg'" mode="aspectFit" />
           <text>收藏</text>
-        </view>
-        <view class="footer-btn" @click="blockPhotographer">
-          <image class="footer-icon-img" src="/static/icons/block.svg" mode="aspectFit" />
-          <text>拉黑</text>
         </view>
       </view>
       <view class="footer-right">
@@ -298,7 +298,17 @@ function goBooking() {
 }
 
 function goPortfolio() {
-  uni.navigateTo({ url: '/pages/portfolio/index' })
+  const pid = photographer.value?.id ?? id
+  uni.navigateTo({ url: `/pages/portfolio/index?photographerId=${pid}` })
+}
+
+function onMore() {
+  uni.showActionSheet({
+    itemList: ['拉黑该摄影师'],
+    success: (res) => {
+      if (res.tapIndex === 0) blockPhotographer()
+    }
+  })
 }
 
 function goReviews() {
@@ -341,10 +351,37 @@ function goReviews() {
   margin-left: $spacing-md;
 }
 
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
 .name {
   font-size: $font-size-xl;
   font-weight: 600;
   color: $dark-text-primary;
+}
+.cert-pill {
+  padding: 2rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  color: #FFB02E;
+  background: rgba(255, 176, 46, 0.12);
+  border: 1rpx solid rgba(255, 176, 46, 0.35);
+}
+.name-meta {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: $text-3;
+}
+.more-btn {
+  margin-left: auto;
+  padding: 0 16rpx;
+  min-height: 56rpx;
+  line-height: 56rpx;
+  font-size: 32rpx;
+  color: $dark-text-tertiary;
+  letter-spacing: 2rpx;
 }
 
 .stats {
@@ -360,6 +397,18 @@ function goReviews() {
   flex: 1;
 }
 
+.stat-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+}
+.stat-star {
+  font-size: 24rpx;
+  color: #FFB02E;
+}
+.stat-value--warn {
+  color: #FFB02E;
+}
 .stat-value {
   font-size: $font-size-lg;
   font-weight: 600;
@@ -540,10 +589,10 @@ function goReviews() {
   color: $neon-purple;
 }
 
-.btn {
+.btn-ghost {
   padding: 8rpx 24rpx;
-  background: $neon-purple;
-  color: #fff;
+  border: 1rpx solid rgba(255, 107, 0, 0.45);
+  color: $brand;
   font-size: $font-size-xs;
   border-radius: $border-radius-sm;
   margin-top: $spacing-xs;
@@ -584,6 +633,14 @@ function goReviews() {
   width: 200rpx;
   height: 280rpx;
   border-radius: $border-radius-md;
+  background: $surface-2;
+}
+.work-image--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  color: $text-3;
 }
 
 .work-title {

@@ -11,7 +11,6 @@
             @click="setFilter(item.key)"
           >
             {{ item.label }}
-            <text v-if="item.key === currentFilter" class="filter-arrow">▼</text>
           </view>
         </view>
       </scroll-view>
@@ -119,16 +118,30 @@ function setFilter(key: string) {
 
 <style lang="scss" scoped>
 .page {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   background: $dark-bg-primary;
 }
 
 .filter-bar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 100;
   background: $dark-bg-secondary;
   border-bottom: 1rpx solid $dark-border;
+
+  /* 右侧渐隐：5 个 tab 超宽时可横向滑，末项不被硬切 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 56rpx;
+    background: linear-gradient(to right, rgba(12, 13, 20, 0), $dark-bg-secondary);
+    pointer-events: none;
+  }
 }
 
 .filter-scroll {
@@ -137,13 +150,15 @@ function setFilter(key: string) {
 
 .filter-list {
   display: inline-flex;
-  padding: $spacing-sm $spacing-md;
-  gap: $spacing-sm;
+  padding: $spacing-sm 20rpx;
+  gap: 12rpx;
 }
 
 .filter-item {
   display: flex;
   align-items: center;
+  min-height: 88rpx;
+  box-sizing: border-box;
   font-size: $font-size-sm;
   color: $dark-text-secondary;
   padding: $spacing-xs $spacing-md;
@@ -168,7 +183,8 @@ function setFilter(key: string) {
 }
 
 .content {
-  height: 100vh;
+  flex: 1;
+  height: 0;
 }
 
 .photographer-list {

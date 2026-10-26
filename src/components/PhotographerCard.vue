@@ -6,7 +6,7 @@
     :hover-stay-time="60"
     @click="goDetail"
   >
-    <image v-if="showAvatar" :src="photographer.avatar" class="avatar" mode="aspectFill" />
+    <image v-if="showAvatar" :src="photographer.avatar" class="avatar" mode="aspectFill" @error="avatarFailed = true" />
     <view v-else class="avatar avatar-fallback"><text class="avatar-initial">{{ initial }}</text></view>
     <view class="info">
       <view class="header">
@@ -30,7 +30,7 @@
       <view class="footer">
         <view class="footer-left">
           <MPriceTag v-if="price.text" :text="price.text" :tone="price.tone" size="md" />
-          <text v-if="!price.text" class="muted">暂未设置</text>
+          <text v-if="!price.text" class="muted">私信咨询</text>
         </view>
         <view class="footer-right">
           <text class="meta">{{ photographer.location }}</text>
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Photographer } from '@/types'
 import { describePrice } from '@/utils/price'
 import MPriceTag from '@/components/MPriceTag.vue'
@@ -57,7 +57,10 @@ const props = withDefaults(defineProps<{
 })
 
 const initial = computed(() => (props.photographer.name || '?').slice(0, 1))
-const showAvatar = computed(() => !!props.photographer.avatar && /\.(jpe?g|png|webp)$/i.test(props.photographer.avatar))
+// 不再用后缀白名单判定：微信头像、OSS 带参数、SVG 都会被误杀成大单字。
+// 交给 <image> 自己加载，失败再回退首字（mp-weixin 不支持 svg 时也走这里）。
+const avatarFailed = ref(false)
+const showAvatar = computed(() => !!props.photographer.avatar?.trim() && !avatarFailed.value)
 
 // 评分按真实评价重算：没有评价时后端给 rating=0 / reviewCount=0，
 // 显示「★ 0」会让人以为被打 0 分，故无评价时改文案。

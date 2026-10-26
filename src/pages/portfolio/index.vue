@@ -2,7 +2,7 @@
   <view class="page">
     <view class="gallery">
       <view class="gallery-header">
-        <text class="gallery-title">作品集</text>
+        <text class="gallery-title">摄影作品</text>
         <text class="gallery-count">{{ works.length }} 作品</text>
       </view>
       
@@ -11,15 +11,16 @@
           v-for="(work, index) in works" 
           :key="work.id" 
           class="gallery-item"
-          :class="{ 'full-width': work.images.length >= 2 }"
+          :class="{ 'full-width': (work.images?.length || 0) >= 2 }"
           @click="previewImage(index)"
         >
-          <image :src="work.images[0]" class="gallery-image" mode="aspectFill" />
+          <image v-if="work.images?.length" :src="work.images[0]" class="gallery-image" mode="aspectFill" />
+          <view v-else class="gallery-image gallery-image--empty"><text>暂无图片</text></view>
           <view class="gallery-overlay">
             <text class="gallery-title-text">{{ work.title }}</text>
             <view class="gallery-tags">
               <text 
-                v-for="tag in work.tags.slice(0, 2)" 
+                v-for="tag in (work.tags || []).slice(0, 2)" 
                 :key="tag" 
                 class="gallery-tag"
               >{{ tag }}</text>
@@ -70,6 +71,7 @@ async function loadData() {
 
 function previewImage(index: number) {
   const currentWork = works.value[index]
+  if (!currentWork?.images?.length) return
   uni.previewImage({
     current: currentWork.images[0],
     urls: currentWork.images
@@ -146,12 +148,22 @@ function previewImage(index: number) {
 }
 
 .gallery-image {
+  display: block;
   width: 100%;
-  height: 280rpx;
-  
+  aspect-ratio: 3 / 4;
+  background: $surface-2;
+
+  /* 双图作品横跨两列，用更宽的取景比例，避免 3:4 拉成巨幅 */
   .full-width & {
-    height: 400rpx;
+    aspect-ratio: 4 / 3;
   }
+}
+.gallery-image--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: $text-3;
 }
 
 .gallery-overlay {

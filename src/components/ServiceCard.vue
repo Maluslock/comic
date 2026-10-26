@@ -9,7 +9,7 @@
         <text class="price">{{ formatPrice(service.price) }}</text>
       </view>
       <text class="desc">{{ service.description }}</text>
-      <text class="duration">{{ formatDuration(service.duration) }}</text>
+      <text v-if="showDuration" class="duration">{{ formatDuration(service.duration) }}</text>
     </view>
   </view>
 </template>
@@ -18,11 +18,20 @@
 import type { Service } from '@/types'
 import { formatPrice } from '@/utils/mappers'
 import { formatDuration } from '@/utils/duration'
+import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   service: Service
   selected?: boolean
 }>()
+
+// 描述里已写「N 小时拍摄」时不再重复一行时长（避免「2小时拍摄」下一行又是「2 小时」）
+const showDuration = computed(() => {
+  const d = props.service.duration
+  if (!d) return false
+  const desc = props.service.description || ''
+  return !new RegExp(`${d}\\s*小时`).test(desc)
+})
 
 defineEmits<{
   select: [service: Service]

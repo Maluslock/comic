@@ -21,6 +21,8 @@ export function resolveImage(url: string): string {
   if (!url) return ''
   if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !url.startsWith('/static/remote/')) return url
   const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || ''
+  const media = (import.meta.env.VITE_MEDIA_ORIGIN as string | undefined) || ''
+  if (/^https?:\/\//.test(media)) return media.replace(/\/$/, '') + url
   if (/^https?:\/\//.test(base)) {
     try {
       return new URL(base).origin + url
@@ -28,6 +30,8 @@ export function resolveImage(url: string): string {
       return url
     }
   }
+  // 相对 /api（H5 dev 代理）或纯静态部署：媒体走同源，由 vite/nginx 把
+  // /static/remote 反代到 API；生产未配反代时需设 VITE_MEDIA_ORIGIN。
   return url
 }
 

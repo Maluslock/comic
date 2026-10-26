@@ -11,6 +11,14 @@ function handleUnauthorized(res: { statusCode: number }) {
   if (res.statusCode === 401) {
     uni.removeStorageSync('token')
     uni.removeStorageSync('user')
+    // storage 清了 Pinia 也要清，否则 isLoggedIn 仍为 true（半登录态）
+    void import('@/stores/user').then(({ useUserStore }) => {
+      try {
+        const s = useUserStore()
+        s.user = null
+        s.token = ''
+      } catch { /* pinia 未安装时忽略 */ }
+    })
     const pages = getCurrentPages()
     const cur = pages[pages.length - 1]?.route
     if (cur && cur !== 'pages/login/index') {

@@ -72,16 +72,16 @@ func mockHomeHandler(c *gin.Context) {
 			{"name": "少女", "usageCount": 43},
 		},
 		"recommendedPhotographers": []gin.H{
-			{"id": 1, "name": "光影行者", "avatar": "/static/img/avatar-photographer1.svg", "location": "北京", "rating": 4.9, "reviewCount": 234, "orderCount": 567, "tags": []string{"日系", "古风", "科幻"}},
-			{"id": 2, "name": "樱花落", "avatar": "/static/img/avatar-photographer2.svg", "location": "上海", "rating": 4.8, "reviewCount": 186, "orderCount": 423, "tags": []string{"日系", "清新", "少女"}},
-			{"id": 3, "name": "暗夜骑士", "avatar": "/static/img/avatar-photographer3.svg", "location": "广州", "rating": 4.7, "reviewCount": 156, "orderCount": 312, "tags": []string{"暗黑", "赛博朋克", "哥特"}},
-			{"id": 4, "name": "古风公子", "avatar": "/static/img/avatar-photographer4.svg", "location": "杭州", "rating": 4.9, "reviewCount": 298, "orderCount": 678, "tags": []string{"古风", "汉服", "仙侠"}},
+			{"id": 1, "name": "光影行者", "avatar": "/static/remote/img/avatar-photographer1.svg", "location": "北京", "rating": 4.9, "reviewCount": 234, "orderCount": 567, "tags": []string{"日系", "古风", "科幻"}},
+			{"id": 2, "name": "樱花落", "avatar": "/static/remote/img/avatar-photographer2.svg", "location": "上海", "rating": 4.8, "reviewCount": 186, "orderCount": 423, "tags": []string{"日系", "清新", "少女"}},
+			{"id": 3, "name": "暗夜骑士", "avatar": "/static/remote/img/avatar-photographer3.svg", "location": "广州", "rating": 4.7, "reviewCount": 156, "orderCount": 312, "tags": []string{"暗黑", "赛博朋克", "哥特"}},
+			{"id": 4, "name": "古风公子", "avatar": "/static/remote/img/avatar-photographer4.svg", "location": "杭州", "rating": 4.9, "reviewCount": 298, "orderCount": 678, "tags": []string{"古风", "汉服", "仙侠"}},
 		},
 		"featuredWorks": []gin.H{
-			{"id": 1, "title": "原神 - 雷电将军", "images": []string{"/static/img/work-1.jpg", "/static/img/work-2.jpg"}, "photographerName": "光影行者"},
-			{"id": 2, "title": "鬼灭之刃 - 祢豆子", "images": []string{"/static/img/work-3.jpg"}, "photographerName": "光影行者"},
-			{"id": 3, "title": "魔卡少女樱", "images": []string{"/static/img/work-4.jpg"}, "photographerName": "樱花落"},
-			{"id": 4, "title": "古风仙侠", "images": []string{"/static/img/work-5.jpg"}, "photographerName": "古风公子"},
+			{"id": 1, "title": "原神 - 雷电将军", "images": []string{"/static/remote/img/work-1.jpg", "/static/remote/img/work-2.jpg"}, "photographerName": "光影行者"},
+			{"id": 2, "title": "鬼灭之刃 - 祢豆子", "images": []string{"/static/remote/img/work-3.jpg"}, "photographerName": "光影行者"},
+			{"id": 3, "title": "魔卡少女樱", "images": []string{"/static/remote/img/work-4.jpg"}, "photographerName": "樱花落"},
+			{"id": 4, "title": "古风仙侠", "images": []string{"/static/remote/img/work-5.jpg"}, "photographerName": "古风公子"},
 		},
 	})
 }

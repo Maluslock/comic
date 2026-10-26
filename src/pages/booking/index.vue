@@ -1,5 +1,15 @@
 <template>
   <view class="page">
+    <view class="ph-card">
+      <image v-if="photographerAvatar" :src="photographerAvatar" class="ph-avatar" mode="aspectFill" />
+      <view v-else class="ph-avatar ph-avatar--initial">{{ photographerName.slice(0, 1) }}</view>
+      <view class="ph-info">
+        <text class="ph-name">{{ photographerName }}</text>
+        <text class="ph-meta">{{ photographerLocation }} · 摄影师</text>
+      </view>
+      <text class="ph-hint">预约 TA</text>
+    </view>
+
     <view class="section">
       <view class="section-title">选择服务</view>
       <ServiceCard 
@@ -193,6 +203,9 @@ async function submitBooking() {
       time: selectedTime.value,
       remarks: remark.value,
     })
+    // 成功后清掉跨页面的临时选择，否则下一次给别人预约会预填这次的套餐
+    uni.removeStorageSync('selectedService')
+    uni.removeStorageSync('bookingPhotographerId')
     uni.showToast({ title: '预约成功', icon: 'success' })
     setTimeout(() => uni.navigateTo({ url: '/pages/order/list' }), 800)
   } catch (e) {
@@ -211,6 +224,57 @@ async function submitBooking() {
   min-height: 100vh;
   background: $dark-bg-primary;
   padding-bottom: 140rpx;
+}
+
+.ph-card {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  margin: $spacing-md $spacing-md 0;
+  padding: $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-lg;
+}
+
+.ph-avatar {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: $surface-2;
+}
+
+.ph-avatar--initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: $brand;
+  background: rgba(255, 107, 0, 0.12);
+}
+
+.ph-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.ph-name {
+  font-size: $font-size-md;
+  font-weight: 600;
+  color: $dark-text-primary;
+}
+
+.ph-meta {
+  font-size: 24rpx;
+  color: $text-3;
+}
+
+.ph-hint {
+  margin-left: auto;
+  font-size: 24rpx;
+  color: $text-3;
 }
 
 .section {
@@ -270,13 +334,17 @@ async function submitBooking() {
 }
 
 .time-slots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-sm;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16rpx;
 }
 
 .time-slot {
-  padding: $spacing-sm $spacing-lg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80rpx;
+  padding: 0 8rpx;
   background: $dark-bg-card;
   border: 1rpx solid $dark-border;
   border-radius: $border-radius-md;

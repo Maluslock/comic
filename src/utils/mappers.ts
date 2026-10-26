@@ -19,7 +19,8 @@ export function formatPrice(price: number | null | undefined): string {
  */
 export function resolveImage(url: string): string {
   if (!url) return ''
-  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !url.startsWith('/static/remote/')) return url
+  // 只处理后端托管的三类前缀；tab 图标等包内资源原样返回
+  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !/^\/static\/(remote|img|uploads)\//.test(url)) return url
   const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || ''
   const media = (import.meta.env.VITE_MEDIA_ORIGIN as string | undefined) || ''
   if (/^https?:\/\//.test(media)) return media.replace(/\/$/, '') + url
@@ -107,7 +108,7 @@ export function mapLoginUser(u: LoginUserDTO): User {
   return {
     id: String(u.id),
     name: u.name,
-    avatar: u.avatar,
+    avatar: resolveImage(u.avatar || ''),
     phone: u.phone,
     bio: u.bio || '',
     role: 'coser',
@@ -146,7 +147,7 @@ export function mapPhotographerItem(p: PhotographerDTO): Photographer {
   return {
     id: String(p.id),
     name: p.name,
-    avatar: p.avatar || '',
+    avatar: resolveImage(p.avatar || ''),
     role: 'photographer' as const,
     description: p.description || '',
     rating: p.rating ?? 0,
@@ -175,7 +176,7 @@ export function mapReviewItem(r: ReviewDTO): Review {
     id: String(r.id),
     userId: String(r.userId || ''),
     userName: r.userName || '',
-    userAvatar: r.userAvatar || '',
+    userAvatar: resolveImage(r.userAvatar || ''),
     photographerId: String(r.photographerId || ''),
     rating: r.rating || 0,
     content: r.content || '',

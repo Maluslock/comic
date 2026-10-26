@@ -2,7 +2,10 @@
   <view class="page">
     <scroll-view scroll-y class="content">
       <view class="header">
-        <image :src="photographer?.avatar" class="avatar" mode="aspectFill" @error="onAvatarError" />
+        <image v-if="!avatarFailed" :src="photographer?.avatar" class="avatar" mode="aspectFill" @error="onAvatarError" />
+        <view v-else class="avatar avatar--fallback">
+          <text>{{ (photographer?.name || '摄')[0] }}</text>
+        </view>
         <view class="info">
           <view class="name-row">
             <text class="name">{{ photographer?.name }}</text>
@@ -63,8 +66,7 @@
           >
             <view class="service-info">
               <text class="service-name">{{ service.name }}</text>
-              <text class="service-desc">{{ service.description }}</text>
-              <text class="service-duration">{{ formatDuration(service.duration) }}</text>
+              <text class="service-desc">{{ service.description }}{{ showServiceDuration(service) ? ' · ' + formatDuration(service.duration) : '' }}</text>
             </view>
             <view class="service-price">
               <text class="price">{{ formatPrice(service.price) }}</text>
@@ -86,7 +88,7 @@
               :key="work.id" 
               class="work-item"
             >
-              <image v-if="work.images?.length" :src="work.images[0]" class="work-image" mode="aspectFill" />
+              <image v-if="work.images?.length" :src="work.images[0]" class="work-image" mode="aspectFill" lazy-load />
               <view v-else class="work-image work-image--empty"><text>暂无图片</text></view>
               <text class="work-title">{{ work.title }}</text>
             </view>
@@ -167,10 +169,10 @@ const photographer = ref<PhotographerView | null>(null)
 const ratingText = computed(() => ((photographer.value?.reviewCount ?? 0) > 0 ? String(photographer.value?.rating) : '暂无'))
 
 const collected = ref(false)
-const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
 
+const avatarFailed = ref(false)
 function onAvatarError() {
-  if (photographer.value) photographer.value.avatar = DEFAULT_AVATAR
+  avatarFailed.value = true
 }
 let id = ''
 
@@ -205,6 +207,8 @@ async function loadData(pageId: string) {
       reviews: (res.reviews || []).map(mapReviewItem),
     }
     initCollected()
+  } catch (e) {
+    uni.showToast({ title: '加载失败，请稍后再试', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -302,6 +306,13 @@ function goPortfolio() {
   uni.navigateTo({ url: `/pages/portfolio/index?photographerId=${pid}` })
 }
 
+// duration 单位分钟；描述里已写「N小时拍摄」时不再重复一行时长
+function showServiceDuration(service: { duration: number; description: string }) {
+  if (!service.duration) return false
+  const hours = service.duration % 60 === 0 ? String(service.duration / 60) : (service.duration / 60).toFixed(1)
+  return !new RegExp(`${hours}\\s*小时`).test(service.description || '')
+}
+
 function onMore() {
   uni.showActionSheet({
     itemList: ['拉黑该摄影师'],
@@ -344,6 +355,16 @@ function goReviews() {
   width: 180rpx;
   height: 180rpx;
   border-radius: $border-radius-lg;
+  background: $surface-2;
+}
+
+.avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64rpx;
+  font-weight: 700;
+  color: $brand;
 }
 
 .info {
@@ -377,8 +398,8 @@ function goReviews() {
 .more-btn {
   margin-left: auto;
   padding: 0 16rpx;
-  min-height: 56rpx;
-  line-height: 56rpx;
+  min-height: 88rpx;
+  line-height: 88rpx;
   font-size: 32rpx;
   color: $dark-text-tertiary;
   letter-spacing: 2rpx;
@@ -519,6 +540,11 @@ function goReviews() {
 }
 
 .section-more {
+  /* 热区 ≥88rpx：纯文字链接在小屏上极易点空 */
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  padding: 0 8rpx;
   font-size: $font-size-sm;
   color: $dark-text-tertiary;
 }
@@ -684,6 +710,8 @@ function goReviews() {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 96rpx;
+  padding: 8rpx 12rpx;
   font-size: $font-size-xs;
   color: $dark-text-secondary;
 

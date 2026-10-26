@@ -8,8 +8,7 @@
         <text class="name">{{ service.name }}</text>
         <text class="price">{{ formatPrice(service.price) }}</text>
       </view>
-      <text class="desc">{{ service.description }}</text>
-      <text v-if="showDuration" class="duration">{{ formatDuration(service.duration) }}</text>
+      <text class="desc">{{ service.description }}{{ showDuration ? ' · ' + formatDuration(service.duration) : '' }}</text>
     </view>
   </view>
 </template>
@@ -27,10 +26,12 @@ const props = defineProps<{
 
 // 描述里已写「N 小时拍摄」时不再重复一行时长（避免「2小时拍摄」下一行又是「2 小时」）
 const showDuration = computed(() => {
-  const d = props.service.duration
-  if (!d) return false
+  const minutes = props.service.duration
+  if (!minutes) return false
   const desc = props.service.description || ''
-  return !new RegExp(`${d}\\s*小时`).test(desc)
+  // duration 单位是分钟（120 → 2 小时），描述里已是「2小时拍摄」时不再重复一行
+  const hours = minutes % 60 === 0 ? String(minutes / 60) : (minutes / 60).toFixed(1)
+  return !new RegExp(`${hours}\\s*小时`).test(desc)
 })
 
 defineEmits<{

@@ -206,6 +206,7 @@ async function submitBooking() {
     // 成功后清掉跨页面的临时选择，否则下一次给别人预约会预填这次的套餐
     uni.removeStorageSync('selectedService')
     uni.removeStorageSync('bookingPhotographerId')
+    uni.hideLoading()
     uni.showToast({ title: '预约成功', icon: 'success' })
     setTimeout(() => uni.navigateTo({ url: '/pages/order/list' }), 800)
   } catch (e) {
@@ -213,8 +214,6 @@ async function submitBooking() {
     const code = e instanceof ApiError ? e.status : 0
     uni.showToast({ title: code === 409 ? '该时段已被预约' : '预约失败', icon: 'none' })
     return
-  } finally {
-    uni.hideLoading()
   }
 }
 </script>
@@ -343,7 +342,7 @@ async function submitBooking() {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 80rpx;
+  min-height: 88rpx;
   padding: 0 8rpx;
   background: $dark-bg-card;
   border: 1rpx solid $dark-border;

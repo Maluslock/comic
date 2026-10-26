@@ -2,6 +2,8 @@ import { mockPhotographers, mockWorks, mockEvents, tags } from '@/data/mock'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
 import type { HomeResponse } from '@/types'
 
+import { resolveImage } from '@/utils/mappers'
+
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 async function uploadFile(filePath: string): Promise<string> {
@@ -19,7 +21,8 @@ async function uploadFile(filePath: string): Promise<string> {
           return
         }
         try {
-          resolve((JSON.parse(res.data) as { url: string }).url)
+          // 后端返回 /static/uploads/xxx 相对路径，小程序端必须补 origin，否则入库即裂图
+          resolve(resolveImage((JSON.parse(res.data) as { url: string }).url))
         } catch (e) {
           reject(e)
         }

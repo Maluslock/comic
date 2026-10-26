@@ -17,6 +17,10 @@ export default defineConfig({
         target: API_TARGET,
         changeOrigin: true,
       },
+      '/static/img': {
+        target: API_TARGET,
+        changeOrigin: true,
+      },
       '/static/remote': {
         target: API_TARGET,
         changeOrigin: true,

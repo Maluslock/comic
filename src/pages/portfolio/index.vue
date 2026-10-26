@@ -14,7 +14,7 @@
           :class="{ 'full-width': (work.images?.length || 0) >= 2 }"
           @click="previewImage(index)"
         >
-          <image v-if="work.images?.length" :src="work.images[0]" class="gallery-image" mode="aspectFill" />
+          <image v-if="work.images?.length" :src="work.images[0]" class="gallery-image" mode="aspectFill" lazy-load />
           <view v-else class="gallery-image gallery-image--empty"><text>暂无图片</text></view>
           <view class="gallery-overlay">
             <text class="gallery-title-text">{{ work.title }}</text>
@@ -64,6 +64,8 @@ async function loadData() {
       const home = await apiGet<any>('/v1/home')
       works.value = (home.featuredWorks || []).map(mapWorkItem)
     }
+  } catch (e) {
+    uni.showToast({ title: '加载失败，请稍后再试', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -156,6 +158,14 @@ function previewImage(index: number) {
   /* 双图作品横跨两列，用更宽的取景比例，避免 3:4 拉成巨幅 */
   .full-width & {
     aspect-ratio: 4 / 3;
+  }
+}
+
+/* 老安卓 WebView 不支持 aspect-ratio 时给固定高度兜底，避免塌成 0 高 */
+@supports not (aspect-ratio: 1 / 1) {
+  .gallery-image {
+    height: 440rpx;
+    .full-width & { height: 330rpx; }
   }
 }
 .gallery-image--empty {

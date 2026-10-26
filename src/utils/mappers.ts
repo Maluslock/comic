@@ -12,6 +12,25 @@ export function formatPrice(price: number | null | undefined): string {
   return `¥${price}`
 }
 
+/**
+ * 图片地址解析：后端把封面托管在 /static/remote/**，H5 由 vite 代理同源；
+ * 小程序端没有同源概念，构建时给了 VITE_API_BASE_URL（绝对地址），这里补上 origin。
+ * 本地静态图（/static/img、/static/tab 等）原样返回，避免误伤。
+ */
+export function resolveImage(url: string): string {
+  if (!url) return ''
+  if (/^(https?:)?\/\//.test(url) || url.startsWith('data:') || !url.startsWith('/static/remote/')) return url
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || ''
+  if (/^https?:\/\//.test(base)) {
+    try {
+      return new URL(base).origin + url
+    } catch {
+      return url
+    }
+  }
+  return url
+}
+
 export interface LoginUserDTO {
   id: number
   name: string
@@ -107,7 +126,7 @@ export function mapEventItem(e: EventDTO): ComicEvent {
     address: e.address || '',
     startDate: new Date(e.startDate).getTime(),
     endDate: new Date(e.endDate).getTime(),
-    cover: e.coverUrl || '',
+    cover: resolveImage(e.coverUrl || ''),
     tags: e.tags || [],
     imageGallery: e.imageGallery || [],
     photographerCount: e.photographers?.length || 0,
@@ -168,7 +187,7 @@ export function mapWorkItem(w: WorkDTO): Work {
     id: String(w.id),
     photographerId: '',
     title: w.title,
-    images: w.images || [],
+    images: (w.images || []).map(resolveImage),
     description: '',
     tags: [],
     createdAt: Date.now(),
@@ -187,7 +206,7 @@ export function mapBannerItem(b: BannerDTO): {
 } {
   return {
     id: b.id,
-    image: b.imageUrl,
+    image: resolveImage(b.imageUrl),
     title: b.title,
     linkId: b.linkId,
   }

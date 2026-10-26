@@ -10,7 +10,7 @@ const path = require('path')
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const PAGES = Number(process.env.PAGES || 3)
-const OUT_DIR = '/app/src/static/img/events'
+const OUT_DIR = '/app/server/static/remote/covers'
 const SQL_PATH = process.env.SQL_PATH || '/scripts/import.sql'
 const KEEP = /漫展|动漫|嘉年华|同人|comic|chinajoy|萤火虫|cp\d|only|祭|acg|二次元|漫|展/i
 const DROP = /咖啡|cafe|主题店|快闪|餐厅|奶茶|酒吧|影院|电影|演唱会|音乐会|话剧|展览馆?票/i
@@ -98,7 +98,7 @@ async function main () {
         const r = await get(url, true)
         if (r.status === 200 && r.buf.length > 2000) {
           fs.writeFileSync(dest, r.buf)
-          local = '/static/img/events/' + file
+          local = '/static/remote/covers/' + file
         } else console.log('img fail', e.id, r.status, r.buf.length)
       } catch (err) { console.log('img err', e.id, err.message) }
     }

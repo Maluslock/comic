@@ -28,13 +28,9 @@ export function resolveImage(url: string): string {
   const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) || getApiBase()
   const media = (import.meta.env.VITE_MEDIA_ORIGIN as string | undefined) || ''
   if (/^https?:\/\//.test(media)) return media.replace(/\/$/, '') + url
-  if (/^https?:\/\//.test(base)) {
-    try {
-      return new URL(base).origin + url
-    } catch {
-      return url
-    }
-  }
+  // 小程序运行时没有 URL 构造器（部分基础库），用正则取 origin，别用 new URL。
+  const m = /^(https?:\/\/[^/]+)/i.exec(base)
+  if (m) return m[1] + url
   // 相对 /api（H5 dev 代理）或纯静态部署：媒体走同源，由 vite/nginx 把
   // /static/remote 反代到 API；生产未配反代时需设 VITE_MEDIA_ORIGIN。
   return url

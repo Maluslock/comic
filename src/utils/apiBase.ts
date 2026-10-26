@@ -14,6 +14,8 @@ const DEFAULT_BASE = defaultBase
 export function normalizeBase(raw: string): string {
   let v = (raw || '').trim().replace(/\/+$/, '')
   if (!v) return DEFAULT_BASE
+  // 用户可能只填 host:port，小程序里必须带协议才能取图
+  if (/^[\w.-]+(:\d+)?$/.test(v)) v = 'http://' + v
   if (!/\/api$/.test(v)) v += '/api'
   return v
 }

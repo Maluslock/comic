@@ -6,7 +6,7 @@
     :hover-stay-time="60"
     @click="goDetail"
   >
-    <image v-if="showAvatar" :src="photographer.avatar" class="avatar" mode="aspectFill" @error="avatarFailed = true" />
+    <image v-if="showAvatar" :src="photographer.avatar" class="avatar" mode="aspectFill" lazy-load @error="avatarFailed = true" />
     <view v-else class="avatar avatar-fallback"><text class="avatar-initial">{{ initial }}</text></view>
     <view class="info">
       <view class="header">

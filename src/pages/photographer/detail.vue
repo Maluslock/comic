@@ -99,14 +99,17 @@
       <view class="section">
         <view class="section-header">
           <text class="section-title">用户评价</text>
-          <text class="section-more" @click="goReviews">查看全部</text>
+          <text class="section-more">{{ reviewCount }} 条</text>
         </view>
         <view class="review-list">
-          <ReviewCard 
-            v-for="review in photographer?.reviews" 
-            :key="review.id" 
+          <ReviewCard
+            v-for="review in visibleReviews"
+            :key="review.id"
             :review="review"
           />
+        </view>
+        <view v-if="reviewCount > 3" class="review-toggle" @click="reviewExpanded = !reviewExpanded">
+          {{ reviewExpanded ? '收起' : `展开全部 ${reviewCount} 条评价` }}
         </view>
       </view>
 
@@ -116,11 +119,11 @@
     <view class="footer">
       <view class="footer-left">
         <view class="footer-btn" @click="goChat">
-          <image class="footer-icon-img" src="/static/icons/chat.svg" mode="aspectFit" />
+          <image class="footer-icon-img" src="/static/icons/chat.png" mode="aspectFit" />
           <text>聊天</text>
         </view>
         <view class="footer-btn" @click="collect">
-          <image class="footer-icon-img" :src="collected ? '/static/icons/star-filled.svg' : '/static/icons/star.svg'" mode="aspectFit" />
+          <image class="footer-icon-img" :src="collected ? '/static/icons/star-filled.png' : '/static/icons/star.png'" mode="aspectFit" />
           <text>收藏</text>
         </view>
       </view>
@@ -169,6 +172,12 @@ const photographer = ref<PhotographerView | null>(null)
 const ratingText = computed(() => ((photographer.value?.reviewCount ?? 0) > 0 ? String(photographer.value?.rating) : '暂无'))
 
 const collected = ref(false)
+const reviewExpanded = ref(false)
+const reviewCount = computed(() => photographer.value?.reviews?.length || 0)
+const visibleReviews = computed(() => {
+  const list = photographer.value?.reviews || []
+  return reviewExpanded.value ? list : list.slice(0, 3)
+})
 
 const avatarFailed = ref(false)
 function onAvatarError() {
@@ -322,9 +331,6 @@ function onMore() {
   })
 }
 
-function goReviews() {
-  uni.navigateTo({ url: `/pages/comment/index?photographerId=${id}` })
-}
 </script>
 
 <style lang="scss" scoped>
@@ -537,6 +543,16 @@ function goReviews() {
     background: $neon-gradient;
     border-radius: 3rpx;
   }
+}
+
+.review-toggle {
+  margin-top: 12rpx;
+  padding: 24rpx 0;
+  text-align: center;
+  font-size: $font-size-sm;
+  color: $brand;
+
+  &:active { opacity: .7; }
 }
 
 .section-more {

@@ -114,7 +114,7 @@
                 class="event-card"
                 @click="goEventDetail(event.id)"
               >
-                <image class="event-cover" :src="event.cover" mode="aspectFill" />
+                <image class="event-cover" lazy-load :src="event.cover" mode="aspectFill" />
                 <view class="event-countdown-badge">
                   <text>{{ store.countdownDays(event.startDate) }}天后</text>
                 </view>
@@ -145,7 +145,7 @@
               class="work-card"
               @click="goEventDetail(ev.id)"
             >
-              <image class="work-img" :src="ev.cover" mode="aspectFill" />
+              <image class="work-img" lazy-load :src="ev.cover" mode="aspectFill" />
               <view class="work-scrim" />
               <view class="work-meta">
                 <text class="work-title">{{ ev.name }}</text>
@@ -204,9 +204,16 @@
           <text class="city-popup-title">选择城市</text>
           <text class="city-popup-close" @click="closeCityPicker">✕</text>
         </view>
+        <input
+          v-model="cityKeyword"
+          class="city-search"
+          type="text"
+          placeholder="搜索城市"
+          placeholder-class="city-search-ph"
+        />
         <view class="city-list">
           <view
-            v-for="city in cityOptions"
+            v-for="city in filteredCityOptions"
             :key="city"
             class="city-option"
             :class="{ active: currentCity === city }"
@@ -246,6 +253,13 @@ const rangeOptions = [
 ]
 const unreadCount = ref(0)
 const showCityPicker = ref(false)
+const cityKeyword = ref('')
+
+const filteredCityOptions = computed(() => {
+  const kw = cityKeyword.value.trim()
+  const list = (store.cityOptions || []) as string[]
+  return kw ? list.filter(c => c.includes(kw)) : list
+})
 
 const nearestEvent = computed(() => {
   const upcoming = filteredEvents.value
@@ -331,6 +345,7 @@ function goCitySelect() {
 }
 
 function closeCityPicker() {
+  cityKeyword.value = ''
   showCityPicker.value = false
 }
 
@@ -1066,6 +1081,22 @@ function onQuickNav(_url: string) {}
   padding: $spacing-xs;
 }
 
+.city-search {
+  margin: 0 $spacing-lg $spacing-sm;
+  padding: 0 24rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1rpx solid $border-subtle;
+  border-radius: 40rpx;
+  font-size: $font-size-sm;
+  color: $text-primary;
+}
+
+.city-search-ph {
+  color: $text-tertiary;
+}
+
 .city-list {
   flex: 1;
   overflow-y: auto;
@@ -1115,5 +1146,15 @@ function onQuickNav(_url: string) {}
 .empty-inline-sub {
   font-size: 26rpx;
   color: $brand;
+}
+
+/* 低端机/旧内核不支持 backdrop-filter 时退回不透明底，避免文字压图不可读 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .status-bar,
+  .city-selector,
+  .hero-icon-btn,
+  .event-countdown-badge {
+    background: rgba(12, 13, 20, 0.94);
+  }
 }
 </style>

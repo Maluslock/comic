@@ -135,12 +135,17 @@ export interface EventItem {
   name: string
   location: string
   venue: string
+  /** 详细地址（详情页/日历展示用，列表接口可能缺省） */
+  address?: string
   startDate: string  // ISO8601 from backend
   endDate: string    // ISO8601 from backend
   coverUrl: string
   tags: string[]
   status: string
   typeName: string
+  /** 详情接口附带的图片集与简介 */
+  imageGallery?: string[]
+  description?: string
 }
 
 export interface TagItem {

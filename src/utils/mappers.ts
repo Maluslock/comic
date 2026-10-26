@@ -21,6 +21,65 @@ export interface LoginUserDTO {
   photographerId?: number
 }
 
+export interface EventDTO {
+  id: number | string
+  name: string
+  location: string
+  venue: string
+  address?: string
+  /** 后端给 ISO8601 字符串；历史代码里也有时间戳 */
+  startDate: string | number
+  endDate: string | number
+  coverUrl?: string
+  tags?: string[]
+  imageGallery?: string[]
+  photographers?: unknown[]
+  status?: string
+  description?: string
+}
+
+export interface PhotographerDTO {
+  id: number | string
+  name: string
+  avatar?: string
+  description?: string
+  rating?: number
+  reviewCount?: number
+  orderCount?: number
+  location?: string
+  tags?: string[]
+  userId?: number | string
+  minPrice?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
+}
+
+export interface ReviewDTO {
+  id: number | string
+  userId?: number | string
+  userName?: string
+  userAvatar?: string
+  photographerId?: number | string
+  rating?: number
+  content?: string
+  createdAt?: string | number
+}
+
+export interface WorkDTO {
+  id: number | string
+  title: string
+  images?: string[]
+  photographerName?: string
+}
+
+export interface BannerDTO {
+  id: number
+  imageUrl: string
+  title: string
+  linkId?: number | null
+}
+
 export function mapLoginUser(u: LoginUserDTO): User {
   return {
     id: String(u.id),
@@ -39,7 +98,7 @@ export function mapLoginUser(u: LoginUserDTO): User {
  * Map backend EventItem DTO to frontend ComicEvent.
  * Handles both HomeResponse.upcomingEvents and EventDetailResponse.
  */
-export function mapEventItem(e: any): ComicEvent {
+export function mapEventItem(e: EventDTO): ComicEvent {
   return {
     id: String(e.id),
     name: e.name,
@@ -48,7 +107,7 @@ export function mapEventItem(e: any): ComicEvent {
     address: e.address || '',
     startDate: new Date(e.startDate).getTime(),
     endDate: new Date(e.endDate).getTime(),
-    cover: e.coverUrl,
+    cover: e.coverUrl || '',
     tags: e.tags || [],
     imageGallery: e.imageGallery || [],
     photographerCount: e.photographers?.length || 0,
@@ -60,19 +119,19 @@ export function mapEventItem(e: any): ComicEvent {
 /**
  * Map backend PhotographerItem DTO to frontend Photographer.
  */
-export function mapPhotographerItem(p: any): Photographer {
+export function mapPhotographerItem(p: PhotographerDTO): Photographer {
   return {
     id: String(p.id),
     name: p.name,
     avatar: p.avatar || '',
     role: 'photographer' as const,
     description: p.description || '',
-    rating: p.rating,
-    reviewCount: p.reviewCount,
-    orderCount: p.orderCount,
+    rating: p.rating ?? 0,
+    reviewCount: p.reviewCount ?? 0,
+    orderCount: p.orderCount ?? 0,
     location: p.location || '',
     tags: p.tags || [],
-    userId: p.userId,
+    userId: typeof p.userId === 'number' ? p.userId : undefined,
     works: [],
     services: [],
     reviews: [],
@@ -88,7 +147,7 @@ export function mapPhotographerItem(p: any): Photographer {
 /**
  * Map backend ReviewItem DTO to frontend Review.
  */
-export function mapReviewItem(r: any): Review {
+export function mapReviewItem(r: ReviewDTO): Review {
   return {
     id: String(r.id),
     userId: String(r.userId || ''),
@@ -104,7 +163,7 @@ export function mapReviewItem(r: any): Review {
 /**
  * Map backend WorkItem DTO to frontend Work.
  */
-export function mapWorkItem(w: any): Work {
+export function mapWorkItem(w: WorkDTO): Work {
   return {
     id: String(w.id),
     photographerId: '',
@@ -120,7 +179,7 @@ export function mapWorkItem(w: any): Work {
 /**
  * Map backend BannerItem DTO to banner display object.
  */
-export function mapBannerItem(b: any): {
+export function mapBannerItem(b: BannerDTO): {
   id: number
   image: string
   title: string

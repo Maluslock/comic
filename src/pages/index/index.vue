@@ -36,7 +36,7 @@
           <view class="vf-corner vf-tr" />
 
           <view class="hero-content">
-            <view class="hero-top-bar">
+            <view class="hero-top-bar" :style="{ paddingRight: capsuleInset + 'px' }">
               <view class="city-selector" @click="goCitySelect">
                 <text class="city-dot" />
                 <text class="city-text">{{ currentCity }}</text>
@@ -132,24 +132,6 @@
           </scroll-view>
         </view>
 
-        <!-- Hot Tags -->
-        <view class="section-compact">
-          <view class="section-header">
-            <text class="section-title">热门风格</text>
-            <text class="section-more" @click="goSearch">更多 ›</text>
-          </view>
-          <view class="tags-row">
-            <view
-              v-for="tag in store.hotTags"
-              :key="tag"
-              class="tag-item"
-              @click="goSearchByTag(tag)"
-            >
-              {{ tag }}
-            </view>
-          </view>
-        </view>
-
         <!-- Poster Wall -->
         <view v-if="posterWall.length" class="section">
           <view class="section-header">
@@ -169,6 +151,24 @@
                 <text class="work-title">{{ ev.name }}</text>
                 <text class="work-author">{{ formatShortDate(ev.startDate) }} · {{ ev.location }}</text>
               </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- Hot Tags -->
+        <view class="section-compact">
+          <view class="section-header">
+            <text class="section-title">热门风格</text>
+            <text class="section-more" @click="goSearch">更多 ›</text>
+          </view>
+          <view class="tags-row">
+            <view
+              v-for="tag in store.hotTags"
+              :key="tag"
+              class="tag-item"
+              @click="goSearchByTag(tag)"
+            >
+              {{ tag }}
             </view>
           </view>
         </view>
@@ -236,6 +236,7 @@ const store = useHomeStore()
 const userStore = useUserStore()
 const { cityOptions } = storeToRefs(store)
 const statusBarHeight = ref(44)
+const capsuleInset = ref(0)
 const currentCity = ref('全部')
 const eventRange = ref<'all' | 'week' | 'month'>('all')
 const rangeOptions = [
@@ -267,10 +268,18 @@ onShow(() => {
 onMounted(() => {
   const sysInfo = uni.getSystemInfoSync()
   statusBarHeight.value = sysInfo.statusBarHeight || 44
+  // 小程序端右上角是微信胶囊，图标要主动让位；H5 下 getMenuButtonBoundingClientRect 返回全 0，用 width 判断。
+  try {
+    const rect = uni.getMenuButtonBoundingClientRect()
+    if (rect && rect.width && sysInfo.windowWidth) {
+      capsuleInset.value = Math.max(sysInfo.windowWidth - rect.right, 0) + 8
+    }
+  } catch {
+    capsuleInset.value = 0
+  }
   if (!store.loaded) {
     store.fetchHomeData()
   }
-  loadUnread()
 })
 
 async function loadUnread() {
@@ -334,7 +343,7 @@ const filteredEvents = computed(() => {
   const base = currentCity.value === '全部'
     ? store.upcomingEvents
     : store.events
-      .filter(e => e.status === 'upcoming' && e.location === currentCity.value)
+      .filter(e => e.status === 'upcoming' && e.startDate > Date.now() && e.location === currentCity.value)
       .sort((a, b) => a.startDate - b.startDate)
       .slice(0, 8)
   if (eventRange.value === 'all') return base
@@ -348,7 +357,7 @@ const posterWall = computed(() => {
   // 按 id 去重而不是按日期：数据只有几个档期时按日期会把整段海报墙清空。
   const shownIds = new Set(filteredEvents.value.map(e => e.id))
   return store.events
-    .filter(e => e.status === 'upcoming' && (currentCity.value === '全部' || e.location === currentCity.value))
+    .filter(e => e.status === 'upcoming' && e.startDate > Date.now() && (currentCity.value === '全部' || e.location === currentCity.value))
     .filter(e => !shownIds.has(e.id))
     .sort((a, b) => a.startDate - b.startDate)
     .slice(0, 4)
@@ -419,7 +428,7 @@ function onQuickNav(_url: string) {}
   background:
     radial-gradient(52% 40% at 78% 12%, rgba(255, 107, 0, 0.30) 0%, rgba(255, 107, 0, 0) 70%),
     radial-gradient(40% 30% at 6% 86%, rgba(0, 210, 211, 0.12) 0%, rgba(0, 210, 211, 0) 72%);
-  mix-blend-mode: screen;
+  opacity: 0.9;
   pointer-events: none;
 }
 
@@ -461,10 +470,10 @@ function onQuickNav(_url: string) {}
 .city-selector {
   display: flex;
   align-items: center;
-  height: 72rpx;
-  padding: 0 24rpx;
+  height: 88rpx;
+  padding: 0 28rpx;
   background: rgba(21, 23, 34, 0.66);
-  border-radius: 36rpx;
+  border-radius: 44rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(16px);
 }
@@ -485,7 +494,7 @@ function onQuickNav(_url: string) {}
 }
 
 .city-arrow {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: $dark-text-tertiary;
   margin-left: 8rpx;
 }
@@ -497,8 +506,8 @@ function onQuickNav(_url: string) {}
 
 .hero-icon-btn {
   position: relative;
-  width: 80rpx;
-  height: 80rpx;
+  width: 88rpx;
+  height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -522,11 +531,11 @@ function onQuickNav(_url: string) {}
   position: absolute;
   top: -4rpx;
   right: -4rpx;
-  min-width: 28rpx;
-  height: 28rpx;
-  line-height: 28rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  line-height: 32rpx;
   text-align: center;
-  font-size: 20rpx;
+  font-size: 24rpx;
   color: #fff;
   background: $neon-pink;
   border-radius: 14rpx;
@@ -540,7 +549,7 @@ function onQuickNav(_url: string) {}
 
 .hero-eyebrow {
   display: block;
-  font-size: 22rpx;
+  font-size: 24rpx;
   letter-spacing: 4rpx;
   color: $neon-cyan;
   font-weight: 600;
@@ -653,7 +662,7 @@ function onQuickNav(_url: string) {}
 
 .ticket-meta {
   margin-top: 6rpx;
-  font-size: 20rpx;
+  font-size: 24rpx;
   color: rgba(248, 250, 252, 0.5);
   overflow: hidden;
   white-space: nowrap;
@@ -761,11 +770,14 @@ function onQuickNav(_url: string) {}
 }
 
 .range-chip {
-  padding: 8rpx 24rpx;
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  padding: 0 32rpx;
   border-radius: 999rpx;
   border: 1rpx solid $border-subtle;
   background: rgba(255, 255, 255, 0.04);
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: $text-3;
   line-height: 1.2;
 }
@@ -834,7 +846,7 @@ function onQuickNav(_url: string) {}
   background: rgba(12, 13, 20, 0.62);
   border: 1rpx solid rgba(255, 255, 255, 0.16);
   border-radius: 999rpx;
-  font-size: 20rpx;
+  font-size: 24rpx;
   letter-spacing: 0.04em;
   color: #FFB27A;
   backdrop-filter: blur(12rpx);
@@ -867,7 +879,7 @@ function onQuickNav(_url: string) {}
 
 .event-location {
   display: block;
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: rgba(226, 232, 240, 0.72);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -879,7 +891,7 @@ function onQuickNav(_url: string) {}
 }
 
 .event-date {
-  font-size: 21rpx;
+  font-size: 24rpx;
   color: #FF9A4D;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -893,8 +905,11 @@ function onQuickNav(_url: string) {}
 }
 
 .tag-item {
-  padding: 10rpx 28rpx;
-  font-size: $font-size-sm;
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  padding: 0 32rpx;
+  font-size: 24rpx;
   color: $neon-purple;
   background: $neon-purple-dim;
   border: 2rpx solid rgba($neon-purple, 0.4);
@@ -961,7 +976,7 @@ function onQuickNav(_url: string) {}
 
 .work-author {
   margin-top: 4rpx;
-  font-size: 21rpx;
+  font-size: 24rpx;
   color: rgba(226, 232, 240, 0.68);
 }
 
@@ -995,7 +1010,7 @@ function onQuickNav(_url: string) {}
 .btn-retry {
   padding: 14rpx 48rpx;
   background: $neon-gradient;
-  color: #fff;
+  color: #0C0D14;
   border-radius: $border-radius-xl;
   font-size: $font-size-base;
   font-weight: 600;

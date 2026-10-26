@@ -67,10 +67,11 @@ export const useHomeStore = defineStore('home', () => {
   })
 
   // --- Actions ---
-  async function fetchHomeData() {
-    // B1: Reset loaded and error at the start of every fetch so error state is reachable
+  async function fetchHomeData(preserveLoaded = false) {
+    // B1: 首屏加载要能进入错误态，所以置 loaded=false；但下拉刷新必须保住已加载内容，
+    // 否则整页被骨架屏替换、失败还会盖掉列表（刷新不等于重开）。
     loading.value = true
-    loaded.value = false
+    if (!preserveLoaded) loaded.value = false
     error.value = null
 
     let data: HomeResponse
@@ -121,7 +122,7 @@ export const useHomeStore = defineStore('home', () => {
 
   async function refresh() {
     refreshing.value = true
-    await fetchHomeData()
+    await fetchHomeData(true)
   }
 
   function formatDate(ts: number): string {

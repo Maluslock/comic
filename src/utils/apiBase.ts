@@ -6,7 +6,7 @@ let defaultBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '
 // #ifdef MP-WEIXIN
 // 小程序包内没有 /static 代理，默认必须是绝对地址，否则 remote 图会被当成本地文件（500）。
 // 换网络时在「个人中心 → 长按版本号」改基址，不必重新打包。
-defaultBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://100.64.0.16:8088/api'
+defaultBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://glxy.haxlock.top:18088/api'
 // #endif
 const DEFAULT_BASE = defaultBase
 

@@ -31,7 +31,6 @@
           <image class="hero-media" :src="heroImage" mode="aspectFill" />
           <view class="hero-scrim" />
           <view class="hero-glow" />
-          <view class="hero-grain" />
           <view class="vf-corner vf-tl" />
           <view class="vf-corner vf-tr" />
 
@@ -447,15 +446,6 @@ function onQuickNav(_url: string) {}
     radial-gradient(40% 30% at 6% 86%, rgba(0, 210, 211, 0.12) 0%, rgba(0, 210, 211, 0) 72%);
   opacity: 0.9;
   pointer-events: none;
-}
-
-.hero-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  pointer-events: none;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.6) 0.5rpx, transparent 0.7rpx);
-  background-size: 3rpx 3rpx;
 }
 
 .vf-corner {

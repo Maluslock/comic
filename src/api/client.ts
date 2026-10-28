@@ -27,9 +27,47 @@ function handleUnauthorized(res: { statusCode: number }) {
   }
 }
 
+// 调试期把基址打出来：真机上没有 Network 面板时，vConsole 里这行就是证据
+let baseLogged = false
+
+type ReqOpts = {
+  url: string
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  data?: AnyObject
+  header?: Record<string, string>
+}
+
+// uni.request 在部分端/版本里返回的不是 Promise，直接 await 会拿到 Task 或 [err, res]。
+// 统一包成回调式 Promise，行为在所有端一致。
+function request(opts: ReqOpts): Promise<UniApp.RequestSuccessCallbackResult> {
+  return new Promise((resolve, reject) => {
+    uni.request({
+      ...opts,
+      timeout: 8000,
+      success: (res) => resolve(res as UniApp.RequestSuccessCallbackResult),
+      fail: (err) => reject(new Error(String((err && (err as AnyObject).errMsg) || 'request failed')))
+    })
+  })
+}
+
+// 小程序基础库没有 URLSearchParams（鸿蒙容器直接 ReferenceError），手写序列化。
+// 症状：带 query 的接口一律「加载失败」，且请求根本没发出（服务端零日志）。
+function toQuery(params?: Record<string, string>): string {
+  if (!params) return ''
+  const parts: string[] = []
+  Object.keys(params).forEach((k) => {
+    const v = params[k]
+    if (v === undefined || v === null || v === '') return
+    parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)))
+  })
+  return parts.length ? '?' + parts.join('&') : ''
+}
+
 export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = getApiBase() + path + (params ? '?' + new URLSearchParams(params).toString() : '')
-  const res = await uni.request({ url, method: 'GET', timeout: 5000, header: authHeader() })
+  const base = getApiBase()
+  if (!baseLogged) { baseLogged = true; console.log('[api] base =', base) }
+  const url = base + path + toQuery(params)
+  const res = await request({ url, method: 'GET', header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
   if (res.statusCode !== 200) throw new ApiError(res.statusCode, 'request failed')
@@ -37,14 +75,14 @@ export async function apiGet<T>(path: string, params?: Record<string, string>): 
 }
 
 export async function apiPost<T>(path: string, body: AnyObject): Promise<T> {
-  const res = await uni.request({ url: getApiBase() + path, method: 'POST', data: body, timeout: 5000, header: authHeader() })
+  const res = await request({ url: getApiBase() + path, method: 'POST', data: body, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode !== 200 && res.statusCode !== 201) throw new ApiError(res.statusCode, 'request failed')
   return res.data as T
 }
 
 export async function apiPut<T>(path: string, body: AnyObject): Promise<T> {
-  const res = await uni.request({ url: getApiBase() + path, method: 'PUT', data: body, timeout: 5000, header: authHeader() })
+  const res = await request({ url: getApiBase() + path, method: 'PUT', data: body, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
   if (res.statusCode !== 200) throw new ApiError(res.statusCode, 'request failed')
@@ -52,9 +90,8 @@ export async function apiPut<T>(path: string, body: AnyObject): Promise<T> {
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await uni.request({ url: getApiBase() + path, method: 'DELETE', timeout: 5000, header: authHeader() })
+  const res = await request({ url: getApiBase() + path, method: 'DELETE', header: authHeader() })
   handleUnauthorized(res)
-  if (res.statusCode === 404) throw new NotFoundError()
   if (res.statusCode !== 200 && res.statusCode !== 204) throw new ApiError(res.statusCode, 'request failed')
   return res.data as T
 }

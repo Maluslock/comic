@@ -45,6 +45,36 @@ export interface LoginUserDTO {
   photographerId?: number
 }
 
+/**
+ * 页面路径 + query 的安全拼接：小程序没有 URL/URLSearchParams 构造器，
+ * query 值必须手写 encodeURIComponent。redirect 里嵌套的 /xx?id=1 若不整体编码，
+ * 登录页解析 options 时会把 id 当成登录页自己的参数，跳回后丢 id 落到坏页面。
+ */
+export function withQuery(path: string, params: Record<string, string | number | undefined>): string {
+  const parts: string[] = []
+  Object.keys(params).forEach((k) => {
+    const v = params[k]
+    if (v === undefined || v === null || v === '') return
+    parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)))
+  })
+  return parts.length ? `${path}?${parts.join('&')}` : path
+}
+
+/** 编码完整页面路径（含自身 query），用于塞进 redirect= 参数。 */
+export function encodeRedirect(path: string): string {
+  return encodeURIComponent(path)
+}
+
+/** 解码 redirect= 的值（与 encodeRedirect 配对使用；小程序 options 无内置解码）。
+ * 带非法 % 序列的值（如未编码的老跳转方传入了含 % 的串）会抛 URIError，兜底原样返回。 */
+export function decodeRedirect(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
 export interface EventDTO {
   id: number | string
   name: string

@@ -140,7 +140,7 @@ import ReviewCard from '@/components/ReviewCard.vue'
 import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser } from '@/api/index'
-import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice } from '@/utils/mappers'
+import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRedirect } from '@/utils/mappers'
 import { formatDuration } from '@/utils/duration'
 import type { Photographer, Service } from '@/types'
 
@@ -234,7 +234,7 @@ async function initCollected() {
 async function collect() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/detail?id=' + id }), 800)
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
     return
   }
   const pid = Number(id)
@@ -256,7 +256,7 @@ async function collect() {
 async function blockPhotographer() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/detail?id=' + id }), 800)
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
     return
   }
   const targetUserId = photographer.value?.userId
@@ -283,7 +283,7 @@ async function blockPhotographer() {
 async function goChat() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/detail?id=' + id }), 800)
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
     return
   }
   try {

@@ -95,6 +95,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { decodeRedirect } from '@/utils/mappers'
 
 const userStore = useUserStore()
 
@@ -188,7 +189,10 @@ async function onLogin() {
 
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
-  const redirect = currentPage?.options?.redirect as string | undefined
+  const rawRedirect = currentPage?.options?.redirect as string | undefined
+  // 跳转方已对 redirect 整体 encodeURIComponent（内层 id= 不会再被当成登录页参数），这里配对解码。
+  // 老跳转方未编码时 decode 会原样返回（无 % 序列），向后兼容。
+  const redirect = rawRedirect ? decodeRedirect(rawRedirect) : undefined
 
   setTimeout(() => {
     if (redirect) {

@@ -153,7 +153,7 @@ import { ref, onMounted } from 'vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import type { ComicEvent, Photographer, Work } from '@/types'
 import { apiGet } from '@/api/client'
-import { mapEventItem, mapPhotographerItem, mapWorkItem } from '@/utils/mappers'
+import { mapEventItem, mapPhotographerItem, mapWorkItem, encodeRedirect } from '@/utils/mappers'
 import { loadFollowedIds, toggleFollow } from '@/utils/follow'
 import { useUserStore } from '@/stores/user'
 
@@ -265,7 +265,7 @@ async function initFollowState() {
 async function onToggleFollow() {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/event/detail?id=' + id }), 800)
+    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id) }), 800)
     return
   }
   try {

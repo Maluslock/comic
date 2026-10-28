@@ -20,9 +20,19 @@ function handleUnauthorized(res: { statusCode: number }) {
       } catch { /* pinia 未安装时忽略 */ }
     })
     const pages = getCurrentPages()
-    const cur = pages[pages.length - 1]?.route
+    const top = pages[pages.length - 1]
+    const cur = top?.route
     if (cur && cur !== 'pages/login/index') {
-      uni.navigateTo({ url: `/pages/login/index?redirect=/${cur}` })
+      // redirect 必须带上当前页自身的 query（如 detail?id=12）并整体编码，
+      // 否则 401 → 登录 → 跳回时丢 id，落到「缺少摄影师ID」死页。
+      // options 的取法与各页面 onMounted 里 getCurrentPages() 一致。
+      const opts = ((top as unknown as { options?: Record<string, string> })?.options || {}) as Record<string, string>
+      const qs = Object.keys(opts)
+        .filter((k) => opts[k] !== undefined && opts[k] !== '')
+        .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(opts[k]))}`)
+        .join('&')
+      const back = `/${cur}${qs ? '?' + qs : ''}`
+      uni.navigateTo({ url: `/pages/login/index?redirect=${encodeURIComponent(back)}` })
     }
   }
 }

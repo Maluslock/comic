@@ -29,11 +29,22 @@
         />
       </view>
       
-      <view v-if="loading" class="loading">
+      <view v-if="loading && !photographers.length" class="loading">
         <text>加载中...</text>
       </view>
-      
-      <view v-if="!loading && photographers.length >= total" class="no-more">
+
+      <view v-else-if="error && !photographers.length" class="state-block">
+        <text class="state-title">加载失败</text>
+        <text class="state-desc">{{ error }}</text>
+        <view class="state-btn" @click="loadData()"><text>重新加载</text></view>
+      </view>
+
+      <view v-else-if="!photographers.length" class="state-block">
+        <text class="state-title">没有找到摄影师</text>
+        <text class="state-desc">换个筛选条件试试</text>
+      </view>
+
+      <view v-if="!loading && photographers.length && photographers.length >= total" class="no-more">
         <text>没有更多了</text>
       </view>
       
@@ -67,7 +78,10 @@ const photographers = ref<Photographer[]>([])
 const currentPage = ref(1)
 const total = ref(0)
 const loading = ref(false)
+const error = ref('')
 const currentFilter = ref('all')
+// 请求序号：连点筛选时只认最后一次请求的响应，避免旧响应覆盖新列表
+let requestSeq = 0
 
 // 与后端 SearchPhotographers 的排序键一一对应（$7）：
 // all=评分优先（默认）/ hot=评价数最多 / rating=评分最高 / order=接单最多 / new=最新入驻。
@@ -85,26 +99,31 @@ onMounted(() => {
 })
 
 async function loadData(page = 1) {
+  const seq = ++requestSeq
   loading.value = true
+  error.value = ''
   try {
     const res = await apiGet<PhotographerListResponse>('/v1/photographers', {
       page: String(page),
       size: '10',
       sort: currentFilter.value,
     })
+    if (seq !== requestSeq) return
     const mapped = (res.list || []).map(mapPhotographerItem)
     photographers.value = page === 1 ? mapped : [...photographers.value, ...mapped]
     total.value = res.total
     currentPage.value = page
   } catch (e) {
-    uni.showToast({ title: '加载失败', icon: 'none' })
+    if (seq !== requestSeq) return
+    error.value = e instanceof Error ? e.message : '网络异常'
+    if (photographers.value.length) uni.showToast({ title: '加载失败', icon: 'none' })
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
 function loadMore() {
-  if (loading.value || photographers.value.length >= total.value) return
+  if (loading.value || error.value || photographers.value.length >= total.value) return
   loadData(currentPage.value + 1)
 }
 
@@ -177,11 +196,6 @@ function setFilter(key: string) {
   }
 }
 
-.filter-arrow {
-  font-size: $font-size-xs;
-  margin-left: 4rpx;
-}
-
 .content {
   flex: 1;
   height: 0;
@@ -189,6 +203,37 @@ function setFilter(key: string) {
 
 .photographer-list {
   padding: $spacing-md;
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx $spacing-lg;
+  gap: 12rpx;
+}
+
+.state-title {
+  font-size: $font-size-md;
+  color: $dark-text-primary;
+}
+
+.state-desc {
+  font-size: $font-size-sm;
+  color: $dark-text-secondary;
+}
+
+.state-btn {
+  margin-top: $spacing-md;
+  min-height: 88rpx;
+  padding: 0 $spacing-lg;
+  display: flex;
+  align-items: center;
+  border-radius: $border-radius-xl;
+  border: 1rpx solid rgba($neon-purple, 0.4);
+  color: $neon-purple;
+  font-size: $font-size-sm;
+  &:active { background: $dark-bg-card-hover; }
 }
 
 .loading, .no-more {

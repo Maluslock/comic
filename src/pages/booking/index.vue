@@ -85,7 +85,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import ServiceCard from '@/components/ServiceCard.vue'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
-import { formatPrice } from '@/utils/mappers'
+import { formatPrice, encodeRedirect } from '@/utils/mappers'
 import { todayKey } from '@/utils/date'
 import type { Service } from '@/types'
 
@@ -186,7 +186,9 @@ function selectTime(time: string) {
 async function submitBooking() {
   if (!userStore.isLoggedIn) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/booking/index' }), 800)
+    // 回跳必须带 photographerId：否则登录回来 onLoad 会退回默认的 1 号摄影师
+    const back = encodeRedirect(`/pages/booking/index?photographerId=${photographerId.value}`)
+    setTimeout(() => uni.navigateTo({ url: `/pages/login/index?redirect=${back}` }), 800)
     return
   }
   if (!canSubmit.value) {

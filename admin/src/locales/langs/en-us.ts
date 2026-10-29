@@ -239,7 +239,8 @@ const local: App.I18n.Schema = {
     'admin-accounts': 'Admin Management',
     notification: 'Notification',
     content: 'Content',
-    'audit-log': 'Audit Log'
+    'audit-log': 'Audit Log',
+    dispute: 'Disputes'
   },
   page: {
     login: {

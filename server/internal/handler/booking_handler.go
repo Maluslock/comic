@@ -166,7 +166,7 @@ func (h *BookingHandler) ListByPhotographer(c *gin.Context) {
 }
 
 func (h *BookingHandler) ListByUser(c *gin.Context) {
-	userIDStr := c.Param("userId")
+	userIDStr := c.Param("id")
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
@@ -182,4 +182,92 @@ func (h *BookingHandler) ListByUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, data)
+}
+
+// Checkin validates the coser's check-in code and records arrival.
+func (h *BookingHandler) Checkin(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+		return
+	}
+	data, err := h.svc.Checkin(c.Request.Context(), id, middleware.UserID(c), req.Code)
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// MarkDelivered records photographer delivery with optional evidence.
+func (h *BookingHandler) MarkDelivered(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	var req struct {
+		Evidence []string `json:"evidence"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	data, err := h.svc.MarkDelivered(c.Request.Context(), id, middleware.UserID(c), req.Evidence)
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// AcceptDelivery lets the coser accept a delivered booking.
+func (h *BookingHandler) AcceptDelivery(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	data, err := h.svc.AcceptDelivery(c.Request.Context(), id, middleware.UserID(c))
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GetEvents returns the escrow timeline of a booking (check-in, delivery,
+// acceptance, dispute events). Only the two parties of the booking may read it.
+func (h *BookingHandler) GetEvents(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	events, err := h.svc.GetOrderEvents(c.Request.Context(), id, middleware.UserID(c))
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"list": events})
+}
+
+func (h *BookingHandler) mapNodeErr(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrBookingNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "booking not found"})
+	case errors.Is(err, service.ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+	case errors.Is(err, service.ErrInvalidTransition):
+		c.JSON(http.StatusConflict, gin.H{"error": "invalid status transition"})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
 }

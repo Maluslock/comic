@@ -173,8 +173,18 @@ func main() {
 		router.PUT("/api/v1/bookings/:id/status", middleware.AuthRequired(userRepo), bookingH.UpdateStatus)
 		router.POST("/api/v1/bookings/:id/quote", middleware.AuthRequired(userRepo), bookingH.Quote)
 		router.POST("/api/v1/bookings/:id/quote/respond", middleware.AuthRequired(userRepo), bookingH.RespondQuote)
-		router.GET("/api/v1/bookings/:userId", middleware.AuthRequired(userRepo), bookingH.ListByUser)
+		router.GET("/api/v1/bookings/:id", middleware.AuthRequired(userRepo), bookingH.ListByUser)
 		router.GET("/api/v1/bookings/photographer/:photographerId", middleware.AuthRequired(userRepo), bookingH.ListByPhotographer)
+		router.POST("/api/v1/bookings/:id/checkin", middleware.AuthRequired(userRepo), bookingH.Checkin)
+		router.POST("/api/v1/bookings/:id/deliver", middleware.AuthRequired(userRepo), bookingH.MarkDelivered)
+		router.POST("/api/v1/bookings/:id/accept", middleware.AuthRequired(userRepo), bookingH.AcceptDelivery)
+		router.GET("/api/v1/bookings/:id/events", middleware.AuthRequired(userRepo), bookingH.GetEvents)
+
+		// Disputes
+		disputeH := handler.NewDisputeHandler(bookingSvc)
+		router.POST("/api/v1/bookings/:id/disputes", middleware.AuthRequired(userRepo), disputeH.Open)
+		router.POST("/api/v1/disputes/:disputeId/respond", middleware.AuthRequired(userRepo), disputeH.Respond)
+		router.POST("/api/v1/disputes/:disputeId/escalate", middleware.AuthRequired(userRepo), disputeH.Escalate)
 
 		// Reviews
 		reviewSvc := service.NewReviewService(queries)
@@ -323,6 +333,14 @@ func main() {
 		adminGroup.PUT("/orders/:id/status", adminManageH.SetOrderStatus)
 		adminGroup.GET("/events", adminManageH.ListEvents)
 		adminGroup.PUT("/events/:id/status", adminManageH.SetEventStatus)
+
+		// Escrow disputes (admin console)
+		adminDisputeRepo := repository.NewAdminDisputeRepo(pool)
+		adminDisputeSvc := service.NewAdminDisputeService(adminDisputeRepo, bookingSvc)
+		adminDisputeH := handler.NewAdminDisputeHandler(adminDisputeSvc)
+		adminGroup.GET("/disputes", adminDisputeH.List)
+		adminGroup.GET("/disputes/:id", adminDisputeH.Detail)
+		adminGroup.PUT("/disputes/:id/resolve", adminDisputeH.Resolve)
 		adminUserRepo := repository.NewAdminUserRepo(pool)
 		adminUserSvc := service.NewAdminUserService(adminUserRepo)
 		adminUserH := handler.NewAdminUserHandler(adminUserSvc)

@@ -31,3 +31,24 @@ tasks:
     schedule: "0 4 * * *"
     source: bilibili
     enabled: false
+
+  # 担保交易 escrow 定时任务
+  - name: booking-auto-cancel
+    schedule: "*/30 * * * *"   # 30 分钟
+    source: escrow
+    enabled: true
+
+  - name: booking-auto-accept
+    schedule: "*/10 * * * *"   # 10 分钟
+    source: escrow
+    enabled: true
+
+  - name: booking-noshow
+    schedule: "0 * * * *"      # 每小时
+    source: escrow
+    enabled: true
+
+  - name: booking-default-resolve
+    schedule: "*/10 * * * *"   # 10 分钟
+    source: escrow
+    enabled: true

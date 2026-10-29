@@ -7,11 +7,47 @@ import (
 	"time"
 )
 
+// bookingColumns is the canonical SELECT/RETURNING column list for the bookings
+// table. Every query that materializes a Booking must keep this exact order in
+// sync with the Booking struct in models.go.
+const bookingColumns = `id, photographer_id, coser_id, service_id, date, time, status, sub_status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration, checkin_code, checkin_at, delivered_at, accept_deadline, delivery_evidence, cancel_policy, cancelled_by, noshow_party`
+
 const createBooking = `-- name: CreateBooking :one
 INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks, price_mode, price_status, service_name, service_duration)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
-`
+RETURNING ` + bookingColumns
+
+func scanBooking(row pgxRow) (Booking, error) {
+	var i Booking
+	err := row.Scan(
+		&i.ID,
+		&i.PhotographerID,
+		&i.CoserID,
+		&i.ServiceID,
+		&i.Date,
+		&i.Time,
+		&i.Status,
+		&i.SubStatus,
+		&i.TotalPrice,
+		&i.Remarks,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PriceMode,
+		&i.QuotePrice,
+		&i.PriceStatus,
+		&i.ServiceName,
+		&i.ServiceDuration,
+		&i.CheckinCode,
+		&i.CheckinAt,
+		&i.DeliveredAt,
+		&i.AcceptDeadline,
+		&i.DeliveryEvidence,
+		&i.CancelPolicy,
+		&i.CancelledBy,
+		&i.NoShowParty,
+	)
+	return i, err
+}
 
 type CreateBookingParams struct {
 	PhotographerID  int32     `json:"photographer_id"`
@@ -43,30 +79,11 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		arg.ServiceName,
 		arg.ServiceDuration,
 	)
-	var i Booking
-	err := row.Scan(
-		&i.ID,
-		&i.PhotographerID,
-		&i.CoserID,
-		&i.ServiceID,
-		&i.Date,
-		&i.Time,
-		&i.Status,
-		&i.TotalPrice,
-		&i.Remarks,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.PriceMode,
-		&i.QuotePrice,
-		&i.PriceStatus,
-		&i.ServiceName,
-		&i.ServiceDuration,
-	)
-	return i, err
+	return scanBooking(row)
 }
 
 const getBookingsByUser = `-- name: GetBookingsByUser :many
-SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
+SELECT ` + bookingColumns + `
 FROM bookings
 WHERE coser_id = $1
 ORDER BY created_at DESC
@@ -80,25 +97,8 @@ func (q *Queries) GetBookingsByUser(ctx context.Context, coserID int32) ([]Booki
 	defer rows.Close()
 	var items []Booking
 	for rows.Next() {
-		var i Booking
-		if err := rows.Scan(
-			&i.ID,
-			&i.PhotographerID,
-			&i.CoserID,
-			&i.ServiceID,
-			&i.Date,
-			&i.Time,
-			&i.Status,
-			&i.TotalPrice,
-			&i.Remarks,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.PriceMode,
-			&i.QuotePrice,
-			&i.PriceStatus,
-			&i.ServiceName,
-			&i.ServiceDuration,
-		); err != nil {
+		i, err := scanBooking(rows)
+		if err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -110,15 +110,13 @@ func (q *Queries) GetBookingsByUser(ctx context.Context, coserID int32) ([]Booki
 }
 
 const getBookingByID = `-- name: GetBookingByID :one
-SELECT id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
+SELECT ` + bookingColumns + `
 FROM bookings WHERE id = $1
 `
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int64) (Booking, error) {
 	row := q.db.QueryRow(ctx, getBookingByID, id)
-	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration)
-	return i, err
+	return scanBooking(row)
 }
 
 const getOccupiedTimes = `-- name: GetOccupiedTimesByPhotographerDate :many
@@ -156,21 +154,21 @@ func (q *Queries) CountConflictBookings(ctx context.Context, photographerID int3
 
 const updateBookingStatus = `-- name: UpdateBookingStatus :one
 UPDATE bookings SET status = $2, updated_at = NOW()
-WHERE id = $1
-RETURNING id, photographer_id, coser_id, service_id, date, time, status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration
-`
+WHERE id = $1 AND status = $3
+RETURNING ` + bookingColumns
 
-func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error) {
-	row := q.db.QueryRow(ctx, updateBookingStatus, id, status)
-	var i Booking
-	err := row.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration)
-	return i, err
+// UpdateBookingStatus performs a compare-and-set on status: fromStatus is the
+// state the caller observed. 0 rows (pgx.ErrNoRows) means someone else moved the
+// booking first — never retry blindly, surface it as a conflict.
+func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status string, fromStatus string) (Booking, error) {
+	row := q.db.QueryRow(ctx, updateBookingStatus, id, status, fromStatus)
+	return scanBooking(row)
 }
 
 const getBookingsByUserWithDetails = `-- name: GetBookingsByUserWithDetails :many
-SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, b.service_name, b.service_duration,
+SELECT b.` + bookingColumns + `,
        p.name AS photographer_name, p.avatar AS photographer_avatar, p.user_id AS photographer_user_id,
-       COALESCE(s.name, '') AS service_name, COALESCE(s.price, 0) AS service_price
+       COALESCE(s.name, '') AS service_name_join, COALESCE(s.price, 0) AS service_price
 FROM bookings b
 LEFT JOIN photographers p ON p.id = b.photographer_id
 LEFT JOIN services s ON s.id = b.service_id
@@ -187,7 +185,38 @@ func (q *Queries) GetBookingsByUserWithDetails(ctx context.Context, coserID int3
 	var items []BookingWithDetails
 	for rows.Next() {
 		var i BookingWithDetails
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.Booking.ServiceName, &i.ServiceDuration, &i.PhotographerName, &i.PhotographerAvatar, &i.PhotographerUserID, &i.ServiceName, &i.ServicePrice); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.PhotographerID,
+			&i.CoserID,
+			&i.ServiceID,
+			&i.Date,
+			&i.Time,
+			&i.Status,
+			&i.SubStatus,
+			&i.TotalPrice,
+			&i.Remarks,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PriceMode,
+			&i.QuotePrice,
+			&i.PriceStatus,
+			&i.Booking.ServiceName,
+			&i.ServiceDuration,
+			&i.CheckinCode,
+			&i.CheckinAt,
+			&i.DeliveredAt,
+			&i.AcceptDeadline,
+			&i.DeliveryEvidence,
+			&i.CancelPolicy,
+			&i.CancelledBy,
+			&i.NoShowParty,
+			&i.PhotographerName,
+			&i.PhotographerAvatar,
+			&i.PhotographerUserID,
+			&i.ServiceName,
+			&i.ServicePrice,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -203,16 +232,12 @@ type BookingWithCoser struct {
 }
 
 // coser_phone 只在摄影师**已接单**（confirmed/completed）后返回。
-// 手机号是个人信息：摄影师在确认之前并没有联系对方的正当必要（想沟通走站内聊天），
-// 而接单后要赴约就必须能联系上。遮罩刻意写在 SQL 里而不是前端 —— 只藏前端的话，
-// 完整号码仍然在响应体里，抓包即得。前端据 status 决定文案（「确认接单后可见」）。
 const getBookingsByPhotographer = `-- name: GetBookingsByPhotographer :many
-SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price, b.price_status, COALESCE(b.service_name, s.name, '') AS service_name, b.service_duration,
+SELECT b.` + bookingColumns + `,
        COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar,
        CASE WHEN b.status IN ('confirmed', 'completed') THEN COALESCE(u.phone, '') ELSE '' END AS coser_phone
 FROM bookings b
 LEFT JOIN users u ON u.id = b.coser_id
-LEFT JOIN services s ON s.id = b.service_id
 WHERE b.photographer_id = $1
 ORDER BY b.created_at DESC
 `
@@ -226,7 +251,36 @@ func (q *Queries) GetBookingsByPhotographer(ctx context.Context, photographerID 
 	var items []BookingWithCoser
 	for rows.Next() {
 		var i BookingWithCoser
-		if err := rows.Scan(&i.ID, &i.PhotographerID, &i.CoserID, &i.ServiceID, &i.Date, &i.Time, &i.Status, &i.TotalPrice, &i.Remarks, &i.CreatedAt, &i.UpdatedAt, &i.PriceMode, &i.QuotePrice, &i.PriceStatus, &i.ServiceName, &i.ServiceDuration, &i.CoserName, &i.CoserAvatar, &i.CoserPhone); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.PhotographerID,
+			&i.CoserID,
+			&i.ServiceID,
+			&i.Date,
+			&i.Time,
+			&i.Status,
+			&i.SubStatus,
+			&i.TotalPrice,
+			&i.Remarks,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PriceMode,
+			&i.QuotePrice,
+			&i.PriceStatus,
+			&i.ServiceName,
+			&i.ServiceDuration,
+			&i.CheckinCode,
+			&i.CheckinAt,
+			&i.DeliveredAt,
+			&i.AcceptDeadline,
+			&i.DeliveryEvidence,
+			&i.CancelPolicy,
+			&i.CancelledBy,
+			&i.NoShowParty,
+			&i.CoserName,
+			&i.CoserAvatar,
+			&i.CoserPhone,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -249,12 +303,12 @@ func (q *Queries) QuoteBooking(ctx context.Context, id int64, price int32, photo
 
 const acceptBookingQuote = `-- name: AcceptBookingQuote :execrows
 UPDATE bookings SET total_price = quote_price, price_status = 'agreed', status = 'confirmed', updated_at = NOW()
-WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted'
+WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted' AND status = 'pending'
 `
 
 const rejectBookingQuote = `-- name: RejectBookingQuote :execrows
 UPDATE bookings SET price_status = 'rejected', status = 'cancelled', updated_at = NOW()
-WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted'
+WHERE id = $1 AND coser_id = $2 AND price_status = 'quoted' AND status = 'pending'
 `
 
 func (q *Queries) RespondBookingQuote(ctx context.Context, id int64, coserID int32, accept bool) (int64, error) {
@@ -267,4 +321,227 @@ func (q *Queries) RespondBookingQuote(ctx context.Context, id int64, coserID int
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+// ---------- Escrow node operations ----------
+
+// SetBookingConfirmed sets a pending booking to confirmed and emits the
+// in_service sub-status. This replaces the legacy confirmed transition for
+// escrow orders.
+const setBookingConfirmed = `-- name: SetBookingConfirmed :one
+UPDATE bookings
+SET status = 'confirmed',
+    sub_status = 'in_service',
+    updated_at = NOW()
+WHERE id = $1 AND status = 'pending'
+RETURNING ` + bookingColumns
+
+func (q *Queries) SetBookingConfirmed(ctx context.Context, id int64) (Booking, error) {
+	row := q.db.QueryRow(ctx, setBookingConfirmed, id)
+	return scanBooking(row)
+}
+
+// GenerateCheckinCode sets a deterministic 6-character code for coser-side
+// check-in. It is idempotent: repeated calls return the same code.
+const generateCheckinCode = `-- name: GenerateCheckinCode :one
+UPDATE bookings
+SET checkin_code = COALESCE(checkin_code, SUBSTRING(MD5($2::text) FROM 1 FOR 6)),
+    updated_at = NOW()
+WHERE id = $1 AND status = 'confirmed'
+RETURNING ` + bookingColumns
+
+func (q *Queries) GenerateCheckinCode(ctx context.Context, id int64, salt string) (Booking, error) {
+	row := q.db.QueryRow(ctx, generateCheckinCode, id, salt)
+	return scanBooking(row)
+}
+
+// Checkin records arrival, sets sub_status='in_service', and requires both
+// status='confirmed' and a matching 6-character checkin_code.
+const checkin = `-- name: Checkin :one
+UPDATE bookings
+SET checkin_at = NOW(),
+    sub_status = 'in_service',
+    updated_at = NOW()
+WHERE id = $1 AND status = 'confirmed' AND checkin_at IS NULL AND checkin_code = $2
+RETURNING ` + bookingColumns
+
+func (q *Queries) Checkin(ctx context.Context, id int64, code string) (Booking, error) {
+	row := q.db.QueryRow(ctx, checkin, id, code)
+	return scanBooking(row)
+}
+
+// DeliverBooking records photographer delivery with evidence and starts the
+// acceptance timer. It requires the booking to be confirmed and in_service, and
+// not already delivered.
+type DeliverBookingParams struct {
+	ID               int64
+	DeliveryEvidence []string
+	AcceptDeadline   time.Time
+}
+
+const deliverBooking = `-- name: DeliverBooking :one
+UPDATE bookings
+SET sub_status = 'delivered',
+    delivered_at = NOW(),
+    delivery_evidence = $2,
+    accept_deadline = $3,
+    updated_at = NOW()
+WHERE id = $1 AND status = 'confirmed' AND sub_status = 'in_service' AND delivered_at IS NULL
+RETURNING ` + bookingColumns
+
+func (q *Queries) DeliverBooking(ctx context.Context, arg DeliverBookingParams) (Booking, error) {
+	row := q.db.QueryRow(ctx, deliverBooking, arg.ID, arg.DeliveryEvidence, arg.AcceptDeadline)
+	return scanBooking(row)
+}
+
+// AcceptDelivery finalizes a delivered booking as completed.
+const acceptDelivery = `-- name: AcceptDelivery :one
+UPDATE bookings
+SET status = 'completed',
+    sub_status = NULL,
+    updated_at = NOW()
+WHERE id = $1 AND status = 'confirmed' AND sub_status = 'delivered' AND delivered_at IS NOT NULL
+RETURNING ` + bookingColumns
+
+func (q *Queries) AcceptDelivery(ctx context.Context, id int64) (Booking, error) {
+	row := q.db.QueryRow(ctx, acceptDelivery, id)
+	return scanBooking(row)
+}
+
+// AutoAcceptDelivery completes bookings whose acceptance deadline has passed.
+const autoAcceptDelivery = `-- name: AutoAcceptDelivery :many
+UPDATE bookings
+SET status = 'completed',
+    sub_status = NULL,
+    updated_at = NOW()
+WHERE status = 'confirmed'
+  AND sub_status = 'delivered'
+  AND accept_deadline < NOW()
+RETURNING ` + bookingColumns
+
+func (q *Queries) AutoAcceptDelivery(ctx context.Context) ([]Booking, error) {
+	rows, err := q.db.Query(ctx, autoAcceptDelivery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Booking
+	for rows.Next() {
+		i, err := scanBooking(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+// CancelBooking performs a status=cancelled transition and records metadata.
+type CancelBookingParams struct {
+	ID          int64
+	CancelledBy string
+	NoShowParty *string
+}
+
+const cancelBooking = `-- name: CancelBooking :one
+UPDATE bookings
+SET status = 'cancelled',
+    sub_status = NULL,
+    cancelled_by = $2,
+    noshow_party = COALESCE($3, noshow_party),
+    updated_at = NOW()
+WHERE id = $1 AND status IN ('pending', 'confirmed')
+RETURNING ` + bookingColumns
+
+func (q *Queries) CancelBooking(ctx context.Context, arg CancelBookingParams) (Booking, error) {
+	row := q.db.QueryRow(ctx, cancelBooking, arg.ID, arg.CancelledBy, arg.NoShowParty)
+	return scanBooking(row)
+}
+
+// AutoCancelPending cancels bookings that have been pending too long.
+const autoCancelPending = `-- name: AutoCancelPending :many
+UPDATE bookings
+SET status = 'cancelled',
+    sub_status = NULL,
+    cancelled_by = 'system',
+    updated_at = NOW()
+WHERE status = 'pending'
+  AND created_at < $1
+RETURNING ` + bookingColumns
+
+func (q *Queries) AutoCancelPending(ctx context.Context, before time.Time) ([]Booking, error) {
+	rows, err := q.db.Query(ctx, autoCancelPending, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Booking
+	for rows.Next() {
+		i, err := scanBooking(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+// MarkBookingNoShow sets noshow_party on a confirmed booking that missed the
+// slot. The booking remains confirmed so the dispute flow can resolve it.
+const markBookingNoShow = `-- name: MarkBookingNoShow :one
+UPDATE bookings
+SET noshow_party = $2,
+    updated_at = NOW()
+WHERE id = $1 AND status = 'confirmed'
+RETURNING ` + bookingColumns
+
+func (q *Queries) MarkBookingNoShow(ctx context.Context, id int64, party string) (Booking, error) {
+	row := q.db.QueryRow(ctx, markBookingNoShow, id, party)
+	return scanBooking(row)
+}
+
+// ListNoShowCandidates returns confirmed bookings whose slot has passed.
+const listNoShowCandidates = `-- name: ListNoShowCandidates :many
+SELECT ` + bookingColumns + `
+FROM bookings
+WHERE status = 'confirmed'
+  AND noshow_party IS NULL
+  AND (date < CURRENT_DATE OR (date = CURRENT_DATE AND time < CURRENT_TIME))
+ORDER BY id ASC
+`
+
+func (q *Queries) ListNoShowCandidates(ctx context.Context) ([]Booking, error) {
+	rows, err := q.db.Query(ctx, listNoShowCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Booking
+	for rows.Next() {
+		i, err := scanBooking(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+// UpdateBookingSubStatus sets sub_status explicitly (used by dispute resolution).
+const updateBookingSubStatus = `-- name: UpdateBookingSubStatus :one
+UPDATE bookings
+SET sub_status = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING ` + bookingColumns
+
+func (q *Queries) UpdateBookingSubStatus(ctx context.Context, id int64, subStatus *string) (Booking, error) {
+	row := q.db.QueryRow(ctx, updateBookingSubStatus, id, subStatus)
+	return scanBooking(row)
+}
+
+// ---------- pgx helpers for shared scanning ----------
+
+type pgxRow interface {
+	Scan(dest ...any) error
 }

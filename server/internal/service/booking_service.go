@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -72,6 +73,8 @@ var (
 	ErrSelfBooking = errors.New("cannot book your own service")
 )
 
+// canTransition guards the four legacy top-level states. Sub-status flows are
+// checked separately by canSubTransition.
 func canTransition(from, to string) bool {
 	switch from {
 	case "pending":
@@ -82,6 +85,55 @@ func canTransition(from, to string) bool {
 		return false
 	}
 }
+
+// subStatus constants used by the escrow node state machine.
+const (
+	subStatusInService = "in_service"
+	subStatusDelivered = "delivered"
+	subStatusDisputed  = "disputed"
+)
+
+// subStatusOr returns the current sub-status or "" when nil.
+func subStatusOr(b repository.Booking) string {
+	if b.SubStatus == nil {
+		return ""
+	}
+	return *b.SubStatus
+}
+
+// canSubTransition validates transitions of the escrow sub-status layer.
+// Returns (next, allowed). When allowed=false, next equals from.
+func canSubTransition(from string) (string, bool) {
+	switch from {
+	case "":
+		return subStatusInService, true
+	case subStatusInService:
+		return subStatusDelivered, true
+	case subStatusDelivered:
+		return "", true // completion clears sub_status
+	case subStatusDisputed:
+		return "", false
+	default:
+		return from, false
+	}
+}
+
+// disputeStatus constants.
+const (
+	disputeStatusOpen       = "open"
+	disputeStatusResponding = "responding"
+	disputeStatusEscalated  = "escalated"
+	disputeStatusResolved   = "resolved"
+	disputeStatusClosed     = "closed"
+)
+
+// dispute type constants.
+const (
+	disputeTypeNoShow      = "no_show"
+	disputeTypeNotDelivered = "not_delivered"
+	disputeTypeQuality     = "quality"
+	disputeTypeOther       = "other"
+)
 
 // isPastSlot 判断请求的档期是否已经过去，按**服务器本地时区**判断（唯一能自证的时钟）。
 // 日期是硬约束；时刻是尽力而为：今天的、已经过去的小时同样拒绝；若时刻字符串解析不了，
@@ -132,6 +184,26 @@ const (
 	notifyLinkPhotographerOrder = "photographer_orders"
 )
 
+// orderEventType for order_events.event_type.
+type orderEventType string
+
+const (
+	eventConfirmed      orderEventType = "confirmed"
+	eventCheckin                       = "checkin"
+	eventDeliver                       = "deliver"
+	eventAccept                        = "accept"
+	eventAutoAccept                    = "auto_accept"
+	eventCompleteLegacy                = "complete_legacy"
+	eventCancel                        = "cancel"
+	eventAutoCancel                    = "auto_cancel"
+	eventNoShow                        = "noshow"
+	eventDisputeOpen                   = "dispute_open"
+	eventDisputeRespond                = "dispute_respond"
+	eventDisputeEscalate               = "dispute_escalate"
+	eventDisputeResolve                = "dispute_resolve"
+	eventCreditDelta                   = "credit_delta"
+)
+
 func (s *BookingService) notify(ctx context.Context, userID int32, typ, title, content string, bookingID int64) {
 	s.notifyLinked(ctx, userID, typ, title, content, notifyLinkOrder, bookingID)
 }
@@ -148,6 +220,55 @@ func (s *BookingService) notifyLinked(ctx context.Context, userID int32, typ, ti
 	if _, err := s.queries.InsertNotification(ctx, int64(userID), typ, title, content, &linkType, &bookingID); err != nil {
 		log.Printf("booking notify failed: %v", err)
 	}
+}
+
+// emitOrderEvent writes an append-only event for a booking. System/admin events
+// are deduplicated by (booking_id, event_type). Errors are logged and ignored.
+func (s *BookingService) emitOrderEvent(ctx context.Context, bookingID int64, actorID int64, actorRole string, eventType orderEventType, payload map[string]any) {
+	if eventType == eventAutoAccept || eventType == eventAutoCancel || eventType == eventNoShow {
+		// actorRole system/admin events: dedupe by (booking_id, event_type).
+		if n, err := s.queries.CountSystemEventByBooking(ctx, bookingID, string(eventType)); err == nil && n > 0 {
+			return
+		}
+	}
+	var payloadBytes []byte
+	if len(payload) > 0 {
+		var err error
+		payloadBytes, err = json.Marshal(payload)
+		if err != nil {
+			log.Printf("booking event payload marshal failed: %v", err)
+			payloadBytes = []byte("{}")
+		}
+	}
+	actorIDPtr := &actorID
+	actorRolePtr := &actorRole
+	if actorID == 0 {
+		actorIDPtr = nil
+	}
+	if actorRole == "" {
+		actorRolePtr = nil
+	}
+	if _, err := s.queries.CreateOrderEvent(ctx, repository.CreateOrderEventParams{
+		BookingID: bookingID,
+		ActorID:   actorIDPtr,
+		ActorRole: actorRolePtr,
+		EventType: string(eventType),
+		Payload:   payloadBytes,
+	}); err != nil {
+		log.Printf("booking event emit failed: %v", err)
+	}
+}
+
+// dedupedNotify prevents duplicate notifications for the same booking transition
+// if the database layer supports lookup; otherwise falls back to unconditional notify.
+func (s *BookingService) dedupedNotify(ctx context.Context, userID int32, typ, title, content string, bookingID int64, eventType orderEventType) {
+	if eventType == eventConfirmed || eventType == eventCheckin || eventType == eventDeliver ||
+		eventType == eventAccept || eventType == eventCompleteLegacy {
+		if n, err := s.queries.CountSystemEventByBooking(ctx, bookingID, string(eventType)); err == nil && n > 0 {
+			return
+		}
+	}
+	s.notify(ctx, userID, typ, title, content, bookingID)
 }
 
 func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (*BookingItem, error) {
@@ -346,8 +467,14 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
 		return nil, ErrInvalidTransition
 	}
-	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
+	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus, b.Status)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The status changed between our read and this write (double confirm,
+			// confirm-vs-cancel). Tell the caller it lost the race instead of
+			// silently overwriting the winner.
+			return nil, ErrConflict
+		}
 		return nil, err
 	}
 
@@ -361,6 +488,11 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 		}
 	case "completed":
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
+	}
+
+	if newStatus == "completed" {
+		// 旧 UpdateStatus 直接置 completed 视为 legacy 完成事件，保留审计。
+		s.emitOrderEvent(ctx, b.ID, actorUserID, actorTag, eventCompleteLegacy, nil)
 	}
 
 	// 单量（order_count）随状态流转变化：完成 +1、取消 -1。整表重算而不是加减，
@@ -394,8 +526,14 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 	if newStatus == "confirmed" && b.PriceMode == "negotiable" && b.PriceStatus != "agreed" {
 		return nil, ErrInvalidTransition
 	}
-	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus)
+	updated, err := s.queries.UpdateBookingStatus(ctx, bookingID, newStatus, b.Status)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The status changed between our read and this write (double confirm,
+			// confirm-vs-cancel). Tell the caller it lost the race instead of
+			// silently overwriting the winner.
+			return nil, ErrConflict
+		}
 		return nil, err
 	}
 	switch newStatus {
@@ -412,6 +550,331 @@ func (s *BookingService) AdminUpdateStatus(ctx context.Context, bookingID int64,
 	// 管理员流转同样影响单量，走同一套重算。
 	s.recomputeStats(ctx, b.PhotographerID)
 	return bookingToItem(updated), nil
+}
+
+// actorRole helpers.
+const (
+	actorCoser        = "coser"
+	actorPhotographer = "photographer"
+	actorAdmin        = "admin"
+	actorSystem       = "system"
+)
+
+// Credit score constants.
+const (
+	creditReasonNoShow        = "photographer_no_show"
+	creditReasonCoserNoShow   = "coser_no_show"
+	creditReasonDisputeLost   = "dispute_lost"
+	creditReasonOrderComplete = "order_completed"
+	creditReasonLateCancel    = "late_cancel"
+	creditReasonDeliveryOverdue = "delivery_overdue"
+)
+
+// applyCreditDelta idempotently applies a credit delta for a user. The unique
+// index on (user_id, ref_type, ref_id, reason) makes concurrent/duplicate calls
+// a no-op. Errors are logged and ignored so credit never blocks the main flow.
+//
+// 顺序：先尝试插入 credit_events（唯一索引保证幂等）。如果事件已存在，说明该事实
+// 已经计过分，直接跳过 score 更新，避免重复扣分/加分。
+func (s *BookingService) applyCreditDelta(ctx context.Context, userID int64, delta int32, reason string, refType *string, refID *int64, bookingID *int64, desc string) {
+	if _, err := s.queries.UpsertCreditScore(ctx, userID, nil); err != nil {
+		log.Printf("credit upsert score failed: %v", err)
+		return
+	}
+	ce, err := s.queries.CreateCreditEvent(ctx, repository.CreateCreditEventParams{
+		UserID:      userID,
+		Delta:       delta,
+		Reason:      reason,
+		RefType:     refType,
+		RefID:       refID,
+		BookingID:   bookingID,
+		Description: &desc,
+	})
+	if err != nil {
+		// Unique constraint violation is expected for idempotent retries.
+		if !isUniqueViolation(err) {
+			log.Printf("credit create event failed: %v", err)
+		}
+		return
+	}
+	if ce.ID == 0 {
+		// DO NOTHING won the conflict: the event already exists, do not mutate score again.
+		return
+	}
+	if _, err := s.queries.AddCreditDelta(ctx, userID, delta); err != nil {
+		log.Printf("credit add delta failed: %v", err)
+	}
+}
+
+// Checkin lets the booking's photographer confirm the coser has arrived.
+// It is idempotent: repeated calls return the already-checked-in booking.
+func (s *BookingService) Checkin(ctx context.Context, bookingID int64, actorUserID int64, code string) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+		return nil, ErrForbidden
+	}
+	if b.Status != "confirmed" {
+		return nil, ErrInvalidTransition
+	}
+	// Already checked in: idempotent read (only if sub_status is in_service).
+	if b.CheckinAt != nil && b.SubStatus != nil && *b.SubStatus == subStatusInService {
+		return bookingToItem(b), nil
+	}
+	// Prevent accidental "checkin then deliver" skip: a delivered booking must
+	// not be allowed to check in again.
+	if subStatusOr(b) == subStatusDelivered {
+		return nil, ErrInvalidTransition
+	}
+	if code == "" || b.CheckinCode == nil || code != *b.CheckinCode {
+		return nil, ErrForbidden
+	}
+	updated, err := s.queries.Checkin(ctx, bookingID, code)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidTransition
+		}
+		return nil, err
+	}
+	s.emitOrderEvent(ctx, bookingID, actorUserID, actorPhotographer, eventCheckin, map[string]any{"code": code})
+	s.dedupedNotify(ctx, b.CoserID, "info", "预约已签到", "摄影师已确认您已到场，拍摄即将开始", bookingID, eventCheckin)
+	return bookingToItem(updated), nil
+}
+
+// MarkDelivered records the photographer's delivery of the service.
+func (s *BookingService) MarkDelivered(ctx context.Context, bookingID int64, actorUserID int64, evidence []string) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+		return nil, ErrForbidden
+	}
+	if b.Status != "confirmed" {
+		return nil, ErrInvalidTransition
+	}
+	ss := subStatusOr(b)
+	if ss == subStatusDelivered {
+		return bookingToItem(b), nil
+	}
+	if ss != subStatusInService {
+		return nil, ErrInvalidTransition
+	}
+	deadline := time.Now().Add(7 * 24 * time.Hour)
+	updated, err := s.queries.DeliverBooking(ctx, repository.DeliverBookingParams{
+		ID:               bookingID,
+		DeliveryEvidence: evidence,
+		AcceptDeadline:   deadline,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidTransition
+		}
+		return nil, err
+	}
+	s.emitOrderEvent(ctx, bookingID, actorUserID, actorPhotographer, eventDeliver, map[string]any{"evidence_count": len(evidence)})
+	s.dedupedNotify(ctx, b.CoserID, "info", "拍摄已交付", "摄影师已标记拍摄完成，请在 7 天内确认验收", bookingID, eventDeliver)
+	return bookingToItem(updated), nil
+}
+
+// AcceptDelivery lets the coser accept a delivered booking and mark it complete.
+func (s *BookingService) AcceptDelivery(ctx context.Context, bookingID int64, actorUserID int64) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if int64(b.CoserID) != actorUserID {
+		return nil, ErrForbidden
+	}
+	if b.Status != "confirmed" || subStatusOr(b) != subStatusDelivered {
+		return nil, ErrInvalidTransition
+	}
+	if b.DeliveredAt == nil {
+		return nil, ErrInvalidTransition
+	}
+	updated, err := s.queries.AcceptDelivery(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidTransition
+		}
+		return nil, err
+	}
+	s.emitOrderEvent(ctx, bookingID, actorUserID, actorCoser, eventAccept, nil)
+	s.notify(ctx, b.CoserID, "success", "拍摄已完成", "您已确认验收，记得去评价本次拍摄哦", bookingID)
+	s.notifyPhotographer(ctx, b.PhotographerID, "success", "拍摄已完成", "客户已确认验收", bookingID)
+	s.recomputeStats(ctx, b.PhotographerID)
+	// 履约完成 +2（单笔 booking 维度幂等，靠 credit_events 唯一索引兜底）。
+	s.applyCreditDelta(ctx, actorUserID, 2, creditReasonOrderComplete, strPtr("booking"), &bookingID, &bookingID, "订单履约完成")
+	return bookingToItem(updated), nil
+}
+
+
+// OpenDispute starts an escrow dispute for a confirmed booking.
+func (s *BookingService) OpenDispute(ctx context.Context, bookingID int64, actorUserID int64, actorRole, disputeType, reason string) (*repository.Dispute, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if actorRole == actorCoser {
+		if int64(b.CoserID) != actorUserID {
+			return nil, ErrForbidden
+		}
+	} else if actorRole == actorPhotographer {
+		profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+		if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+			return nil, ErrForbidden
+		}
+	} else {
+		return nil, ErrForbidden
+	}
+	if b.Status != "confirmed" {
+		return nil, ErrInvalidTransition
+	}
+	ss := subStatusOr(b)
+	if ss != subStatusInService && ss != subStatusDelivered && ss != "" {
+		return nil, ErrInvalidTransition
+	}
+	// 已存在未关闭争议则禁止重复开启。
+	if existing, err := s.queries.GetOpenDisputeByBooking(ctx, bookingID); err == nil && existing.ID != 0 {
+		return nil, ErrConflict
+	} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	// Snapshot current sub_status as the restore point on resolution.
+	now := time.Now()
+	dispute, err := s.queries.CreateDispute(ctx, repository.CreateDisputeParams{
+		BookingID:        bookingID,
+		OpenedBy:         actorUserID,
+		OpenedByRole:     actorRole,
+		Type:             disputeType,
+		Reason:           reason,
+		RespondDeadline:  now.Add(48 * time.Hour),
+		EvidenceDeadline: now.Add(72 * time.Hour),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.queries.UpdateBookingSubStatus(ctx, bookingID, strPtr(subStatusDisputed)); err != nil {
+		log.Printf("dispute set sub_status failed: %v", err)
+	}
+	s.emitOrderEvent(ctx, bookingID, actorUserID, actorRole, eventDisputeOpen, map[string]any{"dispute_id": dispute.ID, "type": disputeType})
+	s.notify(ctx, b.CoserID, "warning", "争议已开启", fmt.Sprintf("预约(#%d)已发起争议，等待处理", bookingID), bookingID)
+	s.notifyPhotographer(ctx, b.PhotographerID, "warning", "争议已开启", fmt.Sprintf("预约(#%d)已被对方发起争议", bookingID), bookingID)
+	return &dispute, nil
+}
+
+// RespondDispute lets the non-opener reply within the response window.
+func (s *BookingService) RespondDispute(ctx context.Context, disputeID int64, actorUserID int64, actorRole, response string) (*repository.Dispute, error) {
+	d, err := s.queries.GetDisputeByID(ctx, disputeID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if d.Status != disputeStatusOpen && d.Status != disputeStatusResponding {
+		return nil, ErrInvalidTransition
+	}
+	if time.Now().After(d.RespondDeadline) {
+		return nil, ErrInvalidTransition
+	}
+	if actorRole == d.OpenedByRole {
+		return nil, ErrForbidden
+	}
+	b, err := s.queries.GetBookingByID(ctx, d.BookingID)
+	if err != nil {
+		return nil, err
+	}
+	if actorRole == actorCoser {
+		if int64(b.CoserID) != actorUserID {
+			return nil, ErrForbidden
+		}
+	} else if actorRole == actorPhotographer {
+		profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+		if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+			return nil, ErrForbidden
+		}
+	} else {
+		return nil, ErrForbidden
+	}
+	updated, err := s.queries.UpdateDisputeStatus(ctx, repository.UpdateDisputeStatusParams{
+		ID:     disputeID,
+		Status: disputeStatusResponding,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.emitOrderEvent(ctx, d.BookingID, actorUserID, actorRole, eventDisputeRespond, map[string]any{"dispute_id": disputeID, "response": response})
+	return &updated, nil
+}
+
+// ResolveDispute closes a dispute and restores the booking sub-status.
+func (s *BookingService) ResolveDispute(ctx context.Context, disputeID int64, adminUserID int64, resolution string, penaltyParty *string) (*repository.Dispute, error) {
+	d, err := s.queries.GetDisputeByID(ctx, disputeID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	if d.Status != disputeStatusOpen && d.Status != disputeStatusResponding && d.Status != disputeStatusEscalated {
+		return nil, ErrInvalidTransition
+	}
+	b, err := s.queries.GetBookingByID(ctx, d.BookingID)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := s.queries.UpdateDisputeStatus(ctx, repository.UpdateDisputeStatusParams{
+		ID:         disputeID,
+		Status:     disputeStatusClosed,
+		Resolution: &resolution,
+		AdminID:    &adminUserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Restore booking sub-status to allow the normal flow to continue.
+	// A closed dispute after delivery stays delivered; otherwise back to in_service.
+	var restored *string
+	if b.DeliveredAt != nil {
+		restored = strPtr(subStatusDelivered)
+	} else {
+		restored = strPtr(subStatusInService)
+	}
+	if _, err := s.queries.UpdateBookingSubStatus(ctx, d.BookingID, restored); err != nil {
+		log.Printf("dispute restore sub_status failed: %v", err)
+	}
+	s.emitOrderEvent(ctx, d.BookingID, adminUserID, actorAdmin, eventDisputeResolve, map[string]any{"dispute_id": disputeID, "resolution": resolution})
+	s.notify(ctx, b.CoserID, "info", "争议已处理", fmt.Sprintf("预约(#%d)的争议已由平台处理，结果：%s", d.BookingID, resolution), d.BookingID)
+	s.notifyPhotographer(ctx, b.PhotographerID, "info", "争议已处理", fmt.Sprintf("预约(#%d)的争议已由平台处理", d.BookingID), d.BookingID)
+	// 败诉 -10。
+	if penaltyParty != nil {
+		if *penaltyParty == actorCoser {
+			s.applyCreditDelta(ctx, int64(b.CoserID), -10, creditReasonDisputeLost, strPtr("dispute"), &disputeID, &d.BookingID, "争议败诉")
+		} else if *penaltyParty == actorPhotographer {
+			profile, err := s.queries.GetPhotographerById(ctx, b.PhotographerID)
+			if err == nil && profile.UserID != nil {
+				s.applyCreditDelta(ctx, *profile.UserID, -10, creditReasonDisputeLost, strPtr("dispute"), &disputeID, &d.BookingID, "争议败诉")
+			}
+		}
+	}
+	return &updated, nil
 }
 
 // Quote records a single-round price offer from the booking's own photographer.

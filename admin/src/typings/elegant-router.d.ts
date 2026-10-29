@@ -26,6 +26,7 @@ declare module "@elegant-router/types" {
     "certification": "/certification";
     "content": "/content";
     "dashboard": "/dashboard";
+    "dispute": "/dispute";
     "event": "/event";
     "iframe-page": "/iframe-page/:url";
     "login": "/login";
@@ -73,6 +74,7 @@ declare module "@elegant-router/types" {
     | "certification"
     | "content"
     | "dashboard"
+    | "dispute"
     | "event"
     | "iframe-page"
     | "login"
@@ -107,6 +109,7 @@ declare module "@elegant-router/types" {
     | "certification"
     | "content"
     | "dashboard"
+    | "dispute"
     | "event"
     | "notification"
     | "order"

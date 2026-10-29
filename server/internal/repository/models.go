@@ -113,22 +113,31 @@ type FeaturedWork struct {
 
 // Booking represents a booking record.
 type Booking struct {
-	ID             int64     `json:"id"`
-	PhotographerID int32     `json:"photographer_id"`
-	CoserID        int32     `json:"coser_id"`
-	ServiceID      int32     `json:"service_id"`
-	Date           time.Time `json:"date"`
-	Time           string    `json:"time"`
-	Status          string    `json:"status"`
-	TotalPrice      int32     `json:"total_price"`
-	Remarks         *string   `json:"remarks"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	PriceMode       string    `json:"price_mode"`
-	QuotePrice      *int32    `json:"quote_price"`
-	PriceStatus     string    `json:"price_status"`
-	ServiceName     *string   `json:"service_name"`
-	ServiceDuration *int32    `json:"service_duration"`
+	ID               int64      `json:"id"`
+	PhotographerID   int32      `json:"photographer_id"`
+	CoserID          int32      `json:"coser_id"`
+	ServiceID        int32      `json:"service_id"`
+	Date             time.Time  `json:"date"`
+	Time             string     `json:"time"`
+	Status           string     `json:"status"`
+	SubStatus        *string    `json:"sub_status"`
+	TotalPrice       int32      `json:"total_price"`
+	Remarks          *string    `json:"remarks"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	PriceMode        string     `json:"price_mode"`
+	QuotePrice       *int32     `json:"quote_price"`
+	PriceStatus      string     `json:"price_status"`
+	ServiceName      *string    `json:"service_name"`
+	ServiceDuration  *int32     `json:"service_duration"`
+	CheckinCode      *string    `json:"checkin_code"`
+	CheckinAt        *time.Time `json:"checkin_at"`
+	DeliveredAt      *time.Time `json:"delivered_at"`
+	AcceptDeadline   *time.Time `json:"accept_deadline"`
+	DeliveryEvidence []string   `json:"delivery_evidence"`
+	CancelPolicy     string     `json:"cancel_policy"`
+	CancelledBy      *string    `json:"cancelled_by"`
+	NoShowParty      *string    `json:"noshow_party"`
 }
 
 // BookingWithDetails embeds Booking and adds joined photographer/service fields.

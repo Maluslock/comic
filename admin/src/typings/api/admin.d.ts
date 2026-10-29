@@ -74,6 +74,12 @@ declare namespace Api {
     interface Order {
       id: number;
       status: OrderStatus;
+      /** Escrow node status: '' | in_service | delivered | disputed */
+      subStatus: string;
+      /** Active dispute status on this booking ('' when there is none) */
+      disputeStatus: string;
+      /** Active dispute id (0 when there is none) */
+      disputeId: number;
       date: string;
       time: string;
       price: number;
@@ -245,5 +251,58 @@ declare namespace Api {
       name: string;
       usageCount: number;
     }
+
+    /** Escrow dispute status (raw DB states). */
+    type DisputeStatus = 'open' | 'responding' | 'escalated' | 'resolved' | 'closed';
+
+    /** Console tab filter; `resolved`/`rejected` are derived views over closed disputes. */
+    type DisputeFilter = 'all' | 'open' | 'responding' | 'escalated' | 'resolved' | 'rejected';
+
+    /** Dispute type reported by the applicant. */
+    type DisputeType = 'no_show' | 'not_delivered' | 'quality' | 'other';
+
+    interface Dispute {
+      id: number;
+      bookingId: number;
+      openedBy: number;
+      openedByRole: 'coser' | 'photographer';
+      type: DisputeType;
+      reason: string;
+      status: DisputeStatus;
+      respondDeadline: string;
+      evidenceDeadline: string;
+      resolution: string | null;
+      adminId: number | null;
+      reviewedAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+      coserName: string;
+      photographerName: string;
+      bookingStatus: string;
+      bookingSubStatus: string;
+      evidence: string[];
+    }
+
+    interface DisputeEvent {
+      id: number;
+      disputeId: number;
+      actorId: number | null;
+      actorRole: string | null;
+      eventType: string;
+      payload: string;
+      createdAt: string;
+    }
+
+    interface DisputeDetail extends Dispute {
+      events: DisputeEvent[];
+      deliveryEvidence: string[];
+    }
+
+    interface DisputeList {
+      list: Dispute[];
+      total: number;
+    }
+
+    type DisputeResolveAction = 'approve' | 'reject' | 'escalate';
   }
 }

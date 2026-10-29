@@ -26,6 +26,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   certification: () => import("@/views/certification/index.vue"),
   content: () => import("@/views/content/index.vue"),
   dashboard: () => import("@/views/dashboard/index.vue"),
+  dispute: () => import("@/views/dispute/index.vue"),
   event: () => import("@/views/event/index.vue"),
   notification: () => import("@/views/notification/index.vue"),
   order: () => import("@/views/order/index.vue"),

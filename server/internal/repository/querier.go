@@ -61,10 +61,45 @@ type Querier interface {
 	GetBookingByID(ctx context.Context, id int64) (Booking, error)
 	GetOccupiedTimesByPhotographerDate(ctx context.Context, photographerID int32, date time.Time) ([]string, error)
 	CountConflictBookings(ctx context.Context, photographerID int32, date time.Time, timeStr string) (int64, error)
-	UpdateBookingStatus(ctx context.Context, id int64, status string) (Booking, error)
+	UpdateBookingStatus(ctx context.Context, id int64, status string, fromStatus string) (Booking, error)
 	GetBookingsByUserWithDetails(ctx context.Context, coserID int32) ([]BookingWithDetails, error)
 	QuoteBooking(ctx context.Context, id int64, price int32, photographerID int32) (int64, error)
 	RespondBookingQuote(ctx context.Context, id int64, coserID int32, accept bool) (int64, error)
+	SetBookingConfirmed(ctx context.Context, id int64) (Booking, error)
+	GenerateCheckinCode(ctx context.Context, id int64, salt string) (Booking, error)
+	Checkin(ctx context.Context, id int64, code string) (Booking, error)
+	DeliverBooking(ctx context.Context, arg DeliverBookingParams) (Booking, error)
+	AcceptDelivery(ctx context.Context, id int64) (Booking, error)
+	AutoAcceptDelivery(ctx context.Context) ([]Booking, error)
+	CancelBooking(ctx context.Context, arg CancelBookingParams) (Booking, error)
+	AutoCancelPending(ctx context.Context, before time.Time) ([]Booking, error)
+	MarkBookingNoShow(ctx context.Context, id int64, party string) (Booking, error)
+	ListNoShowCandidates(ctx context.Context) ([]Booking, error)
+	UpdateBookingSubStatus(ctx context.Context, id int64, subStatus *string) (Booking, error)
+
+	// Order events
+	CreateOrderEvent(ctx context.Context, arg CreateOrderEventParams) (OrderEvent, error)
+	GetOrderEventsByBooking(ctx context.Context, bookingID int64) ([]OrderEvent, error)
+	CountSystemEventByBooking(ctx context.Context, bookingID int64, eventType string) (int64, error)
+
+	// Disputes
+	CreateDispute(ctx context.Context, arg CreateDisputeParams) (Dispute, error)
+	GetDisputeByID(ctx context.Context, id int64) (Dispute, error)
+	GetOpenDisputeByBooking(ctx context.Context, bookingID int64) (Dispute, error)
+	ListDisputes(ctx context.Context, arg ListDisputesParams) ([]Dispute, error)
+	CountDisputes(ctx context.Context, status *string) (int64, error)
+	UpdateDisputeStatus(ctx context.Context, arg UpdateDisputeStatusParams) (Dispute, error)
+	ListOverdueDisputes(ctx context.Context) ([]Dispute, error)
+	CreateDisputeEvent(ctx context.Context, arg CreateDisputeEventParams) (DisputeEvent, error)
+	GetDisputeEvents(ctx context.Context, disputeID int64) ([]DisputeEvent, error)
+
+	// Credit
+	UpsertCreditScore(ctx context.Context, userID int64, score *int32) (CreditScore, error)
+	GetCreditScoreByUser(ctx context.Context, userID int64) (CreditScore, error)
+	AddCreditDelta(ctx context.Context, userID int64, delta int32) (CreditScore, error)
+	CreateCreditEvent(ctx context.Context, arg CreateCreditEventParams) (CreditEvent, error)
+	GetCreditEventsByUser(ctx context.Context, userID int64, limit, offset int32) ([]CreditEvent, error)
+	GetCreditEventForRef(ctx context.Context, userID int64, reason, refType string, refID int64) (CreditEvent, error)
 
 	// Follows
 	InsertFollow(ctx context.Context, arg InsertFollowParams) (FollowRow, error)

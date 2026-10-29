@@ -10,6 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
+
+	"github.com/Maluslock/comic/server/internal/repository"
+	"github.com/Maluslock/comic/server/internal/service"
 )
 
 type TaskConfig struct {
@@ -66,6 +69,42 @@ func markExpired(pool *pgxpool.Pool) {
 	log.Printf("expire-cleanup: marked %d expired events as deleted", res.RowsAffected())
 }
 
+func runEscrowCron(ctx context.Context, pool *pgxpool.Pool, name string) {
+	start := time.Now()
+	queries := repository.New(pool)
+	svc := service.NewCronService(queries)
+	var err error
+	var count int
+	switch name {
+	case "booking-auto-cancel":
+		var cancelCount int
+		cancelCount, err = svc.AutoCancelPending(ctx)
+		count = cancelCount
+	case "booking-auto-accept":
+		acceptErr := svc.AutoAcceptDeliveries(ctx)
+		if acceptErr == nil {
+			count = -1
+		}
+		err = acceptErr
+	case "booking-noshow":
+		var noshowCount int
+		noshowCount, err = svc.AutoNoShow(ctx)
+		count = noshowCount
+	case "booking-default-resolve":
+		var resolveCount int
+		resolveCount, err = svc.DefaultResolveDisputes(ctx)
+		count = resolveCount
+	default:
+		log.Printf("task %q: unknown escrow task", name)
+		return
+	}
+	if err != nil {
+		log.Printf("task %q: failed: %v", name, err)
+		return
+	}
+	log.Printf("task %q: processed %d row(s) in %s", name, count, time.Since(start).Round(time.Millisecond))
+}
+
 func runCronMode(configPath string) {
 	cfg, err := LoadCronConfig(configPath)
 	if err != nil {
@@ -96,6 +135,10 @@ func runCronMode(configPath string) {
 				runOnce(runParams{url: t.URL, pages: t.Pages, withBili: true})
 			case "nyato", "":
 				runOnce(runParams{url: t.URL, pages: t.Pages})
+			case "escrow":
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				runEscrowCron(ctx, pool, t.Name)
 			default:
 				log.Printf("task %q: unknown source %q", t.Name, t.Source)
 			}

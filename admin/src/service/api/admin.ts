@@ -250,3 +250,22 @@ export function deleteTag(id: number) {
 export function mergeTags(fromId: number, toId: number) {
   return adminRequest.post<{ ok: boolean }, { ok: boolean }>('/tags/merge', { fromId, toId });
 }
+
+/** GET /disputes — escrow dispute list, filterable by status and paginated */
+export async function fetchDisputes(params: { status?: string; page?: number; pageSize?: number }) {
+  const data = await adminRequest.get<Api.Admin.DisputeList | null, Api.Admin.DisputeList | null>('/disputes', { params });
+
+  return data ?? { list: [], total: 0 };
+}
+
+/** GET /disputes/:id — dispute detail with evidence and event timeline */
+export async function fetchDisputeDetail(id: number) {
+  const data = await adminRequest.get<Api.Admin.DisputeDetail | null, Api.Admin.DisputeDetail | null>(`/disputes/${id}`);
+
+  return data;
+}
+
+/** PUT /disputes/:id/resolve — approve / reject / escalate a dispute */
+export function resolveDispute(id: number, payload: { action: Api.Admin.DisputeResolveAction; reason?: string }) {
+  return adminRequest.put<Api.Admin.Dispute, Api.Admin.Dispute>(`/disputes/${id}/resolve`, payload);
+}

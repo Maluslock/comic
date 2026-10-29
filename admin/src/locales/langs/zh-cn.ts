@@ -235,7 +235,8 @@ const local: App.I18n.Schema = {
     'admin-accounts': '管理员管理',
     notification: '通知公告',
     content: '内容管理',
-    'audit-log': '操作日志'
+    'audit-log': '操作日志',
+    dispute: '争议处理'
   },
   page: {
     login: {

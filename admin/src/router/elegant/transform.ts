@@ -172,6 +172,7 @@ const routeMap: RouteMap = {
   "certification": "/certification",
   "content": "/content",
   "dashboard": "/dashboard",
+  "dispute": "/dispute",
   "event": "/event",
   "iframe-page": "/iframe-page/:url",
   "login": "/login",

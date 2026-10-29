@@ -26,6 +26,9 @@ type AdminPhotographer struct {
 type AdminOrder struct {
 	ID               int64  `json:"id"`
 	Status           string `json:"status"`
+	SubStatus        string `json:"subStatus"`
+	DisputeStatus    string `json:"disputeStatus"`
+	DisputeID        int64  `json:"disputeId"`
 	Date             string `json:"date"`
 	Time             string `json:"time"`
 	Price            int32  `json:"price"`
@@ -110,11 +113,19 @@ func (r *AdminManageRepo) ListOrders(ctx context.Context, status string, limit, 
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT b.id, b.status, to_char(b.date, 'YYYY-MM-DD'), b.time, b.total_price, b.created_at::text,
+		SELECT b.id, b.status, COALESCE(b.sub_status, ''), COALESCE(d.status, ''), COALESCE(d.id, 0),
+		       to_char(b.date, 'YYYY-MM-DD'), b.time, b.total_price, b.created_at::text,
 		       COALESCE(u.name, ''), COALESCE(p.name, '')
 		FROM bookings b
 		LEFT JOIN users u ON u.id = b.coser_id
 		LEFT JOIN photographers p ON p.id = b.photographer_id
+		LEFT JOIN LATERAL (
+			SELECT d2.id, d2.status
+			FROM disputes d2
+			WHERE d2.booking_id = b.id AND d2.status <> 'closed'
+			ORDER BY d2.updated_at DESC
+			LIMIT 1
+		) d ON TRUE
 		WHERE ($1::text = '' OR b.status = $1)
 		ORDER BY b.created_at DESC
 		LIMIT $2 OFFSET $3`, status, limit, offset)
@@ -126,7 +137,8 @@ func (r *AdminManageRepo) ListOrders(ctx context.Context, status string, limit, 
 	items := make([]AdminOrder, 0, limit)
 	for rows.Next() {
 		var i AdminOrder
-		if err := rows.Scan(&i.ID, &i.Status, &i.Date, &i.Time, &i.Price, &i.CreatedAt,
+		if err := rows.Scan(&i.ID, &i.Status, &i.SubStatus, &i.DisputeStatus, &i.DisputeID,
+			&i.Date, &i.Time, &i.Price, &i.CreatedAt,
 			&i.CoserName, &i.PhotographerName); err != nil {
 			return nil, 0, err
 		}

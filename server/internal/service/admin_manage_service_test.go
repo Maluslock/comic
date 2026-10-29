@@ -124,6 +124,21 @@ func assignScan(dest any, val any) error {
 			return fmt.Errorf("assignScan: want time.Time for %T", dest)
 		}
 		*d = v
+	case **time.Time:
+		if val == nil {
+			*d = nil
+			return nil
+		}
+		v, ok := val.(*time.Time)
+		if ok {
+			*d = v
+			return nil
+		}
+		vv, ok := val.(time.Time)
+		if !ok {
+			return fmt.Errorf("assignScan: want time.Time or *time.Time for %T", dest)
+		}
+		*d = &vv
 	case *bool:
 		v, ok := val.(bool)
 		if !ok {
@@ -222,11 +237,13 @@ func bookingScanValues(id int64, status string) []any {
 	return []any{
 		id, int32(1), int32(2), int32(3),
 		time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC),
-		"14:00", status, int32(999),
+		"14:00", status, (*string)(nil), int32(999),
 		(*string)(nil),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 		time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC),
 		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
+		(*string)(nil), (*time.Time)(nil), (*time.Time)(nil), (*time.Time)(nil),
+		[]string(nil), "standard", (*string)(nil), (*string)(nil),
 	}
 }
 

@@ -100,6 +100,16 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'dispute',
+    path: '/dispute',
+    component: 'layout.base$view.dispute',
+    meta: {
+      title: 'dispute',
+      i18nKey: 'route.dispute',
+      icon: 'mdi:gavel'
+    }
+  },
+  {
     name: 'event',
     path: '/event',
     component: 'layout.base$view.event',

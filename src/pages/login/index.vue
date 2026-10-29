@@ -20,7 +20,8 @@
       </view>
       <!-- #endif -->
 
-      <!-- Login Form -->
+      <!-- Login Form（仅 H5/开发预览保留手机号登录；小程序端只用微信一键登录） -->
+      <!-- #ifndef MP-WEIXIN -->
       <view class="form-card">
         <view class="input-group">
           <text class="input-label">手机号</text>
@@ -66,26 +67,34 @@
           <text class="login-btn-text">登 录</text>
         </view>
 
-        <view class="agreement-row">
-          <view
-            class="checkbox"
-            :class="{ checked: agreed }"
-            @click="agreed = !agreed"
-          >
-            <text v-if="agreed" class="check-mark">✓</text>
-          </view>
-          <text class="agreement-text">
-            我已阅读并同意
-            <text class="agreement-link" @click.stop="showMock('用户协议')">《用户协议》</text>
-            和
-            <text class="agreement-link" @click.stop="showMock('隐私政策')">《隐私政策》</text>
-          </text>
+      </view>
+      <!-- #endif -->
+
+      <!-- 协议：两种登录方式共用 -->
+      <view class="agreement-row">
+        <view
+          class="checkbox"
+          :class="{ checked: agreed }"
+          @click="agreed = !agreed"
+        >
+          <text v-if="agreed" class="check-mark">✓</text>
         </view>
+        <text class="agreement-text">
+          我已阅读并同意
+          <text class="agreement-link" @click.stop="showMock('用户协议')">《用户协议》</text>
+          和
+          <text class="agreement-link" @click.stop="showMock('隐私政策')">《隐私政策》</text>
+        </text>
       </view>
 
       <!-- Footer -->
       <view class="footer">
+        <!-- #ifdef MP-WEIXIN -->
+        <text class="footer-hint">微信授权登录，无需手机号</text>
+        <!-- #endif -->
+        <!-- #ifndef MP-WEIXIN -->
         <text class="footer-hint">Mock 登录，无需真实手机号</text>
+        <!-- #endif -->
         <text class="footer-copyright">© 2024 米拉漫展</text>
       </view>
     </view>

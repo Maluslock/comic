@@ -11,12 +11,7 @@ export async function setupIconifyOffline() {
   }
 
   const mods = await Promise.all([
-    import('@iconify/json/json/mdi.json'),
-    import('@iconify/json/json/material-symbols.json'),
-    import('@iconify/json/json/ant-design.json'),
-    import('@iconify/json/json/line-md.json'),
-    import('@iconify/json/json/majesticons.json'),
-    import('@iconify/json/json/ph.json')
+    import('@iconify/json/json/mdi.json')
   ]);
 
   mods.forEach(mod => addCollection(mod.default as IconifyJSON));

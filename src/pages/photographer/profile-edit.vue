@@ -18,7 +18,7 @@
               :src="form.avatar"
               class="avatar-preview"
               mode="aspectFill"
-              @error="form.avatar = DEFAULT_AVATAR"
+              @error="form.avatar = ''"
             />
             <view v-else class="avatar-preview avatar-empty">
               <text class="avatar-empty-mark">◇</text>
@@ -109,7 +109,6 @@ import { useUserStore } from '@/stores/user'
 const statusBarHeight = ref(44)
 const loading = ref(true)
 const userStore = useUserStore()
-const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
 
 const modes = [
   { value: 'free', label: '互勉' },

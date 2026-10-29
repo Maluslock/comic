@@ -60,6 +60,19 @@ export default defineConfig(configEnv => {
       sourcemap: viteEnv.VITE_SOURCE_MAP === 'Y',
       commonjsOptions: {
         ignoreTryCatch: false
+      },
+      rollupOptions: {
+        output: {
+          // Split the heavy vendors so the login screen does not pay for echarts
+          // and so vendor hashes stay stable across feature deploys (long cache).
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('echarts') || id.includes('zrender')) return 'vendor-echarts';
+            if (id.includes('naive-ui') || id.includes('vueuc') || id.includes('seemly') || id.includes('css-render')) return 'vendor-naive';
+            if (id.includes('/vue/') || id.includes('vue-router') || id.includes('pinia') || id.includes('vue-i18n') || id.includes('@vue')) return 'vendor-vue';
+            return 'vendor';
+          }
+        }
       }
     }
   };

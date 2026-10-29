@@ -100,6 +100,10 @@ func main() {
 	// Static path is relative to CWD: run the API from server/ so /static works.
 	router.Static("/static", "./static")
 
+	// 管理后台生产产物（hash 路由，无需 SPA fallback）。由 one.sh 的 admin 构建步骤同步到 ./admin-dist。
+	router.Static("/admin", "./admin-dist")
+	router.GET("/admin", func(c *gin.Context) { c.Redirect(http.StatusFound, "/admin/") })
+
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})

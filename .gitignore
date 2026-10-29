@@ -53,3 +53,6 @@ server/ingest
 
 # Local audit scratch (gocache, vendored pylibs, report generator)
 .audit/
+
+# admin 生产产物（由 .devenv/scripts/one.sh 在容器内构建后同步，不入库）
+server/admin-dist/

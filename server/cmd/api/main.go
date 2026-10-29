@@ -100,6 +100,19 @@ func main() {
 	// Static path is relative to CWD: run the API from server/ so /static works.
 	router.Static("/static", "./static")
 
+	// 管理后台产物带 hash 文件名：assets 下可长期缓存，index.html 绝不能缓存——
+	// 否则浏览器拿旧 index 去请求已被新构建删除的 chunk，整页白屏（实测踩过）。
+	router.Use(func(c *gin.Context) {
+		if p := c.Request.URL.Path; len(p) >= 7 && p[:7] == "/admin/" {
+			if len(p) >= 14 && p[:14] == "/admin/assets/" {
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				c.Header("Cache-Control", "no-cache, must-revalidate")
+			}
+		}
+		c.Next()
+	})
+
 	// 管理后台生产产物（hash 路由，无需 SPA fallback）。由 one.sh 的 admin 构建步骤同步到 ./admin-dist。
 	router.Static("/admin", "./admin-dist")
 	router.GET("/admin", func(c *gin.Context) { c.Redirect(http.StatusFound, "/admin/") })
@@ -129,7 +142,12 @@ func main() {
 
 		queries := repository.New(pool)
 		userRepo := repository.NewUserRepo(pool)
-		bookingSvc := service.NewBookingService(queries)
+		bookingSvc := service.NewBookingServiceWithSalt(queries, func() string {
+			if cfg.WXAppSecret != "" {
+				return cfg.WXAppSecret
+			}
+			return "miracomic-checkin-fallback-salt"
+		})
 
 		// Home
 		homeRepo := repository.NewHomeRepository(queries)
@@ -173,16 +191,25 @@ func main() {
 		router.PUT("/api/v1/bookings/:id/status", middleware.AuthRequired(userRepo), bookingH.UpdateStatus)
 		router.POST("/api/v1/bookings/:id/quote", middleware.AuthRequired(userRepo), bookingH.Quote)
 		router.POST("/api/v1/bookings/:id/quote/respond", middleware.AuthRequired(userRepo), bookingH.RespondQuote)
-		router.GET("/api/v1/bookings/:id", middleware.AuthRequired(userRepo), bookingH.ListByUser)
-		router.GET("/api/v1/bookings/photographer/:photographerId", middleware.AuthRequired(userRepo), bookingH.ListByPhotographer)
+		// Disputes & escrow timeline (must register before GET /bookings/:id to avoid
+		// gin wildcard conflict in gin 1.10).
+		disputeH := handler.NewDisputeHandler(bookingSvc)
+		router.GET("/api/v1/bookings/:id/dispute", middleware.AuthRequired(userRepo), bookingH.GetDispute)
+		router.POST("/api/v1/bookings/:id/noshow", middleware.AuthRequired(userRepo), bookingH.MarkNoShow)
+		router.POST("/api/v1/bookings/:id/disputes", middleware.AuthRequired(userRepo), disputeH.Open)
+		// Credit card (read-only, token user only).
+		creditH := handler.NewCreditHandler(service.NewCreditService(queries))
+		router.GET("/api/v1/me/credit", middleware.AuthRequired(userRepo), creditH.Summary)
+		router.GET("/api/v1/me/credit/events", middleware.AuthRequired(userRepo), creditH.Events)
 		router.POST("/api/v1/bookings/:id/checkin", middleware.AuthRequired(userRepo), bookingH.Checkin)
 		router.POST("/api/v1/bookings/:id/deliver", middleware.AuthRequired(userRepo), bookingH.MarkDelivered)
 		router.POST("/api/v1/bookings/:id/accept", middleware.AuthRequired(userRepo), bookingH.AcceptDelivery)
 		router.GET("/api/v1/bookings/:id/events", middleware.AuthRequired(userRepo), bookingH.GetEvents)
 
-		// Disputes
-		disputeH := handler.NewDisputeHandler(bookingSvc)
-		router.POST("/api/v1/bookings/:id/disputes", middleware.AuthRequired(userRepo), disputeH.Open)
+		// Generic booking by id / photographer list (must be AFTER all /bookings/:id/... routes).
+		router.GET("/api/v1/bookings/:id", middleware.AuthRequired(userRepo), bookingH.ListByUser)
+		router.GET("/api/v1/bookings/photographer/:photographerId", middleware.AuthRequired(userRepo), bookingH.ListByPhotographer)
+
 		router.POST("/api/v1/disputes/:disputeId/respond", middleware.AuthRequired(userRepo), disputeH.Respond)
 		router.POST("/api/v1/disputes/:disputeId/escalate", middleware.AuthRequired(userRepo), disputeH.Escalate)
 

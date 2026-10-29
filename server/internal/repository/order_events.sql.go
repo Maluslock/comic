@@ -9,13 +9,14 @@ import (
 
 // OrderEvent represents a single append-only event in a booking lifecycle.
 type OrderEvent struct {
-	ID         int64     `json:"id"`
-	BookingID  int64     `json:"booking_id"`
-	ActorID    *int64    `json:"actor_id"`
-	ActorRole  *string   `json:"actor_role"`
-	EventType  string    `json:"event_type"`
-	Payload    []byte    `json:"payload"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         int64          `json:"id"`
+	BookingID  int64          `json:"booking_id"`
+	ActorID    *int64         `json:"actor_id"`
+	ActorRole  *string        `json:"actor_role"`
+	EventType  string         `json:"event_type"`
+	Payload    []byte         `json:"payload"`
+	PayloadObj map[string]any `json:"payload_obj,omitempty"`
+	CreatedAt  time.Time      `json:"created_at"`
 }
 
 // CreateOrderEventParams is used to insert a new order event.

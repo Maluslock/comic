@@ -35,6 +35,31 @@
       </view>
     </view>
 
+    <!-- 信用分卡片 -->
+    <view v-if="isLoggedIn" class="credit-card" @click="goCredit">
+      <view class="credit-left">
+        <text class="credit-title">信用分</text>
+        <view class="credit-score-row">
+          <text class="credit-score">{{ credit.score }}</text>
+          <text class="credit-unit">分</text>
+          <text class="credit-pill" :class="`tone-${creditTone}`">{{ creditLevelText }}</text>
+        </view>
+        <text v-if="creditFrozenText" class="credit-frozen">{{ creditFrozenText }}</text>
+        <text v-else class="credit-desc">守时履约可以提升信用分</text>
+      </view>
+      <view class="credit-right">
+        <view class="credit-stat">
+          <text class="credit-stat-num">{{ credit.successCount }}</text>
+          <text class="credit-stat-name">成功</text>
+        </view>
+        <view class="credit-stat">
+          <text class="credit-stat-num">{{ credit.noshowCount }}</text>
+          <text class="credit-stat-name">爽约</text>
+        </view>
+        <text class="credit-arrow">›</text>
+      </view>
+    </view>
+
     <view class="menu-section">
       <view class="menu-group">
         <view class="menu-item" @click="goOrders">
@@ -104,9 +129,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
-import { getMyPhotographerProfile } from '@/api'
+import { getMyPhotographerProfile, getMyCredit } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { getApiBase, setApiBase, resetApiBase } from '@/utils/apiBase'
+import { creditLevelText as levelTextOf, creditTone as toneOf, frozenHint } from '@/utils/credit'
+import type { CreditSummary } from '@/types'
 
 const userStore = useUserStore()
 
@@ -125,6 +152,29 @@ const isPhotographer = computed(() => !!userStore.user?.photographerId)
 const certified = ref(false)
 
 const stats = ref({ favorites: 0, follows: 0, works: 0 })
+
+const credit = ref<CreditSummary>({
+  score: 100,
+  level: 'good',
+  successCount: 0,
+  cancelCount: 0,
+  noshowCount: 0,
+  disputeLostCount: 0,
+  frozenUntil: null,
+  updatedAt: null
+})
+const creditTone = computed(() => toneOf(credit.value.level, credit.value.score))
+const creditLevelText = computed(() => levelTextOf(credit.value.level, credit.value.score))
+const creditFrozenText = computed(() => frozenHint(credit.value.frozenUntil))
+
+async function loadCredit() {
+  if (!isLoggedIn.value) return
+  try {
+    credit.value = await getMyCredit()
+  } catch {
+    // 保留默认 100 分，界面仍可展示
+  }
+}
 
 async function loadStats() {
   if (!isLoggedIn.value || !userStore.user) {
@@ -169,10 +219,12 @@ async function loadStats() {
 onMounted(() => {
   userStore.init()
   loadStats()
+  loadCredit()
 })
 
 onShow(() => {
   loadStats()
+  loadCredit()
 })
 
 function goLogin() {
@@ -202,6 +254,14 @@ function goPhotographerOrders() {
 
 function goOrders() {
   uni.navigateTo({ url: '/pages/order/list' })
+}
+
+function goCredit() {
+  if (!isLoggedIn.value) {
+    uni.navigateTo({ url: '/pages/login/index' })
+    return
+  }
+  uni.navigateTo({ url: '/pages/credit/index' })
 }
 
 function goFavorites() {
@@ -407,6 +467,117 @@ function onVersionLongPress() {
   width: 2rpx;
   height: 48rpx;
   background: rgba(255, 255, 255, 0.2);
+}
+
+.credit-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: $spacing-md $spacing-md 0;
+  padding: $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-lg;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2);
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.credit-left {
+  flex: 1;
+}
+
+.credit-title {
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+}
+
+.credit-score-row {
+  display: flex;
+  align-items: baseline;
+  margin-top: 4rpx;
+}
+
+.credit-score {
+  font-size: $font-size-xl;
+  font-weight: 700;
+  color: $dark-text-primary;
+}
+
+.credit-unit {
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+  margin-left: 4rpx;
+  margin-right: 12rpx;
+}
+
+.credit-pill {
+  font-size: 22rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $dark-border;
+  background: rgba(255, 255, 255, 0.04);
+
+  &.tone-good {
+    color: $success-color;
+    border-color: rgba(34, 197, 94, 0.4);
+  }
+
+  &.tone-fair {
+    color: $warning-color;
+    border-color: rgba(250, 204, 21, 0.4);
+  }
+
+  &.tone-poor {
+    color: $error-color;
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+}
+
+.credit-desc {
+  display: block;
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+  margin-top: 6rpx;
+}
+
+.credit-frozen {
+  display: block;
+  font-size: $font-size-xs;
+  color: $warning-color;
+  margin-top: 6rpx;
+}
+
+.credit-right {
+  display: flex;
+  align-items: center;
+}
+
+.credit-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: $spacing-md;
+}
+
+.credit-stat-num {
+  font-size: $font-size-md;
+  font-weight: 600;
+  color: $dark-text-primary;
+}
+
+.credit-stat-name {
+  font-size: 22rpx;
+  color: $dark-text-tertiary;
+  margin-top: 2rpx;
+}
+
+.credit-arrow {
+  font-size: 40rpx;
+  color: $dark-text-tertiary;
+  margin-left: $spacing-sm;
 }
 
 .menu-section {

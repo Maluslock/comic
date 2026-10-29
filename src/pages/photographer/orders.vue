@@ -21,7 +21,12 @@
         <view v-for="order in orders" :key="order.id" class="order-card">
           <view class="order-header">
             <text class="order-date">{{ order.date }} {{ order.time }}</text>
-            <text class="order-status" :class="`status-${order.status}`">{{ getStatusText(order.status) }}</text>
+            <view class="order-tags">
+              <text v-if="subStatusText(order)" class="sub-status" :class="`sub-${subTone(order)}`">
+                {{ subStatusText(order) }}
+              </text>
+              <text class="order-status" :class="`status-${order.status}`">{{ getStatusText(order.status) }}</text>
+            </view>
           </view>
 
           <view class="order-content">
@@ -39,7 +44,10 @@
             <view v-if="order.status === 'pending'" class="btn-outline danger" @click="rejectOrder(order.id)">拒绝</view>
             <view v-if="order.status === 'pending' && !isNegotiablePending(order)" class="btn-primary" @click="updateStatus(order.id, 'confirmed')">确认接单</view>
             <view v-if="canQuote(order)" class="btn-primary" @click="quoteOrder(order.id)">报价</view>
-            <view v-if="order.status === 'confirmed'" class="btn-primary" @click="updateStatus(order.id, 'completed')">完成拍摄</view>
+            <view v-if="canCheckin(order)" class="btn-primary" @click="doCheckin(order)">核销</view>
+            <view v-if="canDeliver(order)" class="btn-primary" @click="doDeliver(order)">提交交付</view>
+            <view v-if="canMarkNoShow(order)" class="btn-outline danger" @click="doMarkNoShow(order)">标记爽约</view>
+            <view v-if="order.status === 'confirmed' && !order.subStatus" class="btn-primary" @click="updateStatus(order.id, 'completed')">完成拍摄</view>
           </view>
         </view>
       </view>
@@ -52,10 +60,12 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { apiGet, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
-import type { OrderPriceFields } from '@/types'
+import type { OrderPriceFields, EscrowBookingFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote } from '@/utils/quote'
+import { escrowState } from '@/utils/escrow'
+import { checkinBooking, deliverBooking, markNoShow, pickAndUploadImages } from '@/api'
 
-interface PhotographerOrder extends OrderPriceFields {
+interface PhotographerOrder extends OrderPriceFields, EscrowBookingFields {
   id: number
   photographerId: number
   coserId: number
@@ -94,6 +104,13 @@ async function loadOrders() {
       priceMode: toPriceMode(o.priceMode),
       priceStatus: toPriceStatus(o.priceStatus),
       quotePrice: o.quotePrice ?? null,
+      subStatus: o.subStatus ?? null,
+      checkinAt: o.checkinAt ?? null,
+      deliveredAt: o.deliveredAt ?? null,
+      acceptDeadline: o.acceptDeadline ?? null,
+      deliveryEvidence: Array.isArray(o.deliveryEvidence) ? o.deliveryEvidence : [],
+      noShowParty: o.noShowParty ?? null,
+      cancelledBy: o.cancelledBy ?? null
     }))
   } catch {
     orders.value = []
@@ -119,6 +136,106 @@ function renderCoserPhone(order: PhotographerOrder): string {
 
 function canQuote(order: PhotographerOrder): boolean {
   return order.priceMode === 'negotiable' && order.priceStatus === 'awaiting_quote'
+}
+
+/* ───────────────── 担保交易：核销 / 交付 / 爽约 ───────────────── */
+
+/**
+ * 可核销：已确认接单、尚未核销、且订单没有进入争议/交付。
+ * 注意：后端确认接单走的是 UpdateBookingStatus（只改 status），
+ * 所以「待核销」时 sub_status 可能还是空，也可能已经是 in_service，
+ * 两种都要允许核销，否则按钮永远不出现。
+ */
+function canCheckin(order: PhotographerOrder): boolean {
+  if (order.status !== 'confirmed' || order.checkinAt) return false
+  return order.subStatus !== 'delivered' && order.subStatus !== 'disputed'
+}
+
+/** 可交付：已核销、尚未交付、且没有争议。 */
+function canDeliver(order: PhotographerOrder): boolean {
+  if (order.status !== 'confirmed' || !order.checkinAt) return false
+  return order.subStatus !== 'delivered' && order.subStatus !== 'disputed'
+}
+
+/** 可标记爽约：已确认接单、尚未核销（coser 没到场），且还没标记过。 */
+function canMarkNoShow(order: PhotographerOrder): boolean {
+  return order.status === 'confirmed' && !order.checkinAt && !order.noShowParty && order.subStatus !== 'disputed'
+}
+
+/** 核销：输入 coser 的 6 位核销码。 */
+function doCheckin(order: PhotographerOrder) {
+  uni.showModal({
+    title: '拍摄核销',
+    editable: true,
+    placeholderText: '请输入 coser 的 6 位核销码',
+    success: async (res) => {
+      if (!res.confirm) return
+      const code = (res.content || '').trim()
+      if (!/^[0-9a-zA-Z]{6}$/.test(code)) {
+        uni.showToast({ title: '核销码为 6 位', icon: 'none' })
+        return
+      }
+      uni.showLoading({ title: '核销中...' })
+      try {
+        await checkinBooking(order.id, code)
+        uni.hideLoading()
+        uni.showToast({ title: '核销成功', icon: 'success' })
+        loadOrders()
+      } catch (e) {
+        uni.hideLoading()
+        const code2 = e instanceof ApiError ? e.status : 0
+        uni.showToast({
+          title: code2 === 403 ? '核销码不正确' : code2 === 409 ? '当前状态不能核销' : '核销失败',
+          icon: 'none'
+        })
+      }
+    }
+  })
+}
+
+/** 提交交付：上传成片凭证（图片）。 */
+function doDeliver(order: PhotographerOrder) {
+  uni.showLoading({ title: '提交中...' })
+  pickAndUploadImages(3)
+    .then(async (urls) => {
+      if (!urls.length) {
+        uni.hideLoading()
+        return
+      }
+      await deliverBooking(order.id, urls)
+      uni.hideLoading()
+      uni.showToast({ title: '已提交交付', icon: 'success' })
+      loadOrders()
+    })
+    .catch(() => {
+      uni.hideLoading()
+      uni.showToast({ title: '提交失败', icon: 'none' })
+    })
+}
+
+/** 标记 coser 爽约。 */
+function doMarkNoShow(order: PhotographerOrder) {
+  uni.showModal({
+    title: '标记爽约',
+    content: '确认 coser 未按时到场？标记后对方信用分会被扣减。',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '提交中...' })
+      try {
+        await markNoShow(order.id, 'coser')
+        uni.hideLoading()
+        uni.showToast({ title: '已标记爽约', icon: 'success' })
+        loadOrders()
+      } catch (e) {
+        uni.hideLoading()
+        const code = e instanceof ApiError ? e.status : 0
+        uni.showToast({
+          title: code === 409 ? '当前状态不能标记' : code === 403 ? '无权操作该订单' : '标记失败',
+          icon: 'none'
+        })
+      }
+    }
+  })
 }
 
 function quoteOrder(id: number) {
@@ -159,6 +276,16 @@ function getStatusText(status: string): string {
   return map[status] || status
 }
 
+/** 子状态小标签文案（待核销 / 拍摄中 / 待确认交付 / 争议中）。 */
+function subStatusText(order: PhotographerOrder): string {
+  return escrowState(order.status, order.subStatus, order.checkinAt).subText
+}
+
+/** 子状态小标签色调。 */
+function subTone(order: PhotographerOrder): string {
+  return escrowState(order.status, order.subStatus, order.checkinAt).tone
+}
+
 function goActivate() {
   uni.navigateTo({ url: '/pages/photographer/activate' })
 }
@@ -185,6 +312,13 @@ function goBack() {
 .order-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; padding: 28rpx; box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2); }
 .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
 .order-date { font-size: 26rpx; color: $dark-text-secondary; }
+.order-tags { display: flex; align-items: center; gap: 12rpx; }
+.sub-status { font-size: 22rpx; padding: 4rpx 14rpx; border-radius: 999rpx; border: 1rpx solid $dark-border; background: rgba(255, 255, 255, 0.04);
+  &.sub-cyan { color: $neon-cyan; border-color: rgba(6, 182, 212, 0.45); }
+  &.sub-purple { color: $neon-purple-bright; border-color: rgba(255, 107, 0, 0.45); }
+  &.sub-warning { color: $warning-color; border-color: rgba(250, 204, 21, 0.45); }
+  &.sub-error { color: $error-color; border-color: rgba(244, 63, 94, 0.45); }
+}
 .order-status { font-size: 24rpx; font-weight: 500;
   &.status-pending { color: $neon-cyan; }
   &.status-confirmed { color: $neon-purple; }

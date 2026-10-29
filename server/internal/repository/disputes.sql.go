@@ -114,7 +114,7 @@ func (q *Queries) GetDisputeByID(ctx context.Context, id int64) (Dispute, error)
 const getOpenDisputeByBooking = `-- name: GetOpenDisputeByBooking :one
 SELECT id, booking_id, opened_by, opened_by_role, type, reason, status, respond_deadline, evidence_deadline, resolution, admin_id, reviewed_at, created_at, updated_at
 FROM disputes
-WHERE booking_id = $1 AND status <> 'closed'
+WHERE booking_id = $1 AND status IN ('open','escalated')
 `
 
 func (q *Queries) GetOpenDisputeByBooking(ctx context.Context, bookingID int64) (Dispute, error) {
@@ -203,6 +203,37 @@ func (q *Queries) CountDisputes(ctx context.Context, status *string) (int64, err
 	var n int64
 	err := q.db.QueryRow(ctx, countDisputes, s).Scan(&n)
 	return n, err
+}
+
+// GetDisputeByBooking returns the most recent dispute for a booking, or
+// pgx.ErrNoRows if none exists.
+const getDisputeByBooking = `-- name: GetDisputeByBooking :one
+SELECT id, booking_id, opened_by, opened_by_role, type, reason, status, respond_deadline, evidence_deadline, resolution, admin_id, reviewed_at, created_at, updated_at
+FROM disputes
+WHERE booking_id = $1
+ORDER BY id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetDisputeByBooking(ctx context.Context, bookingID int64) (Dispute, error) {
+	var i Dispute
+	err := q.db.QueryRow(ctx, getDisputeByBooking, bookingID).Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.OpenedBy,
+		&i.OpenedByRole,
+		&i.Type,
+		&i.Reason,
+		&i.Status,
+		&i.RespondDeadline,
+		&i.EvidenceDeadline,
+		&i.Resolution,
+		&i.AdminID,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 // UpdateDisputeStatusParams is used for state transitions and resolution.

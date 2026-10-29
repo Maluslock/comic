@@ -300,6 +300,7 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 		}
 		items = mergePriceSummaries(items, sums)
 	}
+	s.attachCredit(ctx, items)
 
 	total := offset + len(photographers)
 	if hasMore {
@@ -362,7 +363,7 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 
 	rating := numericToFloat64(p.Rating)
 
-	return &PhotographerDetail{
+	detail := &PhotographerDetail{
 		PhotographerItem: PhotographerItem{
 			ID:          int64(p.ID),
 			Name:        p.Name,
@@ -381,7 +382,9 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 		Services:    mapServiceItems(services),
 		Works:       mapWorkItems(works),
 		Reviews:     mapReviewItems(reviews),
-	}, nil
+	}
+	s.attachCreditOne(ctx, &detail.PhotographerItem)
+	return detail, nil
 }
 
 func mapServiceItems(services []repository.Service) []ServiceItem {
@@ -642,4 +645,50 @@ func (s *PhotographerService) ListTemplates(ctx context.Context) ([]ServiceItem,
 		return nil, err
 	}
 	return mapServiceItems(rows), nil
+}
+
+// attachCredit fills the optional credit badge for a page of photographers in a
+// single batch query — never one query per row.
+func (s *PhotographerService) attachCredit(ctx context.Context, items []PhotographerListItem) {
+	userIDs := make([]int64, 0, len(items))
+	for _, it := range items {
+		if it.UserID > 0 {
+			userIDs = append(userIDs, it.UserID)
+		}
+	}
+	if len(userIDs) == 0 {
+		return
+	}
+	scores, err := s.queries.ListCreditScoresByUserIDs(ctx, userIDs)
+	if err != nil {
+		// Credit is decorative here: a failed lookup must not break the list.
+		return
+	}
+	byUser := make(map[int64]int32, len(scores))
+	for _, sc := range scores {
+		byUser[sc.UserID] = sc.Score
+	}
+	for i := range items {
+		score, ok := byUser[items[i].UserID]
+		if !ok {
+			continue
+		}
+		v := score
+		items[i].CreditScore = &v
+		items[i].CreditLevel = CreditLevel(score)
+	}
+}
+
+// attachCreditOne is the single-row variant used by the detail page.
+func (s *PhotographerService) attachCreditOne(ctx context.Context, item *PhotographerItem) {
+	if item == nil || item.UserID <= 0 {
+		return
+	}
+	scores, err := s.queries.ListCreditScoresByUserIDs(ctx, []int64{item.UserID})
+	if err != nil || len(scores) == 0 {
+		return
+	}
+	v := scores[0].Score
+	item.CreditScore = &v
+	item.CreditLevel = CreditLevel(v)
 }

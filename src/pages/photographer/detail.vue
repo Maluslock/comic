@@ -18,6 +18,7 @@
               <view class="stat-value-row">
                 <text v-if="photographer?.reviewCount" class="stat-star">★</text>
                 <text class="stat-value" :class="{ 'stat-value--warn': !!photographer?.reviewCount }">{{ ratingText }}</text>
+                <text v-if="creditLabel" class="credit-pill" :class="`tone-${creditTone}`">信用{{ creditLabel }}</text>
               </view>
               <text class="stat-label">综合评分</text>
             </view>
@@ -142,6 +143,7 @@ import { useUserStore } from '@/stores/user'
 import { blockUser } from '@/api/index'
 import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRedirect } from '@/utils/mappers'
 import { formatDuration } from '@/utils/duration'
+import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
 import type { Photographer, Service } from '@/types'
 
 interface PhotographerDetailResponse {
@@ -155,6 +157,10 @@ interface PhotographerDetailResponse {
   userId: number
   mode?: string
   certified?: boolean
+  /** 信用分（后端信用分接口落地后返回，缺失时前端不展示信用标签） */
+  creditScore?: number
+  /** 信用等级：good | fair | poor */
+  creditLevel?: string
   tags: string[]
   description: string
   services: Array<{ id: number; name: string; price: number | null; description: string; duration: number }>
@@ -162,7 +168,12 @@ interface PhotographerDetailResponse {
   reviews: Array<{ id: number; rating: number; content: string; userName: string; userAvatar?: string; createdAt: string }>
 }
 
-type PhotographerView = Photographer & { mode?: string; certified?: boolean }
+type PhotographerView = Photographer & {
+  mode?: string
+  certified?: boolean
+  creditScore?: number
+  creditLevel?: string
+}
 
 const userStore = useUserStore()
 const photographer = ref<PhotographerView | null>(null)
@@ -170,6 +181,15 @@ const photographer = ref<PhotographerView | null>(null)
 // 评分按真实评价重算：没有评价时后端返回 rating=0 / reviewCount=0。
 // 直接显示「0」会被读成「被打 0 分」，故无评价时给文案。
 const ratingText = computed(() => ((photographer.value?.reviewCount ?? 0) > 0 ? String(photographer.value?.rating) : '暂无'))
+
+// 信用等级标签：后端还没返回信用分时不展示（避免出现「信用良好」但没有依据的假标签）
+const creditLabel = computed(() => {
+  const p = photographer.value
+  if (!p) return ''
+  if (typeof p.creditScore !== 'number' && !p.creditLevel) return ''
+  return creditLevelShort(p.creditLevel, p.creditScore)
+})
+const creditTone = computed(() => creditToneOf(photographer.value?.creditLevel, photographer.value?.creditScore))
 
 const collected = ref(false)
 const reviewExpanded = ref(false)
@@ -205,6 +225,8 @@ async function loadData(pageId: string) {
       ...mapPhotographerItem(res),
       mode: res.mode,
       certified: res.certified,
+      creditScore: res.creditScore,
+      creditLevel: res.creditLevel,
       services: (res.services || []).map(s => ({
         id: String(s.id),
         name: s.name,
@@ -440,6 +462,30 @@ function onMore() {
   font-size: $font-size-lg;
   font-weight: 600;
   color: $dark-text-primary;
+}
+
+.credit-pill {
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $dark-border;
+  background: rgba(255, 255, 255, 0.04);
+  align-self: center;
+
+  &.tone-good {
+    color: $success-color;
+    border-color: rgba(34, 197, 94, 0.4);
+  }
+
+  &.tone-fair {
+    color: $warning-color;
+    border-color: rgba(250, 204, 21, 0.4);
+  }
+
+  &.tone-poor {
+    color: $error-color;
+    border-color: rgba(239, 68, 68, 0.4);
+  }
 }
 
 .stat-label {

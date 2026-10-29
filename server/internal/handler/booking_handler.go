@@ -259,6 +259,37 @@ func (h *BookingHandler) GetEvents(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"list": events})
 }
 
+// GetDispute returns the C-end view of the dispute for a booking.
+func (h *BookingHandler) GetDispute(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	data, err := h.svc.GetBookingDispute(c.Request.Context(), id, middleware.UserID(c))
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// MarkNoShow lets a photographer mark the coser as a no-show. The action is
+// idempotent and applies at most one -15 credit delta per booking.
+func (h *BookingHandler) MarkNoShow(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid booking id"})
+		return
+	}
+	data, err := h.svc.MarkCoserNoShow(c.Request.Context(), id, middleware.UserID(c))
+	if err != nil {
+		h.mapNodeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
 func (h *BookingHandler) mapNodeErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrBookingNotFound):

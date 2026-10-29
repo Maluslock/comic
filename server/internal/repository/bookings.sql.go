@@ -166,7 +166,11 @@ func (q *Queries) UpdateBookingStatus(ctx context.Context, id int64, status stri
 }
 
 const getBookingsByUserWithDetails = `-- name: GetBookingsByUserWithDetails :many
-SELECT b.` + bookingColumns + `,
+SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.sub_status,
+       b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price,
+       b.price_status, b.service_name, b.service_duration, b.checkin_code, b.checkin_at,
+       b.delivered_at, b.accept_deadline, b.delivery_evidence, b.cancel_policy,
+       b.cancelled_by, b.noshow_party,
        p.name AS photographer_name, p.avatar AS photographer_avatar, p.user_id AS photographer_user_id,
        COALESCE(s.name, '') AS service_name_join, COALESCE(s.price, 0) AS service_price
 FROM bookings b
@@ -233,7 +237,11 @@ type BookingWithCoser struct {
 
 // coser_phone 只在摄影师**已接单**（confirmed/completed）后返回。
 const getBookingsByPhotographer = `-- name: GetBookingsByPhotographer :many
-SELECT b.` + bookingColumns + `,
+SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.status, b.sub_status,
+       b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price,
+       b.price_status, b.service_name, b.service_duration, b.checkin_code, b.checkin_at,
+       b.delivered_at, b.accept_deadline, b.delivery_evidence, b.cancel_policy,
+       b.cancelled_by, b.noshow_party,
        COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar,
        CASE WHEN b.status IN ('confirmed', 'completed') THEN COALESCE(u.phone, '') ELSE '' END AS coser_phone
 FROM bookings b
@@ -345,7 +353,7 @@ func (q *Queries) SetBookingConfirmed(ctx context.Context, id int64) (Booking, e
 // check-in. It is idempotent: repeated calls return the same code.
 const generateCheckinCode = `-- name: GenerateCheckinCode :one
 UPDATE bookings
-SET checkin_code = COALESCE(checkin_code, SUBSTRING(MD5($2::text) FROM 1 FOR 6)),
+SET checkin_code = COALESCE(checkin_code, SUBSTRING(MD5(($2::text || ':' || $1::text)) FROM 1 FOR 6)),
     updated_at = NOW()
 WHERE id = $1 AND status = 'confirmed'
 RETURNING ` + bookingColumns
@@ -493,7 +501,8 @@ UPDATE bookings
 SET noshow_party = $2,
     updated_at = NOW()
 WHERE id = $1 AND status = 'confirmed'
-RETURNING ` + bookingColumns
+RETURNING ` + bookingColumns + `
+`
 
 func (q *Queries) MarkBookingNoShow(ctx context.Context, id int64, party string) (Booking, error) {
 	row := q.db.QueryRow(ctx, markBookingNoShow, id, party)
@@ -506,7 +515,8 @@ SELECT ` + bookingColumns + `
 FROM bookings
 WHERE status = 'confirmed'
   AND noshow_party IS NULL
-  AND (date < CURRENT_DATE OR (date = CURRENT_DATE AND time < CURRENT_TIME))
+  AND time ~ '^[0-2][0-9]:[0-5][0-9]$'
+  AND ((date + time::time) AT TIME ZONE 'Asia/Shanghai') < now()
 ORDER BY id ASC
 `
 

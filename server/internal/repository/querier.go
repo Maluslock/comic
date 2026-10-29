@@ -90,6 +90,7 @@ type Querier interface {
 	CountDisputes(ctx context.Context, status *string) (int64, error)
 	UpdateDisputeStatus(ctx context.Context, arg UpdateDisputeStatusParams) (Dispute, error)
 	ListOverdueDisputes(ctx context.Context) ([]Dispute, error)
+	GetDisputeByBooking(ctx context.Context, bookingID int64) (Dispute, error)
 	CreateDisputeEvent(ctx context.Context, arg CreateDisputeEventParams) (DisputeEvent, error)
 	GetDisputeEvents(ctx context.Context, disputeID int64) ([]DisputeEvent, error)
 

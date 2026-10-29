@@ -68,7 +68,16 @@ func (h *DisputeHandler) Open(c *gin.Context) {
 		"reason":   req.Reason,
 		"evidence": evidence,
 	})
-	c.JSON(http.StatusCreated, data)
+	// The C-end reads camelCase; the repository struct is snake_case because it
+	// doubles as the DB row. Map explicitly instead of leaking DB tags.
+	c.JSON(http.StatusCreated, gin.H{
+		"id":              data.ID,
+		"bookingId":       data.BookingID,
+		"type":            data.Type,
+		"status":          data.Status,
+		"respondDeadline": data.RespondDeadline.Format("2006-01-02T15:04:05Z07:00"),
+		"createdAt":       data.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	})
 }
 
 // Respond lets the counterparty reply to a dispute.

@@ -155,6 +155,12 @@
       }
     },
     {
+      "path": "pages/credit/index",
+      "style": {
+        "navigationBarTitleText": "信用明细"
+      }
+    },
+    {
       "path": "pages/settings/index",
       "style": {
         "navigationBarTitleText": "设置"

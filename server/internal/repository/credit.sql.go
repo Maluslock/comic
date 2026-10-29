@@ -18,15 +18,15 @@ type CreditScore struct {
 
 // CreditEvent records a single score delta with full provenance.
 type CreditEvent struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Delta       int32      `json:"delta"`
-	Reason      string     `json:"reason"`
-	RefType     *string    `json:"ref_type"`
-	RefID       *int64     `json:"ref_id"`
-	BookingID   *int64     `json:"booking_id"`
-	Description *string    `json:"description"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID          int64     `json:"id"`
+	UserID      int64     `json:"user_id"`
+	Delta       int32     `json:"delta"`
+	Reason      string    `json:"reason"`
+	RefType     *string   `json:"ref_type"`
+	RefID       *int64    `json:"ref_id"`
+	BookingID   *int64    `json:"booking_id"`
+	Description *string   `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // UpsertCreditScore inserts a row with the default score when missing.
@@ -34,8 +34,7 @@ const upsertCreditScore = `-- name: UpsertCreditScore :one
 INSERT INTO credit_scores (user_id, score)
 VALUES ($1, COALESCE($2, 100))
 ON CONFLICT (user_id) DO UPDATE
-SET score = EXCLUDED.score,
-    updated_at = NOW()
+SET updated_at = NOW()
 RETURNING id, user_id, score, created_at, updated_at
 `
 
@@ -194,4 +193,96 @@ func (q *Queries) GetCreditEventForRef(ctx context.Context, userID int64, reason
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+// CreditEventPage is one page of credit events.
+type CreditEventPage struct {
+	List  []CreditEvent `json:"list"`
+	Total int64         `json:"total"`
+}
+
+const countCreditEventsByUser = `-- name: CountCreditEventsByUser :one
+SELECT COUNT(*) FROM credit_events WHERE user_id = $1
+`
+
+func (q *Queries) CountCreditEventsByUser(ctx context.Context, userID int64) (int64, error) {
+	var n int64
+	err := q.db.QueryRow(ctx, countCreditEventsByUser, userID).Scan(&n)
+	return n, err
+}
+
+const listCreditEventsByUser = `-- name: ListCreditEventsByUser :many
+SELECT id, user_id, delta, reason, ref_type, ref_id, booking_id, description, created_at
+FROM credit_events
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3
+`
+
+func (q *Queries) ListCreditEventsByUser(ctx context.Context, userID int64, limit, offset int32) ([]CreditEvent, error) {
+	rows, err := q.db.Query(ctx, listCreditEventsByUser, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]CreditEvent, 0, limit)
+	for rows.Next() {
+		var i CreditEvent
+		if err := rows.Scan(&i.ID, &i.UserID, &i.Delta, &i.Reason, &i.RefType, &i.RefID, &i.BookingID, &i.Description, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
+
+// CreditCounts are the tallies shown on the credit card.
+type CreditCounts struct {
+	SuccessCount     int32 `json:"successCount"`
+	CancelCount      int32 `json:"cancelCount"`
+	NoShowCount      int32 `json:"noShowCount"`
+	DisputeLostCount int32 `json:"disputeLostCount"`
+}
+
+const getCreditCounts = `-- name: GetCreditCounts :one
+SELECT
+  COUNT(*) FILTER (WHERE reason = 'order_completed')::int AS success_count,
+  COUNT(*) FILTER (WHERE reason = 'late_cancel')::int AS cancel_count,
+  COUNT(*) FILTER (WHERE reason IN ('photographer_no_show','coser_no_show'))::int AS noshow_count,
+  COUNT(*) FILTER (WHERE reason = 'dispute_lost')::int AS dispute_lost_count
+FROM credit_events
+WHERE user_id = $1
+`
+
+func (q *Queries) GetCreditCounts(ctx context.Context, userID int64) (CreditCounts, error) {
+	var c CreditCounts
+	err := q.db.QueryRow(ctx, getCreditCounts, userID).Scan(&c.SuccessCount, &c.CancelCount, &c.NoShowCount, &c.DisputeLostCount)
+	return c, err
+}
+
+// UserCreditScore is the minimal per-user score used for batch lookups.
+type UserCreditScore struct {
+	UserID int64 `json:"user_id"`
+	Score  int32 `json:"score"`
+}
+
+const listCreditScoresByUserIDs = `-- name: ListCreditScoresByUserIDs :many
+SELECT user_id, score FROM credit_scores WHERE user_id = ANY($1)
+`
+
+func (q *Queries) ListCreditScoresByUserIDs(ctx context.Context, userIDs []int64) ([]UserCreditScore, error) {
+	rows, err := q.db.Query(ctx, listCreditScoresByUserIDs, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]UserCreditScore, 0, len(userIDs))
+	for rows.Next() {
+		var u UserCreditScore
+		if err := rows.Scan(&u.UserID, &u.Score); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
 }

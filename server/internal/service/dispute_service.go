@@ -30,9 +30,44 @@ func (s *BookingService) ActorRoleForUser(ctx context.Context, userID int64) (st
 	return actorCoser, nil
 }
 
+// BookingDisputeDTO is the inner dispute object returned to C-end.
+type BookingDisputeDTO struct {
+	ID               int64    `json:"id"`
+	BookingID        int64    `json:"bookingId"`
+	OpenedBy         int64    `json:"openedBy"`
+	OpenedByRole     string   `json:"openedByRole"`
+	Type             string   `json:"type"`
+	Reason           string   `json:"reason"`
+	Status           string   `json:"status"`
+	RespondDeadline  string   `json:"respondDeadline"`
+	EvidenceDeadline string   `json:"evidenceDeadline"`
+	Resolution       *string  `json:"resolution"`
+	AdminID          *int64   `json:"adminId"`
+	ReviewedAt       *string  `json:"reviewedAt"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
+}
+
+// BookingDisputeResponse wraps the dispute DTO and the caller's role.
+type BookingDisputeResponse struct {
+	Dispute *BookingDisputeDTO `json:"dispute"`
+	MyRole  string             `json:"myRole"`
+}
+
+// OrderEventItem is the C-end DTO for booking timeline events.
+type OrderEventItem struct {
+	ID        int64          `json:"id"`
+	EventType string         `json:"eventType"`
+	ActorRole *string        `json:"actorRole"`
+	ActorID   *int64         `json:"actorId"`
+	CreatedAt string         `json:"createdAt"`
+	Payload   map[string]any `json:"payload"`
+}
+
 // GetOrderEvents returns the escrow timeline of a booking. Only the two
-// parties of the booking may read it.
-func (s *BookingService) GetOrderEvents(ctx context.Context, bookingID, actorUserID int64) ([]repository.OrderEvent, error) {
+// parties of the booking may read it. Payload is returned as a parsed JSON
+// object under payloadObj.
+func (s *BookingService) GetOrderEvents(ctx context.Context, bookingID, actorUserID int64) ([]OrderEventItem, error) {
 	b, err := s.queries.GetBookingByID(ctx, bookingID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -46,14 +81,31 @@ func (s *BookingService) GetOrderEvents(ctx context.Context, bookingID, actorUse
 			return nil, ErrForbidden
 		}
 	}
-	events, err := s.queries.GetOrderEventsByBooking(ctx, bookingID)
+	rawEvents, err := s.queries.GetOrderEventsByBooking(ctx, bookingID)
 	if err != nil {
 		return nil, err
 	}
-	if events == nil {
-		events = []repository.OrderEvent{}
+	if rawEvents == nil {
+		rawEvents = []repository.OrderEvent{}
 	}
-	return events, nil
+	items := make([]OrderEventItem, 0, len(rawEvents))
+	for _, e := range rawEvents {
+		payload := map[string]any{}
+		if len(e.Payload) > 0 {
+			if err := json.Unmarshal(e.Payload, &payload); err != nil {
+				payload = map[string]any{"_raw": string(e.Payload)}
+			}
+		}
+		items = append(items, OrderEventItem{
+			ID:        e.ID,
+			EventType: e.EventType,
+			ActorRole: e.ActorRole,
+			ActorID:   e.ActorID,
+			CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			Payload:   payload,
+		})
+	}
+	return items, nil
 }
 
 // RecordDisputeEvent appends one entry to the dispute timeline.
@@ -82,6 +134,98 @@ func (s *BookingService) RecordDisputeEvent(ctx context.Context, disputeID, acto
 	}); err != nil {
 		log.Printf("dispute event write failed (dispute=%d type=%s): %v", disputeID, eventType, err)
 	}
+}
+
+// GetBookingDispute returns the C-end view of the most recent dispute on a
+// booking, plus the caller's role relative to the booking. Only the two
+// parties of the booking may read it.
+func (s *BookingService) GetBookingDispute(ctx context.Context, bookingID, actorUserID int64) (*BookingDisputeResponse, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	var myRole string
+	if int64(b.CoserID) == actorUserID {
+		myRole = actorCoser
+	} else {
+		profile, perr := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+		if perr != nil || int64(profile.ID) != int64(b.PhotographerID) {
+			return nil, ErrForbidden
+		}
+		myRole = actorPhotographer
+	}
+	resp := &BookingDisputeResponse{MyRole: myRole}
+	d, err := s.queries.GetDisputeByBooking(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return resp, nil
+		}
+		return nil, err
+	}
+	dto := &BookingDisputeDTO{
+		ID:               d.ID,
+		BookingID:        d.BookingID,
+		OpenedBy:         d.OpenedBy,
+		OpenedByRole:     d.OpenedByRole,
+		Type:             d.Type,
+		Reason:           d.Reason,
+		Status:           d.Status,
+		RespondDeadline:  d.RespondDeadline.Format("2006-01-02T15:04:05Z07:00"),
+		EvidenceDeadline: d.EvidenceDeadline.Format("2006-01-02T15:04:05Z07:00"),
+		Resolution:       d.Resolution,
+		AdminID:          d.AdminID,
+		CreatedAt:        d.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:        d.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if d.ReviewedAt != nil {
+		s := d.ReviewedAt.Format("2006-01-02T15:04:05Z07:00")
+		dto.ReviewedAt = &s
+	}
+	resp.Dispute = dto
+	return resp, nil
+}
+
+// MarkCoserNoShow lets the photographer mark the coser as a no-show for a
+// confirmed booking. The booking must not already have a no-show party. The
+// action is idempotent: repeated calls return the already-marked booking
+// without applying a second credit penalty.
+func (s *BookingService) MarkCoserNoShow(ctx context.Context, bookingID int64, actorUserID int64) (*BookingItem, error) {
+	b, err := s.queries.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookingNotFound
+		}
+		return nil, err
+	}
+	profile, err := s.queries.GetPhotographerByUserID(ctx, actorUserID)
+	if err != nil || int64(profile.ID) != int64(b.PhotographerID) {
+		return nil, ErrForbidden
+	}
+	if b.Status != "confirmed" {
+		return nil, ErrInvalidTransition
+	}
+	if b.NoShowParty != nil {
+		if *b.NoShowParty == actorCoser {
+			return bookingToItem(b), nil
+		}
+		return nil, ErrInvalidTransition
+	}
+	updated, err := s.queries.MarkBookingNoShow(ctx, bookingID, actorCoser)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidTransition
+		}
+		return nil, err
+	}
+	s.emitOrderEvent(ctx, bookingID, actorUserID, actorPhotographer, eventNoShow, map[string]any{"party": actorCoser})
+	// Photographer-initiated coser no-show: coser -15, idempotent via unique index.
+	s.applyCreditDelta(ctx, int64(b.CoserID), -15, creditReasonCoserNoShow, strPtr("booking"), &bookingID, &bookingID, "模特缺席")
+	s.notify(ctx, b.CoserID, "warning", "您被标记缺席", fmt.Sprintf("预约(#%d)摄影师标记您缺席，信用分将受到影响", bookingID), bookingID)
+	s.notifyPhotographer(ctx, b.PhotographerID, "info", "缺席标记已提交", fmt.Sprintf("预约(#%d)已标记模特缺席", bookingID), bookingID)
+	return bookingToItem(updated), nil
 }
 
 // EscalateDispute moves a dispute into the escalated state. Both parties may

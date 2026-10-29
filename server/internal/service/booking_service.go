@@ -22,23 +22,31 @@ type CreateBookingRequest struct {
 }
 
 type BookingItem struct {
-	ID                 int64  `json:"id"`
-	PhotographerID     int32  `json:"photographerId"`
-	CoserID            int32  `json:"coserId"`
-	ServiceID          int32  `json:"serviceId"`
-	Date               string `json:"date"`
-	Time               string `json:"time"`
-	Status             string `json:"status"`
-	TotalPrice         int32  `json:"totalPrice"`
-	PriceMode          string `json:"priceMode"`
-	QuotePrice         *int32 `json:"quotePrice"`
-	PriceStatus        string `json:"priceStatus"`
-	Remarks            string `json:"remarks"`
-	CreatedAt          string `json:"createdAt"`
-	PhotographerName   string `json:"photographerName"`
-	PhotographerAvatar string `json:"photographerAvatar"`
-	PhotographerUserID int64  `json:"photographerUserId"`
-	ServiceName        string `json:"serviceName"`
+	ID                 int64    `json:"id"`
+	PhotographerID     int32    `json:"photographerId"`
+	CoserID            int32    `json:"coserId"`
+	ServiceID          int32    `json:"serviceId"`
+	Date               string   `json:"date"`
+	Time               string   `json:"time"`
+	Status             string   `json:"status"`
+	SubStatus          *string  `json:"subStatus"`
+	TotalPrice         int32    `json:"totalPrice"`
+	PriceMode          string   `json:"priceMode"`
+	QuotePrice         *int32   `json:"quotePrice"`
+	PriceStatus        string   `json:"priceStatus"`
+	Remarks            string   `json:"remarks"`
+	CreatedAt          string   `json:"createdAt"`
+	CheckinAt          *string  `json:"checkinAt"`
+	DeliveredAt        *string  `json:"deliveredAt"`
+	AcceptDeadline     *string  `json:"acceptDeadline"`
+	DeliveryEvidence   []string `json:"deliveryEvidence"`
+	CheckinCode        *string  `json:"checkinCode"`
+	NoShowParty        *string  `json:"noShowParty"`
+	CancelledBy        *string  `json:"cancelledBy"`
+	PhotographerName   string   `json:"photographerName"`
+	PhotographerAvatar string   `json:"photographerAvatar"`
+	PhotographerUserID int64    `json:"photographerUserId"`
+	ServiceName        string   `json:"serviceName"`
 	// ServiceDuration is the下单时冻结的时长快照（分钟）。指针对待：快照列可能为空
 	// （000027 之前的旧行），此时前端应显示「—」而不是 0 分钟。
 	ServiceDuration *int32 `json:"serviceDuration"`
@@ -52,11 +60,26 @@ type BookingItemWithCoser struct {
 }
 
 type BookingService struct {
-	queries *repository.Queries
+	queries    *repository.Queries
+	configSalt func() string
 }
 
 func NewBookingService(queries *repository.Queries) *BookingService {
-	return &BookingService{queries: queries}
+	return NewBookingServiceWithSalt(queries, defaultCheckinSalt)
+}
+
+// NewBookingServiceWithSalt allows the main package to inject the server-side
+// secret used for deterministic check-in code generation.
+func NewBookingServiceWithSalt(queries *repository.Queries, saltFn func() string) *BookingService {
+	return &BookingService{queries: queries, configSalt: saltFn}
+}
+
+// defaultCheckinSalt is a last-resort fallback; the real service uses WXAppSecret.
+func defaultCheckinSalt() string { return "miracomic-checkin-fallback-salt" }
+
+// checkinSalt returns the injected server-side secret.
+func (s *BookingService) checkinSalt() string {
+	return s.configSalt()
 }
 
 var (
@@ -158,23 +181,40 @@ func parseClock(s string) (int, int, bool) {
 }
 
 func bookingToItem(b repository.Booking) *BookingItem {
-	return &BookingItem{
-		ID:              b.ID,
-		PhotographerID:  b.PhotographerID,
-		CoserID:         b.CoserID,
-		ServiceID:       b.ServiceID,
-		Date:            b.Date.Format("2006-01-02"),
-		Time:            b.Time,
-		Status:          b.Status,
-		TotalPrice:      b.TotalPrice,
-		PriceMode:       b.PriceMode,
-		QuotePrice:      b.QuotePrice,
-		PriceStatus:     b.PriceStatus,
-		Remarks:         derefString(b.Remarks),
-		CreatedAt:       b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		ServiceName:     derefString(b.ServiceName),
-		ServiceDuration: b.ServiceDuration,
+	item := &BookingItem{
+		ID:               b.ID,
+		PhotographerID:   b.PhotographerID,
+		CoserID:          b.CoserID,
+		ServiceID:        b.ServiceID,
+		Date:             b.Date.Format("2006-01-02"),
+		Time:             b.Time,
+		Status:           b.Status,
+		SubStatus:        b.SubStatus,
+		TotalPrice:       b.TotalPrice,
+		PriceMode:        b.PriceMode,
+		QuotePrice:       b.QuotePrice,
+		PriceStatus:      b.PriceStatus,
+		Remarks:          derefString(b.Remarks),
+		CreatedAt:        b.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		DeliveryEvidence: b.DeliveryEvidence,
+		NoShowParty:      b.NoShowParty,
+		CancelledBy:      b.CancelledBy,
+		ServiceName:      derefString(b.ServiceName),
+		ServiceDuration:  b.ServiceDuration,
 	}
+	if b.CheckinAt != nil {
+		s := b.CheckinAt.Format("2006-01-02T15:04:05Z07:00")
+		item.CheckinAt = &s
+	}
+	if b.DeliveredAt != nil {
+		s := b.DeliveredAt.Format("2006-01-02T15:04:05Z07:00")
+		item.DeliveredAt = &s
+	}
+	if b.AcceptDeadline != nil {
+		s := b.AcceptDeadline.Format("2006-01-02T15:04:05Z07:00")
+		item.AcceptDeadline = &s
+	}
+	return item
 }
 
 // notify writes a notification after a booking event; errors are logged and
@@ -399,6 +439,15 @@ func (s *BookingService) ListByUser(ctx context.Context, userID int32) ([]Bookin
 		if item.ServiceName == "" {
 			item.ServiceName = b.ServiceName
 		}
+		// Coser 视角：confirmed 且没码时惰性生成一次； always 返回真实码。
+		if b.Booking.Status == "confirmed" {
+			updated, gerr := s.queries.GenerateCheckinCode(ctx, b.Booking.ID, s.checkinSalt())
+			if gerr == nil {
+				item.CheckinCode = updated.CheckinCode
+			} else {
+				item.CheckinCode = b.Booking.CheckinCode
+			}
+		}
 		items = append(items, *item)
 	}
 	return items, nil
@@ -425,6 +474,8 @@ func (s *BookingService) ListByPhotographer(ctx context.Context, photographerID 
 		if item.ServiceName == "" {
 			item.ServiceName = derefString(b.ServiceName)
 		}
+		// 摄影师视角：核销码必须对摄影师隐藏。
+		item.CheckinCode = nil
 		items = append(items, BookingItemWithCoser{
 			BookingItem: *item,
 			CoserName:   b.CoserName,
@@ -476,6 +527,13 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 			return nil, ErrConflict
 		}
 		return nil, err
+	}
+
+	// 确认接单后立刻生成核销码，保证 coser 在到场前能出示。
+	if newStatus == "confirmed" {
+		if g, gerr := s.queries.GenerateCheckinCode(ctx, bookingID, s.checkinSalt()); gerr == nil {
+			updated = g
+		}
 	}
 
 	switch newStatus {
@@ -560,13 +618,15 @@ const (
 	actorSystem       = "system"
 )
 
+
+
 // Credit score constants.
 const (
-	creditReasonNoShow        = "photographer_no_show"
-	creditReasonCoserNoShow   = "coser_no_show"
-	creditReasonDisputeLost   = "dispute_lost"
-	creditReasonOrderComplete = "order_completed"
-	creditReasonLateCancel    = "late_cancel"
+	creditReasonNoShow          = "photographer_no_show"
+	creditReasonCoserNoShow     = "coser_no_show"
+	creditReasonDisputeLost     = "dispute_lost"
+	creditReasonOrderComplete   = "order_completed"
+	creditReasonLateCancel      = "late_cancel"
 	creditReasonDeliveryOverdue = "delivery_overdue"
 )
 

@@ -1,9 +1,17 @@
 import { mockPhotographers, mockWorks, mockEvents, tags } from '@/data/mock'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
-import type { HomeResponse } from '@/types'
+import type {
+  HomeResponse,
+  OrderEventItem,
+  DisputeItem,
+  BookingDisputeResponse,
+  CreditSummary,
+  CreditEventsResponse
+} from '@/types'
 
 import { resolveImage } from '@/utils/mappers'
 import { getApiBase } from '@/utils/apiBase'
+import { mockCreditSummary, mockCreditEvents } from '@/data/creditMock'
 
 async function uploadFile(filePath: string): Promise<string> {
   const token = uni.getStorageSync('token') as string
@@ -223,6 +231,97 @@ export function updateService(id: number, payload: ServiceUpsertPayload) {
 
 export function deleteService(id: number) {
   return apiDelete<{ ok: boolean }>(`/v1/photographers/services/${id}`)
+}
+
+/* ───────────────────── 担保交易：履约节点 + 争议 ───────────────────── */
+
+/**
+ * 摄影师核销：输入 coser 的 6 位核销码，确认对方已到场。
+ * 后端会校验核销码是否与订单一致（不一致 → 403 forbidden）。
+ */
+export function checkinBooking(bookingId: number | string, code: string) {
+  return apiPost<Record<string, unknown>>(`/v1/bookings/${bookingId}/checkin`, { code })
+}
+
+/** 摄影师提交交付：上传成片凭证（图片 URL 数组）。 */
+export function deliverBooking(bookingId: number | string, evidence: string[]) {
+  return apiPost<Record<string, unknown>>(`/v1/bookings/${bookingId}/deliver`, { evidence })
+}
+
+/** coser 确认收到交付，订单转 completed。 */
+export function acceptDelivery(bookingId: number | string) {
+  return apiPost<Record<string, unknown>>(`/v1/bookings/${bookingId}/accept`, {})
+}
+
+/** 订单履约事件流（时间线数据源）。仅订单双方可读。 */
+export function getOrderEvents(bookingId: number | string) {
+  return apiGet<{ list: OrderEventItem[] }>(`/v1/bookings/${bookingId}/events`)
+}
+
+/** 订单当前争议 + 我在该订单中的角色。无未关闭争议时 dispute 为 null。 */
+export function getBookingDispute(bookingId: number | string) {
+  return apiGet<BookingDisputeResponse>(`/v1/bookings/${bookingId}/dispute`)
+}
+
+/** 发起争议。type: no_show | not_delivered | quality | other。 */
+export function openDispute(
+  bookingId: number | string,
+  payload: { type: string; reason: string; evidence?: string[] }
+) {
+  return apiPost<DisputeItem>(`/v1/bookings/${bookingId}/disputes`, payload)
+}
+
+/** 响应争议（仅非申请方）。 */
+export function respondDispute(
+  disputeId: number | string,
+  payload: { response: string; evidence?: string[] }
+) {
+  return apiPost<DisputeItem>(`/v1/disputes/${disputeId}/respond`, payload)
+}
+
+/** 升级争议，等待管理员裁决。 */
+export function escalateDispute(disputeId: number | string, reason?: string) {
+  return apiPost<DisputeItem>(`/v1/disputes/${disputeId}/escalate`, reason ? { reason } : {})
+}
+
+/** 摄影师标记对方爽约（party 默认 coser）。 */
+export function markNoShow(bookingId: number | string, party: 'coser' | 'photographer' = 'coser') {
+  return apiPost<Record<string, unknown>>(`/v1/bookings/${bookingId}/noshow`, { party })
+}
+
+/**
+ * 信用分开关：后端只读接口（t11）落地前用本地 mock 跑通 UI。
+ * t11 上线后把它置为 false，页面结构不用动。
+ */
+export const CREDIT_USE_MOCK = true
+
+/** 我的信用分概览。 */
+export async function getMyCredit(): Promise<CreditSummary> {
+  if (!CREDIT_USE_MOCK) {
+    return apiGet<CreditSummary>('/v1/me/credit')
+  }
+  try {
+    return await apiGet<CreditSummary>('/v1/me/credit')
+  } catch {
+    // 后端接口还没上线（404/500）→ 回落到 mock，页面照常渲染
+    return { ...mockCreditSummary }
+  }
+}
+
+/** 我的信用分明细（时间倒序）。 */
+export async function getMyCreditEvents(params?: { limit?: number; offset?: number }): Promise<CreditEventsResponse> {
+  const limit = params?.limit ?? 20
+  const offset = params?.offset ?? 0
+  const query = { limit: String(limit), offset: String(offset) }
+  if (!CREDIT_USE_MOCK) {
+    return apiGet<CreditEventsResponse>('/v1/me/credit/events', query)
+  }
+  try {
+    return await apiGet<CreditEventsResponse>('/v1/me/credit/events', query)
+  } catch {
+    const list = mockCreditEvents.slice(offset, offset + limit)
+    return { list, total: mockCreditEvents.length }
+  }
 }
 
 export async function getHomeData(): Promise<HomeResponse> {

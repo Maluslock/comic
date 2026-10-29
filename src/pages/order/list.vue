@@ -24,9 +24,14 @@
         <view v-for="order in orders" :key="order.id" class="order-card" @click="goDetail(order.id)">
           <view class="order-header">
             <text class="order-id">订单号：{{ order.id }}</text>
-            <text class="order-status" :class="getStatusClass(order.status)">
-              {{ getStatusText(order.status) }}
-            </text>
+            <view class="order-tags">
+              <text v-if="subStatusText(order)" class="sub-status" :class="`sub-${subTone(order)}`">
+                {{ subStatusText(order) }}
+              </text>
+              <text class="order-status" :class="getStatusClass(order.status)">
+                {{ getStatusText(order.status) }}
+              </text>
+            </view>
           </view>
 
           <view class="order-content">
@@ -43,7 +48,16 @@
             <view v-if="isQuotedOwn(order)" class="btn-outline danger" @click="rejectQuote(order.id)">拒绝</view>
             <view v-if="isQuotedOwn(order)" class="btn-primary" @click="acceptQuote(order.id)">接受报价</view>
             <view v-if="order.status === 'pending' || order.status === 'confirmed'" class="btn-outline" @click="cancelOrder(order.id)">取消预约</view>
-            <view v-if="order.status === 'confirmed'" class="btn-primary" @click="confirmOrder(order.id)">确认完成</view>
+            <view
+              v-if="order.status === 'confirmed' && order.subStatus === 'delivered'"
+              class="btn-primary"
+              @click="acceptDeliveryAction(order)"
+            >确认完成</view>
+            <view
+              v-else-if="order.status === 'confirmed' && !order.subStatus"
+              class="btn-primary"
+              @click="confirmOrder(order.id)"
+            >确认完成</view>
             <view v-if="order.status === 'completed'" class="btn-outline" @click="goReview(order)">去评价</view>
             <view v-if="order.status === 'pending' || order.status === 'confirmed'" class="btn-primary" @click="goChat(order.id)">联系摄影师</view>
           </view>
@@ -59,10 +73,12 @@
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
-import type { OrderPriceFields } from '@/types'
+import type { OrderPriceFields, BookingSubStatus, EscrowBookingFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } from '@/utils/quote'
+import { escrowState, escrowTodoWeight } from '@/utils/escrow'
+import { acceptDelivery } from '@/api'
 
-interface DisplayOrder extends OrderPriceFields {
+interface DisplayOrder extends OrderPriceFields, EscrowBookingFields {
   id: string
   coserId?: string
   photographerId?: string
@@ -136,7 +152,15 @@ async function loadBookings() {
       priceStatus: toPriceStatus(b.priceStatus),
       status: b.status || 'pending',
       remark: b.remarks || '',
-      createTime: b.createdAt || Date.now()
+      createTime: b.createdAt || Date.now(),
+      subStatus: (b.subStatus || null) as BookingSubStatus | null,
+      checkinCode: b.checkinCode ?? null,
+      checkinAt: b.checkinAt ?? null,
+      deliveredAt: b.deliveredAt ?? null,
+      acceptDeadline: b.acceptDeadline ?? null,
+      deliveryEvidence: Array.isArray(b.deliveryEvidence) ? b.deliveryEvidence : [],
+      noShowParty: b.noShowParty ?? null,
+      cancelledBy: b.cancelledBy ?? null
     }))
 
     const storedIds = new Set(serverOrders.map(o => o.id))
@@ -157,11 +181,15 @@ async function loadBookings() {
 }
 
 function applyFilter() {
-  if (currentTab.value === 'all') {
-    orders.value = [...fullOrders.value]
-  } else {
-    orders.value = fullOrders.value.filter(o => o.status === currentTab.value)
-  }
+  const base =
+    currentTab.value === 'all'
+      ? [...fullOrders.value]
+      : fullOrders.value.filter(o => o.status === currentTab.value)
+  // 待办订单（待确认交付 / 争议中 / 待核销）置顶，其余按原顺序（后端已按创建时间倒序）
+  orders.value = base
+    .map((o, idx) => ({ o, idx, weight: escrowTodoWeight(o.status, o.subStatus) }))
+    .sort((a, b) => (a.weight === b.weight ? a.idx - b.idx : a.weight - b.weight))
+    .map(item => item.o)
 }
 
 function setTab(key: string) {
@@ -181,6 +209,16 @@ function getStatusText(status: string): string {
 
 function getStatusClass(status: string): string {
   return `status-${status}`
+}
+
+/** 子状态小标签文案（主状态之外的履约进度）。 */
+function subStatusText(order: DisplayOrder): string {
+  return escrowState(order.status, order.subStatus, order.checkinAt).subText
+}
+
+/** 子状态小标签色调。 */
+function subTone(order: DisplayOrder): string {
+  return escrowState(order.status, order.subStatus, order.checkinAt).tone
 }
 
 async function updateStatus(id: string, newStatus: 'confirmed' | 'completed' | 'cancelled') {
@@ -210,6 +248,33 @@ function confirmOrder(id: string) {
     title: '确认完成',
     content: '确认拍摄已完成？',
     success: (res) => { if (res.confirm) updateStatus(id, 'completed') }
+  })
+}
+
+/**
+ * 待确认交付（subStatus === 'delivered'）时，走担保交易的验收节点：
+ * POST /v1/bookings/:id/accept → 订单转 completed。
+ * 其余 confirmed 状态保持原有 PUT /status 流程。
+ */
+function acceptDeliveryAction(order: DisplayOrder) {
+  uni.showModal({
+    title: '确认交付',
+    content: '确认已收到摄影师交付的成片？确认后订单将完成并结算。',
+    success: async (res) => {
+      if (!res.confirm) return
+      uni.showLoading({ title: '提交中...' })
+      try {
+        await acceptDelivery(order.id)
+        uni.hideLoading()
+        uni.showToast({ title: '已确认交付', icon: 'success' })
+      } catch (e) {
+        uni.hideLoading()
+        const code = e instanceof ApiError ? e.status : 0
+        uni.showToast({ title: code === 409 ? '交付状态已变化，请刷新' : '操作失败', icon: 'none' })
+      } finally {
+        loadBookings()
+      }
+    }
   })
 }
 
@@ -373,6 +438,50 @@ function goHome() {
   justify-content: space-between;
   align-items: center;
   margin-bottom: $spacing-md;
+}
+
+.order-tags {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.sub-status {
+  font-size: $font-size-xs;
+  padding: 2rpx 12rpx;
+  border-radius: $border-radius-sm;
+  border: 1rpx solid $dark-border;
+  line-height: 1.6;
+
+  &.sub-cyan {
+    color: $neon-cyan;
+    border-color: rgba(6, 182, 212, 0.35);
+    background: rgba(6, 182, 212, 0.08);
+  }
+
+  &.sub-purple {
+    color: $neon-purple;
+    border-color: rgba(168, 85, 247, 0.35);
+    background: rgba(168, 85, 247, 0.08);
+  }
+
+  &.sub-warning {
+    color: $warning-color;
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.1);
+  }
+
+  &.sub-error {
+    color: $error-color;
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  &.sub-success {
+    color: $success-color;
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.08);
+  }
 }
 
 .order-id {

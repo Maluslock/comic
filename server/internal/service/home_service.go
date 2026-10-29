@@ -68,6 +68,10 @@ type PhotographerItem struct {
 	HasFree       bool   `json:"hasFree"`
 	HasNegotiable bool   `json:"hasNegotiable"`
 	ServiceCount  int32  `json:"serviceCount"`
+
+	// 信用分（可选）：无 credit_scores 行时保持 nil/空，前端据此隐藏标签。
+	CreditScore *int32 `json:"creditScore,omitempty"`
+	CreditLevel string `json:"creditLevel,omitempty"`
 }
 
 type WorkItem struct {

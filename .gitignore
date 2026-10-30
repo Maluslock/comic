@@ -56,3 +56,7 @@ server/ingest
 
 # admin 生产产物（由 .devenv/scripts/one.sh 在容器内构建后同步，不入库）
 server/admin-dist/
+
+# 本地密钥备份与二进制产物，禁止入库
+server/.env.bak*
+server/api

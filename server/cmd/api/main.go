@@ -150,6 +150,9 @@ func main() {
 			}
 			return "miracomic-checkin-fallback-salt"
 		})
+		// 订阅消息是旁路：没有 WX_APPID/WX_APP_SECRET 时 NewWxMsgService 返回 nil，
+		// 所有下发被跳过，本地与 CI 不受影响。
+		bookingSvc = bookingSvc.WithWx(service.NewWxMsgService(), service.LoadTmplIDs(), userRepo)
 
 		// Home
 		homeRepo := repository.NewHomeRepository(queries)

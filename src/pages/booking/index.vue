@@ -85,6 +85,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import ServiceCard from '@/components/ServiceCard.vue'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { TMPL, requestSubscribe, markSubscribed } from '@/utils/subscribe'
 import { formatPrice, encodeRedirect } from '@/utils/mappers'
 import { todayKey } from '@/utils/date'
 import type { Service } from '@/types'
@@ -195,6 +196,12 @@ async function submitBooking() {
     uni.showToast({ title: '请完善预约信息', icon: 'none' })
     return
   }
+  // 一次性订阅必须在用户点击里先要额度：这里一次拿「结果通知 + 交付通知」两张，
+  // 之后摄影师确认、交付时服务端才有额度可发。用户拒绝也不影响下单。
+  const sub = await requestSubscribe([TMPL.result, TMPL.delivered])
+  if (sub?.[TMPL.result] === 'accept') markSubscribed(TMPL.result)
+  if (sub?.[TMPL.delivered] === 'accept') markSubscribed(TMPL.delivered)
+
   uni.showLoading({ title: '提交中...' })
   try {
     await apiPost<{ id: number }>('/v1/bookings', {

@@ -6,6 +6,11 @@
       <text class="nav-title">接单管理</text>
     </view>
 
+    <view v-if="!notifyOn" class="notify-tip">
+      <text class="notify-tip-text">开启接单提醒，客户下单时微信通知你</text>
+      <view class="notify-tip-btn" @click="onEnableNotify">开启</view>
+    </view>
+
     <view class="body">
       <view v-if="!userStore.user?.photographerId" class="empty-state">
         <text class="empty-icon">◈</text>
@@ -58,6 +63,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { TMPL, requestSubscribe, markSubscribed, isSubscribed } from '@/utils/subscribe'
 import { apiGet, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import type { OrderPriceFields, EscrowBookingFields } from '@/types'
@@ -84,6 +90,20 @@ const statusBarHeight = ref(44)
 const loading = ref(true)
 const orders = ref<PhotographerOrder[]>([])
 const userStore = useUserStore()
+
+const notifyOn = ref(isSubscribed(TMPL.newBooking))
+
+async function onEnableNotify() {
+  if (notifyOn.value) return
+  const res = await requestSubscribe([TMPL.newBooking])
+  if (res?.[TMPL.newBooking] === 'accept') {
+    markSubscribed(TMPL.newBooking)
+    notifyOn.value = true
+    uni.showToast({ title: '已开启', icon: 'success' })
+  } else {
+    uni.showToast({ title: '未开启，可稍后再试', icon: 'none' })
+  }
+}
 
 onShow(() => {
   const sysInfo = uni.getSystemInfoSync()
@@ -296,6 +316,31 @@ function goBack() {
 </script>
 
 <style lang="scss" scoped>
+.notify-tip {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  margin: $spacing-md $spacing-md 0;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(255, 107, 0, 0.08);
+  border: 1rpx solid rgba(255, 107, 0, 0.24);
+  border-radius: $border-radius-lg;
+}
+
+.notify-tip-text {
+  flex: 1;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+.notify-tip-btn {
+  padding: 8rpx 24rpx;
+  font-size: $font-size-sm;
+  color: #0c0d14;
+  background: $brand;
+  border-radius: 999rpx;
+}
+
 .page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
 .nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 88rpx; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }

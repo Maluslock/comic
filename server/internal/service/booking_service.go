@@ -62,6 +62,10 @@ type BookingItemWithCoser struct {
 type BookingService struct {
 	queries    *repository.Queries
 	configSalt func() string
+	// 订阅消息是旁路：wx 为 nil（本地无凭据）时所有 push 直接跳过。
+	wx    *WxMsgService
+	tmpl  TmplIDs
+	users *repository.UserRepo
 }
 
 func NewBookingService(queries *repository.Queries) *BookingService {
@@ -72,6 +76,34 @@ func NewBookingService(queries *repository.Queries) *BookingService {
 // secret used for deterministic check-in code generation.
 func NewBookingServiceWithSalt(queries *repository.Queries, saltFn func() string) *BookingService {
 	return &BookingService{queries: queries, configSalt: saltFn}
+}
+
+// WithWx 注入订阅消息能力；不调用则完全不下发（测试与本地环境保持原样）。
+func (s *BookingService) WithWx(wx *WxMsgService, tmpl TmplIDs, users *repository.UserRepo) *BookingService {
+	s.wx = wx
+	s.tmpl = tmpl
+	s.users = users
+	return s
+}
+
+// pushToUser 查 openid 后下发；任何一步缺失都静默返回，绝不影响主流程。
+func (s *BookingService) pushToUser(ctx context.Context, userID int32, tmplID, page string, data map[string]string) {
+	if s.wx == nil || s.users == nil || tmplID == "" || len(data) == 0 {
+		return
+	}
+	openid, err := s.users.GetOpenID(ctx, int64(userID))
+	if err != nil || openid == "" {
+		return
+	}
+	s.wx.SendSubscribe(ctx, openid, tmplID, page, data)
+}
+
+func (s *BookingService) pushToPhotographer(ctx context.Context, photographerID int32, tmplID, page string, data map[string]string) {
+	profile, err := s.queries.GetPhotographerById(ctx, photographerID)
+	if err != nil || profile.UserID == nil {
+		return
+	}
+	s.pushToUser(ctx, int32(*profile.UserID), tmplID, page, data)
 }
 
 // defaultCheckinSalt is a last-resort fallback; the real service uses WXAppSecret.
@@ -419,7 +451,17 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 	s.notify(ctx, req.CoserID, "success", "预约成功", fmt.Sprintf("您的摄影预约(#%d)已提交，等待摄影师确认", booking.ID), booking.ID)
 	s.notifyPhotographer(ctx, req.PhotographerID, "info", "收到新预约", fmt.Sprintf("您收到一条新预约(#%d)，请及时确认接单", booking.ID), booking.ID)
 
-	return bookingToItem(booking), nil
+	item := bookingToItem(booking)
+	// 收到预约通知：拍摄日期 / 拍摄类型 / 价格规格 / 备注（顺序与后台关键词一致）
+	s.pushToPhotographer(ctx, req.PhotographerID, s.tmpl.NewBooking, "pages/photographer/orders",
+		buildData(s.tmpl.NewFields, []string{
+			dateTimeText(item.Date, item.Time),
+			item.ServiceName,
+			priceText(item.TotalPrice, item.PriceMode),
+			fmt.Sprintf("#%d %s", item.ID, item.Remarks),
+		}))
+
+	return item, nil
 }
 
 func (s *BookingService) ListByUser(ctx context.Context, userID int32) ([]BookingItem, error) {
@@ -536,16 +578,33 @@ func (s *BookingService) UpdateStatus(ctx context.Context, bookingID int64, newS
 		}
 	}
 
+	item := bookingToItem(updated)
+	// 预约结果通知：预约对象 / 预约结果 / 预约拍摄日期 / 备注 / 预约单号
+	resultText := ""
 	switch newStatus {
 	case "confirmed":
 		s.notify(ctx, b.CoserID, "info", "预约已确认", "摄影师已确认接单，请按时赴约", b.ID)
+		resultText = "已确认接单"
 	case "cancelled":
 		s.notify(ctx, b.CoserID, "warning", "预约已取消", "您的预约已被取消", b.ID)
 		if actorTag == "coser" {
 			s.notifyPhotographer(ctx, b.PhotographerID, "warning", "预约已取消", "对方取消了预约。", b.ID)
+			resultText = "已取消预约"
+		} else {
+			resultText = "对方拒绝了您的预约"
 		}
 	case "completed":
 		s.notify(ctx, b.CoserID, "success", "拍摄已完成", "记得去评价本次拍摄哦", b.ID)
+	}
+	if resultText != "" {
+		s.pushToUser(ctx, b.CoserID, s.tmpl.Result, fmt.Sprintf("pages/order/detail?id=%d", b.ID),
+			buildData(s.tmpl.ResFields, []string{
+				item.PhotographerName,
+				resultText,
+				dateTimeText(item.Date, item.Time),
+				item.ServiceName,
+				fmt.Sprintf("#%d", item.ID),
+			}))
 	}
 
 	if newStatus == "completed" {
@@ -744,7 +803,15 @@ func (s *BookingService) MarkDelivered(ctx context.Context, bookingID int64, act
 	}
 	s.emitOrderEvent(ctx, bookingID, actorUserID, actorPhotographer, eventDeliver, map[string]any{"evidence_count": len(evidence)})
 	s.dedupedNotify(ctx, b.CoserID, "info", "拍摄已交付", "摄影师已标记拍摄完成，请在 7 天内确认验收", bookingID, eventDeliver)
-	return bookingToItem(updated), nil
+	item := bookingToItem(updated)
+	// 相册交付状态通知：摄影师 / 拍摄时间 / 备注
+	s.pushToUser(ctx, b.CoserID, s.tmpl.Delivered, fmt.Sprintf("pages/order/detail?id=%d", b.ID),
+		buildData(s.tmpl.DelFields, []string{
+			item.PhotographerName,
+			dateTimeText(item.Date, item.Time),
+			"作品已交付，请及时查看并确认验收",
+		}))
+	return item, nil
 }
 
 // AcceptDelivery lets the coser accept a delivered booking and mark it complete.

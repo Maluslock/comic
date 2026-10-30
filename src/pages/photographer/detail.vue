@@ -104,14 +104,16 @@
         </view>
         <view class="review-list">
           <ReviewCard
-            v-for="review in visibleReviews"
+            v-for="review in reviews"
             :key="review.id"
             :review="review"
           />
         </view>
-        <view v-if="reviewCount > 3" class="review-toggle" @click="reviewExpanded = !reviewExpanded">
-          {{ reviewExpanded ? '收起' : `展开全部 ${reviewCount} 条评价` }}
+        <view v-if="!reviews.length" class="review-empty">还没有评价</view>
+        <view v-else-if="reviewHasMore" class="review-toggle" @click="loadReviews(false)">
+          {{ reviewLoading ? '加载中…' : `加载更多（已显示 ${reviews.length}/${reviewTotal}）` }}
         </view>
+        <view v-else class="review-end">已显示全部 {{ reviewTotal }} 条</view>
       </view>
 
       <view class="bottom-space"></view>
@@ -140,7 +142,7 @@ import { ref, computed, onMounted } from 'vue'
 import ReviewCard from '@/components/ReviewCard.vue'
 import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
-import { blockUser } from '@/api/index'
+import { blockUser, getPhotographerReviews } from '@/api/index'
 import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRedirect } from '@/utils/mappers'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
@@ -192,12 +194,35 @@ const creditLabel = computed(() => {
 const creditTone = computed(() => creditToneOf(photographer.value?.creditLevel, photographer.value?.creditScore))
 
 const collected = ref(false)
-const reviewExpanded = ref(false)
-const reviewCount = computed(() => photographer.value?.reviews?.length || 0)
-const visibleReviews = computed(() => {
-  const list = photographer.value?.reviews || []
-  return reviewExpanded.value ? list : list.slice(0, 3)
-})
+const reviews = ref<any[]>([])
+const reviewTotal = ref(0)
+const reviewHasMore = ref(false)
+const reviewLoading = ref(false)
+const REVIEW_PAGE_SIZE = 10
+const reviewCount = computed(() => reviewTotal.value || reviews.value.length)
+
+/** 评价走独立分页接口：详情接口里的 reviews 只作首屏兜底（老版本/接口失败）。 */
+async function loadReviews(reset = false) {
+  if (reviewLoading.value) return
+  const pid = Number(id)
+  if (!pid) return
+  reviewLoading.value = true
+  try {
+    const offset = reset ? 0 : reviews.value.length
+    const res = await getPhotographerReviews(pid, REVIEW_PAGE_SIZE, offset)
+    reviews.value = reset ? res.list : reviews.value.concat(res.list)
+    reviewTotal.value = res.total
+    reviewHasMore.value = res.hasMore
+  } catch {
+    if (reset) {
+      reviews.value = photographer.value?.reviews || []
+      reviewTotal.value = reviews.value.length
+      reviewHasMore.value = false
+    }
+  } finally {
+    reviewLoading.value = false
+  }
+}
 
 const avatarFailed = ref(false)
 function onAvatarError() {
@@ -238,6 +263,7 @@ async function loadData(pageId: string) {
       reviews: (res.reviews || []).map(mapReviewItem),
     }
     initCollected()
+    loadReviews(true)
   } catch (e) {
     uni.showToast({ title: '加载失败，请稍后再试', icon: 'none' })
   } finally {
@@ -599,6 +625,14 @@ function onMore() {
   color: $brand;
 
   &:active { opacity: .7; }
+}
+
+.review-empty,
+.review-end {
+  padding: 28rpx 0;
+  text-align: center;
+  font-size: $font-size-xs;
+  color: $text-tertiary;
 }
 
 .section-more {

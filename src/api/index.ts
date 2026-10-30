@@ -293,7 +293,7 @@ export function markNoShow(bookingId: number | string, party: 'coser' | 'photogr
  * 信用分开关：后端只读接口（t11）落地前用本地 mock 跑通 UI。
  * t11 上线后把它置为 false，页面结构不用动。
  */
-export const CREDIT_USE_MOCK = true
+export const CREDIT_USE_MOCK = false
 
 /** 我的信用分概览。 */
 export async function getMyCredit(): Promise<CreditSummary> {
@@ -364,4 +364,29 @@ export async function getHomeData(): Promise<HomeResponse> {
       photographerName: '',
     })),
   }
+}
+
+export interface PhotographerReview {
+  id: number
+  rating: number
+  content: string
+  userName: string
+  userAvatar?: string
+  images?: string[]
+  createdAt: string
+}
+
+export interface ReviewPage {
+  list: PhotographerReview[]
+  total: number
+  hasMore: boolean
+}
+
+/** 摄影师评价分页（后端 GET /v1/reviews/:photographerId?limit&offset）。 */
+export async function getPhotographerReviews(
+  photographerId: number | string,
+  limit = 10,
+  offset = 0
+): Promise<ReviewPage> {
+  return apiGet<ReviewPage>(`/v1/reviews/${photographerId}?limit=${limit}&offset=${offset}`)
 }

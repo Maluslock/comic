@@ -62,12 +62,32 @@ func (h *ReviewHandler) ListByPhotographer(c *gin.Context) {
 		return
 	}
 
-	data, err := h.svc.ListByPhotographer(c.Request.Context(), int32(photographerID))
+	limit := 10
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			offset = n
+		}
+	}
+
+	list, total, err := h.svc.ListByPhotographerPage(c.Request.Context(), int32(photographerID), int32(limit), int32(offset))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
-	c.JSON(http.StatusOK, data)
+	c.JSON(http.StatusOK, gin.H{
+		"list":    list,
+		"total":   total,
+		"hasMore": int64(offset+len(list)) < total,
+	})
 }
 
 func (h *ReviewHandler) MyReviews(c *gin.Context) {

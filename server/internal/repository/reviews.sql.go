@@ -157,3 +157,54 @@ func (q *Queries) RecomputePhotographerStats(ctx context.Context, photographerID
 	_, err := q.db.Exec(ctx, recomputePhotographerStats, photographerID)
 	return err
 }
+
+const getReviewsByPhotographerPage = `-- name: GetReviewsByPhotographerPage :many
+SELECT id, photographer_id, user_id, user_name, user_avatar, rating, content, images, created_at
+FROM reviews
+WHERE photographer_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3
+`
+
+// GetReviewsByPhotographerPage 按 created_at DESC, id DESC 稳定翻页：
+// 同一秒写入的多条评价靠 id 兜底，避免 LIMIT/OFFSET 在页间重复或漏行。
+func (q *Queries) GetReviewsByPhotographerPage(ctx context.Context, photographerID int32, limit int32, offset int32) ([]Review, error) {
+	rows, err := q.db.Query(ctx, getReviewsByPhotographerPage, photographerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Review
+	for rows.Next() {
+		var i Review
+		if err := rows.Scan(
+			&i.ID,
+			&i.PhotographerID,
+			&i.UserID,
+			&i.UserName,
+			&i.UserAvatar,
+			&i.Rating,
+			&i.Content,
+			&i.Images,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countReviewsByPhotographer = `-- name: CountReviewsByPhotographer :one
+SELECT COUNT(*) FROM reviews WHERE photographer_id = $1
+`
+
+func (q *Queries) CountReviewsByPhotographer(ctx context.Context, photographerID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countReviewsByPhotographer, photographerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}

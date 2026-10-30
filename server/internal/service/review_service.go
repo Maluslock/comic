@@ -116,6 +116,26 @@ func (s *ReviewService) ListByPhotographer(ctx context.Context, photographerID i
 	return mapReviewItems(reviews), nil
 }
 
+// ListByPhotographerPage 返回分页评价与总数。limit/offset 已由 handler 归一化，
+// 这里只做兜底（limit<=0 → 10，offset<0 → 0）。
+func (s *ReviewService) ListByPhotographerPage(ctx context.Context, photographerID int32, limit, offset int32) ([]ReviewItem, int64, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.queries.GetReviewsByPhotographerPage(ctx, photographerID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := s.queries.CountReviewsByPhotographer(ctx, photographerID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return mapReviewItems(rows), total, nil
+}
+
 func (s *ReviewService) ListByUser(ctx context.Context, userID int32) ([]ReviewItem, error) {
 	reviews, err := s.queries.ListReviewsByUser(ctx, userID)
 	if err != nil {

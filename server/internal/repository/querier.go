@@ -53,6 +53,8 @@ type Querier interface {
 
 	// Reviews
 	GetReviewsByPhotographer(ctx context.Context, photographerID int32) ([]Review, error)
+	GetReviewsByPhotographerPage(ctx context.Context, photographerID int32, limit int32, offset int32) ([]Review, error)
+	CountReviewsByPhotographer(ctx context.Context, photographerID int32) (int64, error)
 	CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error)
 
 	// Bookings

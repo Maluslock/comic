@@ -102,3 +102,17 @@ func (r *UserRepo) GetUserByToken(ctx context.Context, token string) (User, erro
 	).Scan(&u.ID, &u.Phone, &u.Name, &u.Avatar, &u.Status, &u.CreatedAt)
 	return u, err
 }
+
+// GetOpenID returns the WeChat openid bound to a user. Phone-only accounts have
+// none, so callers must treat "" as "cannot push".
+func (r *UserRepo) GetOpenID(ctx context.Context, id int64) (string, error) {
+	var openid *string
+	err := r.pool.QueryRow(ctx, "SELECT wx_openid FROM users WHERE id = $1", id).Scan(&openid)
+	if err != nil {
+		return "", err
+	}
+	if openid == nil {
+		return "", nil
+	}
+	return *openid, nil
+}

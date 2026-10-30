@@ -129,8 +129,9 @@ onMounted(() => {
   loadServices()
 
   // 用本地日期，不能用 toISOString（UTC）：东八区 00:00–08:00 会得到「昨天」，
-  // 默认就选中一个已过去的日期。
-  selectedDate.value = todayKey()
+  // 默认就选中一个已过去的日期。若今天已没有可约时段，直接落到明天，
+  // 避免用户选完日期才发现「每个时段都是灰的」。
+  selectedDate.value = ALL_SLOTS.some((t) => !isPastSlotLabel(t)) ? todayKey() : tomorrowKey()
   loadTimeSlots(selectedDate.value)
 })
 
@@ -175,8 +176,23 @@ function onDateChange(e: { detail: { value: string } }) {
   loadTimeSlots(e.detail.value)
 }
 
+/** 当天已过去的时段（含当前这一小时）不可选，与后端 isPastSlot 口径一致。 */
+function isPastSlotLabel(time: string): boolean {
+  if (selectedDate.value !== todayKey()) return false
+  const [h, m] = time.split(':').map(Number)
+  const now = new Date()
+  return h * 60 + m <= now.getHours() * 60 + now.getMinutes()
+}
+
+function tomorrowKey(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 function isTimeDisabled(time: string): boolean {
-  return disabledTimes.value.includes(time)
+  return disabledTimes.value.includes(time) || isPastSlotLabel(time)
 }
 
 function selectTime(time: string) {
@@ -221,7 +237,11 @@ async function submitBooking() {
   } catch (e) {
     uni.hideLoading()
     const code = e instanceof ApiError ? e.status : 0
-    uni.showToast({ title: code === 409 ? '该时段已被预约' : '预约失败', icon: 'none' })
+    // 后端已把原因写在 {"error": "…"} 里（如「不能预约已经过去的日期」），
+    // 能拿到就直接展示，别统一糊成「预约失败」。
+    const reason = e instanceof ApiError && e.message && e.message !== 'request failed' ? e.message : ''
+    const fallback = code === 409 ? '该时段已被预约，换个时间吧' : '预约失败，请稍后再试'
+    uni.showToast({ title: reason || fallback, icon: 'none', duration: 2500 })
     return
   }
 }

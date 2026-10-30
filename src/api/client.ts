@@ -80,14 +80,14 @@ export async function apiGet<T>(path: string, params?: Record<string, string>): 
   const res = await request({ url, method: 'GET', header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
-  if (res.statusCode !== 200) throw new ApiError(res.statusCode, 'request failed')
+  if (res.statusCode !== 200) throw new ApiError(res.statusCode, serverError(res))
   return res.data as T
 }
 
 export async function apiPost<T>(path: string, body: AnyObject): Promise<T> {
   const res = await request({ url: getApiBase() + path, method: 'POST', data: body, header: authHeader() })
   handleUnauthorized(res)
-  if (res.statusCode !== 200 && res.statusCode !== 201) throw new ApiError(res.statusCode, 'request failed')
+  if (res.statusCode !== 200 && res.statusCode !== 201) throw new ApiError(res.statusCode, serverError(res))
   return res.data as T
 }
 
@@ -95,7 +95,7 @@ export async function apiPut<T>(path: string, body: AnyObject): Promise<T> {
   const res = await request({ url: getApiBase() + path, method: 'PUT', data: body, header: authHeader() })
   handleUnauthorized(res)
   if (res.statusCode === 404) throw new NotFoundError()
-  if (res.statusCode !== 200) throw new ApiError(res.statusCode, 'request failed')
+  if (res.statusCode !== 200) throw new ApiError(res.statusCode, serverError(res))
   return res.data as T
 }
 
@@ -108,6 +108,13 @@ export async function apiDelete<T>(path: string): Promise<T> {
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message) }
+}
+
+/** 后端统一用 {"error": "..."} 表达失败原因，能拿到就透传给用户，别吞成「请求失败」。 */
+function serverError(res: { data?: unknown }): string {
+  const data = res.data as { error?: unknown } | undefined
+  const msg = data && typeof data.error === 'string' ? data.error : ''
+  return msg || 'request failed'
 }
 export class NotFoundError extends ApiError {
   constructor() { super(404, 'not found') }

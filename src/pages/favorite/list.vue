@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
     <view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
       <text class="back-arrow" @click="goBack">‹</text>
@@ -82,7 +82,7 @@ function goBack() {
 .nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 88rpx; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
 .back-arrow { font-size: 48rpx; color: $dark-text-primary; padding: 0 24rpx; }
 .nav-title { font-size: 34rpx; font-weight: 600; color: $dark-text-primary; }
-.list { padding: 100rpx 32rpx 32rpx; }
+.list { padding: 24rpx 32rpx 32rpx; }
 .fav-card { display: flex; align-items: center; background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 24rpx; margin-bottom: 20rpx; }
 .avatar { width: 96rpx; height: 96rpx; border-radius: 50%; margin-right: 24rpx; }
 .info { flex: 1; }

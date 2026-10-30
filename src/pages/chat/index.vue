@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { apiGet, apiPost } from '@/api/client'
 import { markChatSessionRead } from '@/api/index'
@@ -74,7 +75,7 @@ interface ChatMessage {
   time: string
 }
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const inputValue = ref('')
 const scrollToId = ref('')
 const typing = ref(false)
@@ -143,8 +144,6 @@ async function loadMessages() {
 }
 
 onMounted(async () => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
 
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
@@ -223,7 +222,9 @@ function goBack() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: $spacing-sm $spacing-md;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 $spacing-md;
   background: $dark-bg-secondary;
   border-bottom: 1rpx solid $dark-border;
 }

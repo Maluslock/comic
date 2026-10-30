@@ -252,6 +252,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { onLoad } from '@dcloudio/uni-app'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
@@ -302,7 +303,7 @@ interface OrderDetail extends OrderPriceFields, EscrowBookingFields {
   createTime: string | number
 }
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 
 const defaultOrder: OrderDetail = {
   id: '',
@@ -433,8 +434,6 @@ async function loadEscrowInfo() {
 }
 
 onMounted(() => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
 })
 
 function getStatusText(status: string): string {
@@ -775,7 +774,9 @@ function goReview() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: $spacing-sm $spacing-md;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 $spacing-md;
   background: $dark-bg-secondary;
   border-bottom: 1rpx solid $dark-border;
 }

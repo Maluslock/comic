@@ -1,13 +1,15 @@
 <template>
   <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
-    <view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <view class="nav-bar" :style="{ marginTop: statusBarHeight + 'px' }">
       <text class="back-arrow" @click="goBack">‹</text>
       <text class="nav-title">认证申请</text>
     </view>
 
     <view class="body">
-      <view v-if="status === 'loading'" class="loading-tip">加载中...</view>
+      <view v-if="status === 'loading'" class="skeleton-wrap">
+        <ListSkeleton :rows="2" variant="card" />
+      </view>
 
       <view v-else-if="status === 'pending'" class="status-card pending">
         <text class="status-icon">◇</text>
@@ -84,12 +86,14 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow } from '@dcloudio/uni-app'
 import { applyCertification, getMyCertApplication, getMyCertApplications, pickAndUploadImages, type CertApplication } from '@/api/index'
 import { ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
 
 const status = ref<'loading' | 'not-applied' | 'pending' | 'approved' | 'rejected'>('loading')
@@ -109,8 +113,6 @@ const canSubmit = computed(
 )
 
 onShow(() => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
@@ -208,12 +210,12 @@ function goBack() {
 <style lang="scss" scoped>
 .page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
-.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 88rpx; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
+.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 44px; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
 .back-arrow { font-size: 48rpx; color: $dark-text-primary; padding: 0 24rpx; }
 .nav-title { font-size: 34rpx; font-weight: 600; color: $dark-text-primary; }
 .body { padding: 24rpx 32rpx 48rpx; }
 
-.loading-tip { text-align: center; padding: 120rpx 0; color: $dark-text-tertiary; font-size: 26rpx; }
+.skeleton-wrap { margin-top: 32rpx; }
 
 .status-card { margin-top: 32rpx; background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 24rpx; padding: 64rpx 40rpx; display: flex; flex-direction: column; align-items: center; box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.25);
   .status-icon { font-size: 96rpx; margin-bottom: 24rpx; }

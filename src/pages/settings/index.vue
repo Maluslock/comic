@@ -1,7 +1,12 @@
 <template>
   <view class="page">
+    <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     <view class="header">
+      <view class="back-btn" @click="goBack">
+        <text class="back-icon">‹</text>
+      </view>
       <text class="header-title">设置</text>
+      <view class="placeholder"></view>
     </view>
 
     <view class="content">
@@ -91,6 +96,9 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
+import { useStatusBar } from '@/composables/useStatusBar'
+
+const { statusBarHeight } = useStatusBar()
 
 const SWITCH_COLOR = '#a855f7'
 
@@ -119,6 +127,10 @@ function loadNotificationPrefs() {
 
 function saveNotificationPrefs() {
   uni.setStorageSync('notificationPrefs', JSON.stringify(notifications.value))
+}
+
+function goBack() {
+  uni.navigateBack()
 }
 
 const notificationList: { key: NotificationKey; label: string }[] = [
@@ -212,15 +224,43 @@ function logout() {
   background: $dark-bg-primary;
 }
 
+.status-bar {
+  background: #7c3aed;
+}
+
+/* 品牌感保留：状态栏与页头连成一条紫色渐变带，再向页面底色收尾。
+   高度仍是 44px，不把内容顶下去，也不吃回「大橙头」那套高度。 */
 .header {
-  background: linear-gradient(135deg, $neon-purple 40%, $dark-bg-secondary 100%);
-  padding: $spacing-lg $spacing-md;
-  padding-top: calc(env(safe-area-inset-top) + #{$spacing-lg});
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 $spacing-md;
+  background: linear-gradient(180deg, #7c3aed 0%, #3b2456 58%, $dark-bg-secondary 100%);
+  border-bottom: 1rpx solid $dark-border;
+}
+
+.back-btn {
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-icon {
+  font-size: 48rpx;
+  color: $dark-text-primary;
+}
+
+.placeholder {
+  width: 60rpx;
 }
 
 .header-title {
-  font-size: $font-size-xl;
-  font-weight: 700;
+  font-size: $font-size-lg;
+  font-weight: 600;
   color: $dark-text-primary;
 }
 

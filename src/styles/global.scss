@@ -6,6 +6,12 @@ page {
   line-height: 1.5;
 }
 
+uni-page,
+uni-page-wrapper {
+  background: $dark-bg-primary;
+  min-height: 100vh;
+}
+
 view, text {
   box-sizing: border-box;
 }

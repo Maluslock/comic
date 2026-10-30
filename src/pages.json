@@ -72,13 +72,15 @@
     {
       "path": "pages/order/detail",
       "style": {
-        "navigationBarTitleText": "订单详情"
+        "navigationBarTitleText": "订单详情",
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/chat/index",
       "style": {
-        "navigationBarTitleText": "聊天"
+        "navigationBarTitleText": "聊天",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -163,25 +165,29 @@
     {
       "path": "pages/settings/index",
       "style": {
-        "navigationBarTitleText": "设置"
+        "navigationBarTitleText": "设置",
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/settings/doc",
       "style": {
-        "navigationBarTitleText": "文档"
+        "navigationBarTitleText": "文档",
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/settings/security",
       "style": {
-        "navigationBarTitleText": "账号与安全"
+        "navigationBarTitleText": "账号与安全",
+        "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/settings/blocks",
       "style": {
-        "navigationBarTitleText": "黑名单管理"
+        "navigationBarTitleText": "黑名单管理",
+        "navigationStyle": "custom"
       }
     },
     {

@@ -1,12 +1,13 @@
 <template>
   <view class="page">
+    <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     <view class="header">
       <text class="back" @click="goBack">‹</text>
       <text class="header-title">黑名单管理</text>
     </view>
 
     <view class="content">
-      <view v-if="loading" class="hint">加载中...</view>
+      <ListSkeleton v-if="loading" :rows="3" variant="row" />
 
       <view v-else-if="blocks.length === 0" class="empty">
         <text class="empty-icon">▪</text>
@@ -31,8 +32,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { getBlocks, unblockUser, type BlockedUser } from '@/api/index'
 import { useUserStore } from '@/stores/user'
+import { useStatusBar } from '@/composables/useStatusBar'
+
+const { statusBarHeight } = useStatusBar()
 
 const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
 
@@ -94,9 +99,11 @@ function goBack() {
 .header {
   display: flex;
   align-items: center;
-  height: 88rpx;
+  height: 44px;
+  box-sizing: border-box;
   padding: 0 $spacing-md;
   border-bottom: 1rpx solid $dark-border;
+  background: $dark-bg-secondary;
 }
 
 .back {

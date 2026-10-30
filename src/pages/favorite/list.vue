@@ -1,11 +1,13 @@
 <template>
   <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
-    <view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <view class="nav-bar" :style="{ marginTop: statusBarHeight + 'px' }">
       <text class="back-arrow" @click="goBack">‹</text>
       <text class="nav-title">我的收藏</text>
     </view>
-    <view v-if="loading" class="empty-hint">加载中...</view>
+    <view v-if="loading" class="list">
+      <ListSkeleton :rows="5" variant="row" />
+    </view>
     <view v-else-if="favorites.length === 0" class="empty-state">
       <text class="empty-icon">☆</text>
       <text class="empty-text">还没有收藏摄影师</text>
@@ -26,17 +28,17 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { apiGet, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const favorites = ref<any[]>([])
 const loading = ref(true)
 const userStore = useUserStore()
 
 onMounted(async () => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
   if (!userStore.isLoggedIn || !userStore.user) {
     loading.value = false
     uni.showToast({ title: '请先登录', icon: 'none' })
@@ -79,7 +81,7 @@ function goBack() {
 <style lang="scss" scoped>
 .page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
-.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 88rpx; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
+.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 44px; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
 .back-arrow { font-size: 48rpx; color: $dark-text-primary; padding: 0 24rpx; }
 .nav-title { font-size: 34rpx; font-weight: 600; color: $dark-text-primary; }
 .list { padding: 24rpx 32rpx 32rpx; }
@@ -93,5 +95,4 @@ function goBack() {
 .empty-icon { font-size: 100rpx; color: $dark-text-tertiary; }
 .empty-text { font-size: 28rpx; color: $dark-text-secondary; margin: 24rpx 0; }
 .btn-go { padding: 16rpx 48rpx; background: $neon-gradient; color: #fff; border-radius: 32rpx; font-size: 28rpx; }
-.empty-hint { text-align: center; padding-top: 200rpx; color: $dark-text-tertiary; }
 </style>

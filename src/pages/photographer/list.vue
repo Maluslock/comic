@@ -29,9 +29,7 @@
         />
       </view>
       
-      <view v-if="loading && !photographers.length" class="loading">
-        <text>加载中...</text>
-      </view>
+      <ListSkeleton v-if="loading && !photographers.length" :rows="4" variant="card" />
 
       <view v-else-if="error && !photographers.length" class="state-block">
         <text class="state-title">加载失败</text>
@@ -55,6 +53,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import { apiGet } from '@/api/client'
 import { mapPhotographerItem } from '@/utils/mappers'

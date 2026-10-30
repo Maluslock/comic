@@ -1,5 +1,6 @@
 <template>
   <view class="page">
+    <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     <view class="header">
       <text class="back" @click="goBack">‹</text>
       <text class="header-title">账号与安全</text>
@@ -40,6 +41,9 @@
 import { computed } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { logoutAllDevices } from '@/api/index'
+import { useStatusBar } from '@/composables/useStatusBar'
+
+const { statusBarHeight } = useStatusBar()
 
 const userStore = useUserStore()
 
@@ -86,9 +90,11 @@ function onLogoutAll() {
 .header {
   display: flex;
   align-items: center;
-  height: 88rpx;
+  height: 44px;
+  box-sizing: border-box;
   padding: 0 $spacing-md;
   border-bottom: 1rpx solid $dark-border;
+  background: $dark-bg-secondary;
 }
 
 .back {

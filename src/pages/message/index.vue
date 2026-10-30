@@ -154,11 +154,11 @@ async function readNotification(item: any) {
     item.read = false
   }
   if (item.linkType === 'order' && item.linkId) {
-    uni.navigateTo({ url: `/pages/order/detail?id=${item.linkId}` })
+    uni.navigateTo({ url: `/pages/order/detail?id=${item.linkId}`, animationType: 'none' })
     return
   }
   if (item.linkType === 'photographer_orders') {
-    uni.navigateTo({ url: '/pages/photographer/orders' })
+    uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
     return
   }
   uni.showToast({ title: item.title, icon: 'none' })
@@ -169,7 +169,10 @@ function onSessionAvatarError(session: any) {
 }
 
 function goChat(session: any) {
-  uni.navigateTo({ url: `/pages/chat/index?sessionId=${session.id}&peerName=${encodeURIComponent(session.userName)}&peerAvatar=${encodeURIComponent(session.userAvatar)}` })
+  uni.navigateTo({
+    url: `/pages/chat/index?sessionId=${session.id}&peerName=${encodeURIComponent(session.userName)}&peerAvatar=${encodeURIComponent(session.userAvatar)}`,
+    animationType: 'none'
+  })
 }
 </script>
 

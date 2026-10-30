@@ -52,7 +52,7 @@
         <text v-if="total > 0" class="section-extra">共 {{ total }} 条</text>
       </view>
 
-      <view v-if="loading" class="loading-text">加载中…</view>
+      <ListSkeleton v-if="loading" :rows="3" variant="row" />
 
       <view v-else-if="events.length === 0" class="empty-state">
         <text class="empty-icon">◇</text>
@@ -87,6 +87,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { getMyCredit, getMyCreditEvents } from '@/api'
 import type { CreditSummary, CreditEventItem } from '@/types'
 import {

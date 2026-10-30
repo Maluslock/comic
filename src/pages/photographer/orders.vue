@@ -1,7 +1,7 @@
 <template>
   <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
-    <view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <view class="nav-bar" :style="{ marginTop: statusBarHeight + 'px' }">
       <text class="back-arrow" @click="goBack">‹</text>
       <text class="nav-title">接单管理</text>
     </view>
@@ -17,7 +17,9 @@
         <text class="empty-text">请先开通摄影师身份</text>
         <view class="btn-primary" @click="goActivate">去开通</view>
       </view>
-      <view v-else-if="loading" class="empty-hint">加载中...</view>
+      <view v-else-if="loading" class="order-list">
+        <ListSkeleton :rows="4" variant="card" />
+      </view>
       <view v-else-if="orders.length === 0" class="empty-state">
         <text class="empty-icon">◇</text>
         <text class="empty-text">暂无收到预约</text>
@@ -62,6 +64,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow } from '@dcloudio/uni-app'
 import { TMPL, requestSubscribe, markSubscribed, isSubscribed } from '@/utils/subscribe'
 import { apiGet, apiPut, ApiError } from '@/api/client'
@@ -86,7 +90,7 @@ interface PhotographerOrder extends OrderPriceFields, EscrowBookingFields {
   coserPhone?: string
 }
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const loading = ref(true)
 const orders = ref<PhotographerOrder[]>([])
 const userStore = useUserStore()
@@ -106,8 +110,6 @@ async function onEnableNotify() {
 }
 
 onShow(() => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
   loadOrders()
 })
 
@@ -316,15 +318,35 @@ function goBack() {
 </script>
 
 <style lang="scss" scoped>
+/*
+ * 通知条：首帧不突兀 + 不再压着导航栏。
+ * 旧写法 margin-top 只有 $spacing-md（16rpx），而导航条占位是 statusBar+44px，
+ * 通知条又紧贴 .nav-bar 下沿 → 视觉上像一条橙条压在导航栏上。
+ * 现在：① 上间距抬到导航条之外（$spacing-lg）；② 首帧 opacity:0 → 过渡后淡入，
+ * 避免页面切换瞬间整条橙色横条突然出现。
+ */
 .notify-tip {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  margin: $spacing-md $spacing-md 0;
+  margin: $spacing-lg $spacing-md 0;
   padding: $spacing-sm $spacing-md;
   background: rgba(255, 107, 0, 0.08);
   border: 1rpx solid rgba(255, 107, 0, 0.24);
   border-radius: $border-radius-lg;
+  opacity: 0;
+  animation: notify-tip-in $motion-base both;
+}
+
+@keyframes notify-tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .notify-tip-text {
@@ -343,7 +365,7 @@ function goBack() {
 
 .page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
-.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 88rpx; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
+.nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 44px; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
 .back-arrow { font-size: 48rpx; color: $dark-text-primary; padding: 0 24rpx; }
 .nav-title { font-size: 34rpx; font-weight: 600; color: $dark-text-primary; }
 .body { padding: 24rpx 32rpx 48rpx; }
@@ -351,7 +373,6 @@ function goBack() {
 .empty-state { display: flex; flex-direction: column; align-items: center; padding-top: 200rpx; }
 .empty-icon { font-size: 100rpx; color: $neon-cyan; text-shadow: 0 0 24rpx $neon-cyan-glow; }
 .empty-text { font-size: 28rpx; color: $dark-text-secondary; margin: 24rpx 0 32rpx; }
-.empty-hint { text-align: center; padding-top: 200rpx; color: $dark-text-tertiary; }
 
 .order-list { display: flex; flex-direction: column; gap: 24rpx; }
 .order-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; padding: 28rpx; box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2); }

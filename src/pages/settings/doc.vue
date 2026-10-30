@@ -1,5 +1,6 @@
 <template>
   <view class="page">
+    <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     <view class="header">
       <text class="back" @click="goBack">‹</text>
       <text class="header-title">{{ title }}</text>
@@ -17,6 +18,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import { useStatusBar } from '@/composables/useStatusBar'
+
+const { statusBarHeight } = useStatusBar()
 
 type DocType = 'privacy' | 'terms' | 'about' | 'help'
 
@@ -82,9 +86,11 @@ function goBack() {
 .header {
   display: flex;
   align-items: center;
-  height: 88rpx;
+  height: 44px;
+  box-sizing: border-box;
   padding: 0 $spacing-md;
   border-bottom: 1rpx solid $dark-border;
+  background: $dark-bg-secondary;
 }
 
 .back {

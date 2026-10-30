@@ -103,6 +103,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { useUserStore } from '@/stores/user'
 import { decodeRedirect } from '@/utils/mappers'
 
@@ -115,9 +116,7 @@ const counting = ref(false)
 const countDown = ref(60)
 let timer: ReturnType<typeof setInterval> | null = null
 
-const statusBarHeight = ref(44)
-const sysInfo = uni.getSystemInfoSync()
-statusBarHeight.value = sysInfo.statusBarHeight || 44
+const { statusBarHeight } = useStatusBar()
 
 const canSend = computed(() => /^1[3-9]\d{9}$/.test(phone.value) || /^100\d{8}$/.test(phone.value))
 const canLogin = computed(() => canSend.value && /^\d{4,6}$/.test(code.value) && agreed.value)

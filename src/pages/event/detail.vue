@@ -150,6 +150,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import type { ComicEvent, Photographer, Work } from '@/types'
 import { apiGet } from '@/api/client'
@@ -189,7 +190,7 @@ interface EventDetailResponse {
   }>
 }
 
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const loading = ref(true)
 const error = ref('')
 
@@ -205,8 +206,6 @@ const isFollowed = ref(false)
 let id = ''   // 路由 eventId（string），onMounted 中赋值
 
 onMounted(async () => {
-  const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
 
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
@@ -298,13 +297,17 @@ function onGalleryImgError(_idx: number) {
   background: $dark-bg-primary;
 }
 
+/*
+ * 状态栏底色不透明：旧写法 background: transparent 会让栈底页（首页 hero）
+ * 在滑入动画期间透过状态栏区域露出来（用户截图里的橙条就是这么来的）。
+ */
 .status-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 100;
-  background: transparent;
+  background: $dark-bg-primary;
 }
 
 .scroll-content {

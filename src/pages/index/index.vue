@@ -229,6 +229,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import PhotographerCard from '@/components/PhotographerCard.vue'
@@ -241,7 +242,7 @@ import { apiGet } from '@/api/client'
 const store = useHomeStore()
 const userStore = useUserStore()
 const { cityOptions } = storeToRefs(store)
-const statusBarHeight = ref(44)
+const { statusBarHeight } = useStatusBar()
 const capsuleInset = ref(0)
 const currentCity = ref('全部')
 const eventRange = ref<'all' | 'week' | 'month'>('all')
@@ -282,7 +283,6 @@ onShow(() => {
 
 onMounted(() => {
   const sysInfo = uni.getSystemInfoSync()
-  statusBarHeight.value = sysInfo.statusBarHeight || 44
   // 小程序端右上角是微信胶囊，图标要主动让位；H5 下 getMenuButtonBoundingClientRect 返回全 0，用 width 判断。
   try {
     const rect = uni.getMenuButtonBoundingClientRect()
@@ -318,11 +318,11 @@ async function onRefresh() {
 }
 
 function goSearch() {
-  uni.navigateTo({ url: '/pages/search/search' })
+  uni.navigateTo({ url: '/pages/search/search', animationType: 'none' })
 }
 
 function goSearchByTag(tag: string) {
-  uni.navigateTo({ url: `/pages/search/search?keyword=${encodeURIComponent(tag)}` })
+  uni.navigateTo({ url: `/pages/search/search?keyword=${encodeURIComponent(tag)}`, animationType: 'none' })
 }
 
 function goPhotographerList() {
@@ -330,11 +330,11 @@ function goPhotographerList() {
 }
 
 function goEventMore() {
-  uni.navigateTo({ url: '/pages/event/list' })
+  uni.navigateTo({ url: '/pages/event/list', animationType: 'none' })
 }
 
 function goEventDetail(id: string) {
-  uni.navigateTo({ url: `/pages/event/detail?id=${id}` })
+  uni.navigateTo({ url: `/pages/event/detail?id=${id}`, animationType: 'none' })
 }
 
 function goMessages() {
@@ -398,13 +398,20 @@ function onQuickNav(_url: string) {}
   background: $surface-page;
 }
 
+/*
+ * 状态栏底色必须不透明。
+ * 旧写法 background: $surface-glass（rgba(21,23,34,0.86)）+ backdrop-filter，
+ * 在不支持 backdrop-filter 的内核里会直接透出下层 hero 的橙色光晕
+ * （.hero-glow 的 rgba(255,107,0,0.30)），视觉上就是状态栏位置出现一条橙条。
+ * 这里改成不透明底色 + 保留 backdrop-filter（支持的机器上仍有玻璃质感）。
+ */
 .status-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 100;
-  background: $surface-glass;
+  background: $surface-page;
   backdrop-filter: blur(20px);
 }
 

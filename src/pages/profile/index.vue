@@ -237,7 +237,7 @@ function goEdit() {
     uni.navigateTo({ url: '/pages/login/index' })
     return
   }
-  uni.navigateTo({ url: '/pages/profile/edit' })
+  uni.navigateTo({ url: '/pages/profile/edit', animationType: 'none' })
 }
 
 function goActivate() {
@@ -245,15 +245,15 @@ function goActivate() {
     uni.navigateTo({ url: '/pages/login/index' })
     return
   }
-  uni.navigateTo({ url: '/pages/photographer/activate' })
+  uni.navigateTo({ url: '/pages/photographer/activate', animationType: 'none' })
 }
 
 function goPhotographerOrders() {
-  uni.navigateTo({ url: '/pages/photographer/orders' })
+  uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
 }
 
 function goOrders() {
-  uni.navigateTo({ url: '/pages/order/list' })
+  uni.navigateTo({ url: '/pages/order/list', animationType: 'none' })
 }
 
 function goCredit() {
@@ -261,20 +261,20 @@ function goCredit() {
     uni.navigateTo({ url: '/pages/login/index' })
     return
   }
-  uni.navigateTo({ url: '/pages/credit/index' })
+  uni.navigateTo({ url: '/pages/credit/index', animationType: 'none' })
 }
 
 function goFavorites() {
-  uni.navigateTo({ url: '/pages/favorite/list' })
+  uni.navigateTo({ url: '/pages/favorite/list', animationType: 'none' })
 }
 
 function goFollows() {
-  uni.navigateTo({ url: '/pages/follow/list' })
+  uni.navigateTo({ url: '/pages/follow/list', animationType: 'none' })
 }
 
 function goWorks() {
   const url = isPhotographer.value ? '/pages/photographer/works' : '/pages/portfolio/index'
-  uni.navigateTo({ url })
+  uni.navigateTo({ url, animationType: 'none' })
 }
 
 function goReviews() {
@@ -282,15 +282,15 @@ function goReviews() {
     uni.navigateTo({ url: '/pages/login/index' })
     return
   }
-  uni.navigateTo({ url: '/pages/comment/index' })
+  uni.navigateTo({ url: '/pages/comment/index', animationType: 'none' })
 }
 
 function goSettings() {
-  uni.navigateTo({ url: '/pages/settings/index' })
+  uni.navigateTo({ url: '/pages/settings/index', animationType: 'none' })
 }
 
 function goHelp() {
-  uni.navigateTo({ url: '/pages/settings/doc?type=help' })
+  uni.navigateTo({ url: '/pages/settings/doc?type=help', animationType: 'none' })
 }
 
 function logout() {

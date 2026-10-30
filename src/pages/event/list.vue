@@ -45,7 +45,9 @@
         </view>
       </view>
 
-      <view v-if="loading" class="loading">
+      <ListSkeleton v-if="loading && events.length === 0" :rows="4" variant="card" />
+
+      <view v-if="loading && events.length > 0" class="loading">
         <text>加载中...</text>
       </view>
 
@@ -65,6 +67,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { mockEvents } from '@/data/mock'
 import type { ComicEvent } from '@/types'
 import { apiGet } from '@/api/client'

@@ -19,7 +19,10 @@
           <text v-else class="no-rating">暂无评分</text>
         </view>
       </view>
+      <!-- 描述槽位：grid 变体固定两行高度，文案缺失时用占位节点补齐 -->
       <text v-if="photographer.description" class="desc">{{ photographer.description }}</text>
+      <view v-else-if="variant === 'grid'" class="desc" />
+      <!-- 标签槽位：grid 变体固定一行高度，无标签时用占位节点补齐 -->
       <view class="tags" v-if="photographer.tags.length">
         <MTag
           v-for="tag in photographer.tags.slice(0, variant === 'grid' ? 2 : 3)"
@@ -27,6 +30,7 @@
           variant="neutral"
         >{{ tag }}</MTag>
       </view>
+      <view v-else-if="variant === 'grid'" class="tags" />
       <view class="footer">
         <view class="footer-left">
           <MPriceTag v-if="price.text" :text="price.text" :tone="price.tone" size="md" />
@@ -209,12 +213,22 @@ function goDetail() {
   white-space: nowrap;
 }
 
-/* 首页 / 详情页双列竖卡 */
+/* 首页 / 详情页双列竖卡
+ * 等高策略：内部槽位固定 + 统一最小高度（grid 行高由内容决定，跨排不等高）
+ * 槽位明细（grid 变体，1rpx = 750/视口宽）：
+ *   头像 96rpx + 间距 8rpx
+ *   名称行 48rpx / 描述 6rpx+2 行×33.6rpx / 标签 8rpx+36rpx / 页脚 8rpx+74rpx
+ *   = 内容约 400rpx，最小高度取 420rpx 留 20rpx 余量，保证内容不被裁、卡片等高
+ */
+$grid-card-min-height: 420rpx;
+
 .variant-grid {
   flex-direction: column;
   align-items: flex-start;
   padding: $s-md;
   gap: $s-xs;
+  height: 100%;
+  min-height: $grid-card-min-height;
 }
 
 .variant-grid .avatar {
@@ -232,12 +246,47 @@ function goDetail() {
   width: 100%;
 }
 
-.variant-grid .desc {
-  -webkit-line-clamp: 2;
+/* 姓名：允许收缩到可用宽度，超出用省略号截断。
+ * flex 子项默认 min-width:auto（= min-content），名字过长时会把 grid 轨道撑成
+ * 不等宽（1fr 的最小尺寸是 auto），导致同一排两列宽度不一致、卡片错位；
+ * 这里显式 min-width:0 打断 min-content 下限，名字再长也只在本卡内省略。 */
+.variant-grid .name {
+  min-width: 0;
 }
 
+/* 描述：grid 变体固定两行高度。
+ * display:-webkit-box + -webkit-box-orient:vertical + overflow:hidden 必须三件套齐写，
+ * 只写 -webkit-line-clamp 在部分内核（Chromium 155 会把 -webkit-box 归一为 flow-root）
+ * 与小程序端都不生效；这里补齐三件套并给 min-height 锁住两行槽位，
+ * 保证「有描述 / 无描述 / 一行描述」的卡片占位一致。 */
+.variant-grid .desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.4;
+  min-height: 2.8em;
+  max-height: 2.8em;
+  width: 100%;
+}
+
+/* 标签：grid 变体固定一行高度，无标签时模板里渲染空的 .tags 占位节点，
+ * 两种情况占位一致，卡片高度不会被内容多寡撑开；标签横向不换行、溢出隐藏。 */
 .variant-grid .tags {
+  width: 100%;
   min-height: 36rpx;
+  max-height: 36rpx;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow: hidden;
+}
+
+.variant-grid .tags :deep(.m-tag) {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .variant-grid .footer {

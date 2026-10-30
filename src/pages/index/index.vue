@@ -995,9 +995,11 @@ function onQuickNav(_url: string) {}
 }
 
 // ===== Photographers =====
+/* minmax(0, 1fr)：避免超长昵称的 min-content 撑宽轨道、挤窄另一列 */
 .photographer-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: $spacing-md;
   padding-bottom: $spacing-sm;
 }

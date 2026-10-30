@@ -568,9 +568,16 @@ function onGalleryImgError(_idx: number) {
   padding-bottom: 2rpx;
 }
 
+/* 两列卡片网格：显式 stretch，保证同一排卡片等高；
+ * 卡片本身带统一 min-height（见 PhotographerCard 的 .variant-grid），
+ * 因此跨排也保持一致的高度下限，内容超出时同排自动拉齐。
+ * minmax(0, 1fr)：1fr 轨道的最小尺寸默认是 auto(=min-content)，
+ * 遇到超长昵称会把所在轨道撑宽、把另一列挤窄，导致同排两列宽度不一致；
+ * 用 minmax(0, 1fr) 打断 min-content 下限，溢出交给卡片内部省略号处理。 */
 .photographer-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: $spacing-md;
 }
 

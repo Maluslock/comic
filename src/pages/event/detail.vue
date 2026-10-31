@@ -100,6 +100,7 @@
           <view class="section">
             <view class="section-header">
               <text class="section-title">参展摄影师</text>
+              <text v-if="photographersSource === 'recommended'" class="section-note">推荐</text>
               <text class="section-count">{{ photographers.length }}人</text>
             </view>
             <view class="photographer-grid" v-if="photographers.length">
@@ -110,7 +111,35 @@
                 variant="grid"
               />
             </view>
-            <view v-else class="empty-hint">暂无摄影师报名参展</view>
+            <view v-else class="empty-hint">还没有摄影师入驻</view>
+
+            <!--
+              入驻入口：摄影师能直接向本漫展提交申请；已申请则就地显示状态，
+              不必再进二级页才知道自己批没批。非摄影师给出去开通的路径。
+            -->
+            <view v-if="userStore.user" class="apply-entry" :class="{ mine: applyStatus }" @click="goEventApply">
+              <template v-if="!isPhotographer">
+                <text class="apply-entry-text">成为摄影师后可申请入驻</text>
+                <text class="apply-entry-arrow">›</text>
+              </template>
+              <template v-else-if="applyStatus">
+                <view class="apply-entry-main">
+                  <text class="apply-entry-text">{{ applyStatusText }}</text>
+                  <text v-if="applyStatus === 'rejected' && applyReason" class="apply-entry-reason">
+                    驳回理由：{{ applyReason }}
+                  </text>
+                </view>
+                <text class="apply-entry-tag" :class="`tone-${applyStatus}`">{{ applyStatusLabel }}</text>
+              </template>
+              <template v-else>
+                <text class="apply-entry-text">申请入驻本漫展</text>
+                <text class="apply-entry-arrow">›</text>
+              </template>
+            </view>
+            <view v-else class="apply-entry" @click="goLoginForApply">
+              <text class="apply-entry-text">登录后可申请入驻本漫展</text>
+              <text class="apply-entry-arrow">›</text>
+            </view>
           </view>
 
           <!-- Works -->
@@ -150,11 +179,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useStatusBar } from '@/composables/useStatusBar'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import type { ComicEvent, Photographer, Work } from '@/types'
 import { apiGet } from '@/api/client'
+import { getMyEventApplication } from '@/api/index'
 import { mapEventItem, mapPhotographerItem, mapWorkItem, encodeRedirect } from '@/utils/mappers'
 import { previewImages } from '@/utils/preview'
 import { loadFollowedIds, toggleFollow } from '@/utils/follow'
@@ -174,6 +204,8 @@ interface EventDetailResponse {
   status: string
   typeName: string
   description: string
+  /** "event" = 真实入驻；"recommended" = 该漫展还没有摄影师入驻，回退平台推荐 */
+  photographersSource?: string
   photographers: Array<{
     id: number
     name: string
@@ -199,12 +231,37 @@ const error = ref('')
 const event = ref<ComicEvent | null>(null)
 const photographers = ref<Photographer[]>([])
 const featuredWorks = ref<Work[]>([])
+/** photographers 的来源，决定标题旁要不要挂「推荐」小字 */
+const photographersSource = ref('')
 
 const statusText = ref('')
 const countdownDays = ref(0)
 
 const userStore = useUserStore()
 const isFollowed = ref(false)
+
+/** 我在本漫展的入驻申请状态：'' = 未申请，其余为 pending/approved/rejected/withdrawn */
+const applyStatus = ref('')
+const applyReason = ref('')
+
+const isPhotographer = computed(() => !!userStore.user?.photographerId)
+
+const APPLY_STATUS_LABEL: Record<string, string> = {
+  pending: '待审核',
+  approved: '已通过',
+  rejected: '未通过',
+  withdrawn: '已撤回'
+}
+
+const applyStatusLabel = computed(() => APPLY_STATUS_LABEL[applyStatus.value] || applyStatus.value)
+
+const applyStatusText = computed(() => {
+  if (applyStatus.value === 'approved') return '已入驻本漫展'
+  if (applyStatus.value === 'rejected') return '入驻申请未通过'
+  if (applyStatus.value === 'withdrawn') return '已撤回申请，可重新申请'
+  return '入驻申请审核中'
+})
+
 let id = ''   // 路由 eventId（string），onMounted 中赋值
 
 onMounted(async () => {
@@ -216,7 +273,9 @@ onMounted(async () => {
   if (!id) { error.value = '缺少漫展ID'; loading.value = false; return }
 
   await loadEvent(id)
-  if (event.value) await initFollowState()
+  if (event.value) {
+    await Promise.all([initFollowState(), loadMyApplication()])
+  }
 })
 
 async function loadEvent(id: string) {
@@ -226,6 +285,8 @@ async function loadEvent(id: string) {
     event.value = mapEventItem(d)
 
     photographers.value = (d.photographers || []).map(mapPhotographerItem)
+
+    photographersSource.value = d.photographersSource || ''
 
     featuredWorks.value = (d.featuredWorks || []).map(mapWorkItem)
 
@@ -261,6 +322,34 @@ async function initFollowState() {
   if (!userStore.user) { isFollowed.value = false; return }
   const set = await loadFollowedIds(userStore.user.id)
   isFollowed.value = set.has(id)   // id 是路由 eventId（string）
+}
+
+/**
+ * 我在本漫展的入驻状态。后端对非摄影师返回 403（mine 也走 resolvePhotographer），
+ * 这不是错误 —— 恰恰是「还不是摄影师」这个正常分支，所以按未申请处理，不弹错。
+ */
+async function loadMyApplication() {
+  if (!userStore.user) { applyStatus.value = ''; applyReason.value = ''; return }
+  try {
+    const res = await getMyEventApplication(id)
+    const app = res.application
+    applyStatus.value = app?.status || ''
+    applyReason.value = app?.reviewReason || ''
+  } catch {
+    applyStatus.value = ''
+    applyReason.value = ''
+  }
+}
+
+function goEventApply() {
+  if (!userStore.user) { goLoginForApply(); return }
+  uni.navigateTo({ url: `/pages/photographer/event-apply?id=${id}`, animationType: 'none' })
+}
+
+function goLoginForApply() {
+  uni.navigateTo({
+    url: '/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id)
+  })
 }
 
 async function onToggleFollow() {
@@ -593,6 +682,88 @@ function onGalleryImgError(_idx: number) {
   padding: $spacing-xl;
   color: $dark-text-tertiary;
   font-size: $font-size-sm;
+}
+
+/* 「推荐」小字：photographersSource === 'recommended' 时提示这不是真实入驻名单，
+ * 而是平台推荐位，避免用户误以为该漫展已经有摄影师报名。 */
+.section-note {
+  font-size: 22rpx;
+  color: $neon-cyan;
+  border: 1rpx solid rgba(6, 182, 212, 0.4);
+  border-radius: 8rpx;
+  padding: 0 10rpx;
+  line-height: 30rpx;
+  margin-bottom: 2rpx;
+}
+
+// 入驻入口
+.apply-entry {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-top: $spacing-md;
+  padding: 24rpx 28rpx;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-md;
+  transition: background 0.2s ease;
+
+  &:active {
+    background: $dark-bg-card-hover;
+    transform: scale(0.99);
+  }
+}
+
+.apply-entry-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.apply-entry-text {
+  font-size: 26rpx;
+  color: $neon-cyan;
+  font-weight: 600;
+}
+
+.apply-entry-reason {
+  display: block;
+  font-size: 22rpx;
+  color: $error-color;
+  line-height: 1.5;
+  margin-top: 6rpx;
+}
+
+.apply-entry-arrow {
+  font-size: 32rpx;
+  color: $dark-text-tertiary;
+  line-height: 1;
+}
+
+.apply-entry-tag {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid $dark-border;
+
+  &.tone-pending {
+    color: $neon-cyan;
+    border-color: rgba(6, 182, 212, 0.45);
+  }
+
+  &.tone-approved {
+    color: $success-color;
+    border-color: rgba(34, 197, 94, 0.45);
+  }
+
+  &.tone-rejected {
+    color: $error-color;
+    border-color: rgba(239, 68, 68, 0.45);
+  }
+
+  &.tone-withdrawn {
+    color: $dark-text-tertiary;
+  }
 }
 
 // Works

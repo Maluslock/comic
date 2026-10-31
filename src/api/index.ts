@@ -390,3 +390,52 @@ export async function getPhotographerReviews(
 ): Promise<ReviewPage> {
   return apiGet<ReviewPage>(`/v1/reviews/${photographerId}?limit=${limit}&offset=${offset}`)
 }
+
+/* ───────────────────── 摄影师入驻漫展（申请 → 审核） ───────────────────── */
+
+/** 一条入驻申请的 C 端视图。status: pending | approved | rejected | withdrawn。 */
+export interface EventApplication {
+  id: number
+  eventId: number
+  status: string
+  message?: string | null
+  reviewReason?: string | null
+  appliedAt: string
+  reviewedAt?: string | null
+}
+
+/** 我的入驻列表项：申请 + 漫展卡片字段（后端一次 join 带回来，前端不必二次拉取）。 */
+export interface MyEventApplication extends EventApplication {
+  eventName: string
+  startDate?: string | null
+  endDate?: string | null
+  location?: string | null
+  venue?: string | null
+  coverUrl?: string | null
+}
+
+/** 提交「摄影师入驻某漫展」申请。message 是可选的自我介绍（设备/出图时效/样片链接）。 */
+export function applyEventPhotographer(eventId: number | string, message: string) {
+  return apiPost<{ id: number; eventId: number; status: string; appliedAt: string }>(
+    `/v1/events/${eventId}/photographer-apply`,
+    { message }
+  )
+}
+
+/**
+ * 我在某漫展的最近一条申请。
+ * 从未申请时后端返回 200 { application: null }（不是 404），据此显示「申请入驻」按钮。
+ */
+export function getMyEventApplication(eventId: number | string) {
+  return apiGet<{ application: EventApplication | null }>(`/v1/events/${eventId}/photographer-apply/mine`)
+}
+
+/** 撤回我在某漫展的申请（pending/approved → withdrawn）。 */
+export function withdrawEventApplication(eventId: number | string) {
+  return apiDelete<{ ok: boolean }>(`/v1/events/${eventId}/photographer-apply`)
+}
+
+/** 我的全部入驻申请（按提交时间倒序，含已驳回/已撤回历史）。 */
+export function getMyEventApplications() {
+  return apiGet<{ list: MyEventApplication[] | null }>('/v1/photographer/event-applications')
+}

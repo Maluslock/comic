@@ -3,8 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#0c0d14" />
     <title>漫展摄影平台</title>
+    <!-- 首屏深色兜底：内联样式先于任何 CSS/JS 生效，消除进页/切页瞬间白闪 -->
+    <style>
+      html,
+      body {
+        background: #0c0d14;
+        margin: 0;
+        color-scheme: dark;
+      }
+      #app {
+        background: #0c0d14;
+        min-height: 100vh;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

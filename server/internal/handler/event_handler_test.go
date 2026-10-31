@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,12 +73,12 @@ type valueRows struct {
 	current int
 }
 
-func (r *valueRows) Close()                                          {}
-func (r *valueRows) Err() error                                      { return nil }
-func (r *valueRows) CommandTag() pgconn.CommandTag                    { return pgconn.CommandTag{} }
-func (r *valueRows) FieldDescriptions() []pgconn.FieldDescription     { return nil }
-func (r *valueRows) RawValues() [][]byte                              { return nil }
-func (r *valueRows) Conn() *pgx.Conn                                  { return nil }
+func (r *valueRows) Close()                                       {}
+func (r *valueRows) Err() error                                   { return nil }
+func (r *valueRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
+func (r *valueRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
+func (r *valueRows) RawValues() [][]byte                          { return nil }
+func (r *valueRows) Conn() *pgx.Conn                              { return nil }
 func (r *valueRows) Next() bool {
 	if r.current >= len(r.rows) {
 		return false
@@ -411,5 +412,132 @@ func TestNewEventHandler(t *testing.T) {
 	}
 	if h.svc != svc {
 		t.Error("expected handler to hold the service reference")
+	}
+}
+
+// ============================================================================
+// Event detail photographers: real event lineup vs. recommended fallback
+// ============================================================================
+
+// detailEventRow is the single-row scan used by GetEventById.
+func detailEventRow(id int64) pgx.Row {
+	return &successRow{scanFn: func(dest ...interface{}) error {
+		*dest[0].(*int64) = id
+		*dest[1].(*int32) = sampleEvent.AllcppID
+		*dest[2].(*string) = sampleEvent.Name
+		*dest[3].(**string) = sampleEvent.Location
+		*dest[4].(**string) = sampleEvent.Venue
+		*dest[5].(**string) = sampleEvent.Address
+		*dest[6].(*time.Time) = sampleEvent.StartDate
+		*dest[7].(*time.Time) = sampleEvent.EndDate
+		*dest[8].(**string) = sampleEvent.CoverUrl
+		*dest[9].(*[]string) = sampleEvent.Tags
+		*dest[10].(*[]string) = sampleEvent.ImageGallery
+		*dest[11].(**string) = sampleEvent.TypeName
+		*dest[12].(*string) = sampleEvent.Status
+		return nil
+	}}
+}
+
+// approvedPhotographerRow mirrors ListApprovedPhotographersByEvent's scan order:
+// id, name, avatar, description, location, rating, review_count, order_count,
+// user_id(**) , mode, certified, tags
+func approvedPhotographerRow() []interface{} {
+	return []interface{}{
+		int32(10),
+		"光影行者",
+		strPtr("https://example.com/a.png"),
+		strPtr("desc"),
+		strPtr("北京"),
+		makeNumeric("4.9"),
+		int32Ptr(3),
+		int32Ptr(7),
+		int64(0), // user_id: dest is **int64, valueRows skips unknown types
+		"free",
+		true,
+		[]string{"日系", "古风"},
+	}
+}
+
+func TestEventHandler_Detail_UsesEventLineupWhenApproved(t *testing.T) {
+	db := &scriptableDBTX{
+		queryRowFn: func(_ context.Context, _ string, args ...interface{}) pgx.Row {
+			if len(args) > 0 {
+				if id, ok := args[0].(int64); ok && id == 12 {
+					return detailEventRow(12)
+				}
+			}
+			return &errorRow{err: pgx.ErrNoRows}
+		},
+		queryFn: func(_ context.Context, sql string, _ ...interface{}) (pgx.Rows, error) {
+			// 该漫展有已通过审核的入驻摄影师
+			if strings.Contains(sql, "event_photographers") {
+				return &valueRows{rows: [][]interface{}{approvedPhotographerRow()}}, nil
+			}
+			return nil, pgx.ErrNoRows
+		},
+	}
+	h := NewEventHandler(makeEventService(db), nil)
+
+	w, ctx := newGinContext(http.MethodGet, "/api/v1/events/12", map[string]string{"id": "12"})
+	h.Detail(ctx)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp service.EventDetail
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if resp.PhotographersSource != service.PhotographersSourceEvent {
+		t.Fatalf("want photographersSource=%q, got %q", service.PhotographersSourceEvent, resp.PhotographersSource)
+	}
+	if len(resp.Photographers) != 1 {
+		t.Fatalf("want 1 event photographer, got %d", len(resp.Photographers))
+	}
+	if resp.Photographers[0].Name != "光影行者" {
+		t.Fatalf("want the approved photographer, got %q", resp.Photographers[0].Name)
+	}
+}
+
+func TestEventHandler_Detail_FallsBackToRecommendedWhenNoLineup(t *testing.T) {
+	db := &scriptableDBTX{
+		queryRowFn: func(_ context.Context, _ string, args ...interface{}) pgx.Row {
+			if len(args) > 0 {
+				if id, ok := args[0].(int64); ok && id == 9 {
+					return detailEventRow(9)
+				}
+			}
+			return &errorRow{err: pgx.ErrNoRows}
+		},
+		queryFn: func(_ context.Context, sql string, _ ...interface{}) (pgx.Rows, error) {
+			// 入驻列表为空（该漫展无人入驻）
+			if strings.Contains(sql, "event_photographers") {
+				return &valueRows{}, nil
+			}
+			// 平台推荐回退
+			if strings.Contains(sql, "FROM photographers p") {
+				return &valueRows{rows: [][]interface{}{approvedPhotographerRow()}}, nil
+			}
+			return nil, pgx.ErrNoRows
+		},
+	}
+	h := NewEventHandler(makeEventService(db), nil)
+
+	w, ctx := newGinContext(http.MethodGet, "/api/v1/events/9", map[string]string{"id": "9"})
+	h.Detail(ctx)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp service.EventDetail
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if resp.PhotographersSource != service.PhotographersSourceRecommended {
+		t.Fatalf("want photographersSource=%q, got %q", service.PhotographersSourceRecommended, resp.PhotographersSource)
+	}
+	if len(resp.Photographers) == 0 {
+		t.Fatalf("fallback must keep the section non-empty")
 	}
 }

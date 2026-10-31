@@ -6,9 +6,21 @@
       <text class="nav-title">接单管理</text>
     </view>
 
-    <view v-if="!notifyOn" class="notify-tip">
-      <text class="notify-tip-text">开启接单提醒，客户下单时微信通知你</text>
-      <view class="notify-tip-btn" @click="onEnableNotify">开启</view>
+    <!--
+      顶部工具区：接单提醒 + 定价入口同排。
+      定价入口必须常驻（提醒开了也要在）——「怎么定价」是摄影师最常找的东西，
+      此前只藏在「我的套餐」页里，而那一页又只能从开通页进，等于找不到。
+    -->
+    <view v-if="userStore.user?.photographerId" class="tool-row">
+      <view v-if="!notifyOn" class="notify-tip">
+        <text class="notify-tip-text">开启接单提醒，客户下单时微信通知你</text>
+        <view class="notify-tip-btn" @click="onEnableNotify">开启</view>
+      </view>
+      <view v-else class="notify-on">
+        <text class="notify-on-dot">·</text>
+        <text class="notify-on-text">接单提醒已开启</text>
+      </view>
+      <view class="tool-link" @click="goServices">套餐与定价 ›</view>
     </view>
 
     <view class="body">
@@ -312,6 +324,11 @@ function goActivate() {
   uni.navigateTo({ url: '/pages/photographer/activate' })
 }
 
+// 定价入口：接单管理页顶部常驻，直达「我的套餐」（改价 / 新增 / 上下架）。
+function goServices() {
+  uni.navigateTo({ url: '/pages/photographer/services', animationType: 'none' })
+}
+
 function goBack() {
   uni.navigateBack()
 }
@@ -324,12 +341,21 @@ function goBack() {
  * 通知条又紧贴 .nav-bar 下沿 → 视觉上像一条橙条压在导航栏上。
  * 现在：① 上间距抬到导航条之外（$spacing-lg）；② 首帧 opacity:0 → 过渡后淡入，
  * 避免页面切换瞬间整条橙色横条突然出现。
+ * ③ 与「套餐与定价」入口并排后，横排间距交给 .tool-row，本条不再自带左右外边距。
  */
-.notify-tip {
+.tool-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: $spacing-sm;
   margin: $spacing-lg $spacing-md 0;
+}
+
+.notify-tip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: $spacing-sm;
   padding: $spacing-sm $spacing-md;
   background: rgba(255, 107, 0, 0.08);
   border: 1rpx solid rgba(255, 107, 0, 0.24);
@@ -362,6 +388,53 @@ function goBack() {
   background: $brand;
   border-radius: 999rpx;
 }
+
+/* 提醒已开启时占据同一位置：不留空洞，也不重复喊话。 */
+.notify-on {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8rpx;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1rpx solid rgba(34, 197, 94, 0.24);
+  border-radius: $border-radius-lg;
+  opacity: 0;
+  animation: notify-tip-in $motion-base both;
+}
+
+.notify-on-dot {
+  font-size: 32rpx;
+  line-height: 1;
+  color: $state-success;
+}
+
+.notify-on-text {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+/* 「套餐与定价」入口：与提醒条同高、同描边风格，避免两个控件像来自两套设计。 */
+.tool-link {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: $spacing-sm $spacing-md;
+  font-size: $font-size-sm;
+  color: $accent;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1rpx solid rgba(6, 182, 212, 0.4);
+  border-radius: $border-radius-lg;
+  opacity: 0;
+  animation: notify-tip-in $motion-base both;
+
+  &:active {
+    transform: scale(0.97);
+    background: rgba(6, 182, 212, 0.18);
+  }
+}
+
 
 .page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }

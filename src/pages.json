@@ -24,49 +24,73 @@
     {
       "path": "pages/event/list",
       "style": {
-        "navigationBarTitleText": "漫展列表"
+        "navigationBarTitleText": "漫展列表",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/calendar/index",
       "style": {
-        "navigationBarTitleText": "漫展日历"
+        "navigationBarTitleText": "漫展日历",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/search/search",
       "style": {
-        "navigationBarTitleText": "搜索"
+        "navigationBarTitleText": "搜索",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/photographer/list",
       "style": {
-        "navigationBarTitleText": "摄影师"
+        "navigationBarTitleText": "摄影师",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/photographer/detail",
       "style": {
-        "navigationBarTitleText": "摄影师详情"
+        "navigationBarTitleText": "摄影师详情",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/portfolio/index",
       "style": {
-        "navigationBarTitleText": "作品集"
+        "navigationBarTitleText": "作品集",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/booking/index",
       "style": {
-        "navigationBarTitleText": "预约"
+        "navigationBarTitleText": "预约",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/order/list",
       "style": {
-        "navigationBarTitleText": "我的订单"
+        "navigationBarTitleText": "我的订单",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
@@ -86,13 +110,19 @@
     {
       "path": "pages/message/index",
       "style": {
-        "navigationBarTitleText": "消息"
+        "navigationBarTitleText": "消息",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/comment/index",
       "style": {
-        "navigationBarTitleText": "评价"
+        "navigationBarTitleText": "评价",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
@@ -145,21 +175,37 @@
       }
     },
     {
+      "path": "pages/photographer/event-apply",
+      "style": {
+        "navigationBarTitleText": "申请入驻",
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
-        "navigationBarTitleText": "个人中心"
+        "navigationBarTitleText": "个人中心",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/profile/edit",
       "style": {
-        "navigationBarTitleText": "编辑资料"
+        "navigationBarTitleText": "编辑资料",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
       "path": "pages/credit/index",
       "style": {
-        "navigationBarTitleText": "信用明细"
+        "navigationBarTitleText": "信用明细",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
       }
     },
     {
@@ -205,7 +251,9 @@
     "backgroundColor": "#0C0D14",
     "app-plus": {
       "background": "#0C0D14"
-    }
+    },
+    "backgroundColorTop": "#0C0D14",
+    "backgroundColorBottom": "#0C0D14"
   },
   "tabBar": {
     "color": "#64748b",

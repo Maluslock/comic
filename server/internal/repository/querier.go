@@ -18,6 +18,19 @@ type Querier interface {
 	SearchEvents(ctx context.Context, arg SearchEventsParams) ([]ComicEvent, error)
 	GetAllEvents(ctx context.Context, limit, offset int32) ([]ComicEvent, error)
 
+	// Event photographer applications (摄影师申请入驻某漫展)
+	ApplyEventPhotographer(ctx context.Context, eventID, photographerID, userID int64, message *string) (EventApplication, error)
+	GetMyEventApplication(ctx context.Context, eventID, userID int64) (EventApplication, error)
+	ListMyEventApplications(ctx context.Context, userID int64) ([]MyEventApplication, error)
+	WithdrawEventApplication(ctx context.Context, eventID, userID int64) (int64, error)
+	ListApprovedPhotographersByEvent(ctx context.Context, eventID int64) ([]PhotographerWithTags, error)
+	ReviveWithdrawnEventApplication(ctx context.Context, eventID, photographerID int64, message *string) (EventApplication, error)
+	CountApprovedByEvent(ctx context.Context, eventID int64) (int64, error)
+	ListEventApplications(ctx context.Context, status string, page, size int32) ([]AdminEventApplication, int64, error)
+	CountEventApplications(ctx context.Context, status string) (int64, error)
+	ReviewEventApplication(ctx context.Context, id int64, status, reviewReason string, adminID int64) (int64, error)
+	GetEventApplicationByID(ctx context.Context, id int64) (EventApplication, error)
+
 	// Banners
 	GetActiveBanners(ctx context.Context, limit int32) ([]Banner, error)
 

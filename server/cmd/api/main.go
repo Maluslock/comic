@@ -392,6 +392,17 @@ func main() {
 		adminGroup.GET("/cert-applications/:id", adminCertH.Detail)
 		adminGroup.PUT("/cert-applications/:id/review", adminCertH.Review)
 
+		// Event photographer applications (摄影师申请入驻某漫展): C-end apply + admin review
+		eventApplySvc := service.NewEventApplyService(queries, queries, notificationSvc)
+		eventApplyH := handler.NewEventApplyHandler(eventApplySvc)
+		router.POST("/api/v1/events/:id/photographer-apply", middleware.AuthRequired(userRepo), eventApplyH.Apply)
+		router.GET("/api/v1/events/:id/photographer-apply/mine", middleware.AuthRequired(userRepo), eventApplyH.MyApplication)
+		router.DELETE("/api/v1/events/:id/photographer-apply", middleware.AuthRequired(userRepo), eventApplyH.Withdraw)
+		router.GET("/api/v1/photographer/event-applications", middleware.AuthRequired(userRepo), eventApplyH.MyApplications)
+		adminEventApplyH := handler.NewAdminEventApplyHandler(eventApplySvc)
+		adminGroup.GET("/event-applications", adminEventApplyH.List)
+		adminGroup.PUT("/event-applications/:id/review", adminEventApplyH.Review)
+
 		// Banner management
 		adminBannerRepo := repository.NewAdminBannerRepo(pool)
 		adminBannerSvc := service.NewAdminBannerService(adminBannerRepo)

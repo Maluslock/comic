@@ -17,7 +17,17 @@ type EventDetail struct {
 	EventItem
 	Photographers []PhotographerItem `json:"photographers"`
 	FeaturedWorks []WorkItem         `json:"featuredWorks"`
+	// PhotographersSource 说明 photographers 数组的来源：
+	//   "event"       —— 该漫展真实入驻（审核通过）的摄影师
+	//   "recommended" —— 该漫展还没有摄影师入驻，回退到平台推荐，保证页面不空
+	PhotographersSource string `json:"photographersSource"`
 }
+
+// PhotographersSourceEvent / PhotographersSourceRecommended 是 photographersSource 的合法取值。
+const (
+	PhotographersSourceEvent       = "event"
+	PhotographersSourceRecommended = "recommended"
+)
 
 type EventService struct {
 	queries *repository.Queries
@@ -80,9 +90,15 @@ func (s *EventService) GetDetail(ctx context.Context, id int64) (*EventDetail, e
 		return nil, err
 	}
 
-	photographers, err := s.queries.GetRecommendedPhotographers(ctx, 4)
-	if err != nil {
-		photographers = []repository.PhotographerWithTags{}
+	// 优先用该漫展真实入驻（审核通过）的摄影师；为空才回退平台推荐，保证页面不空。
+	photographers, err := s.queries.ListApprovedPhotographersByEvent(ctx, id)
+	source := PhotographersSourceEvent
+	if err != nil || len(photographers) == 0 {
+		photographers, err = s.queries.GetRecommendedPhotographers(ctx, 4)
+		if err != nil {
+			photographers = []repository.PhotographerWithTags{}
+		}
+		source = PhotographersSourceRecommended
 	}
 
 	works, err := s.queries.GetFeaturedWorks(ctx, 4)
@@ -113,9 +129,10 @@ func (s *EventService) GetDetail(ctx context.Context, id int64) (*EventDetail, e
 	}
 
 	return &EventDetail{
-		EventItem:     mapSingleEvent(event),
-		Photographers: items,
-		FeaturedWorks: mapFeaturedWorks(works),
+		EventItem:           mapSingleEvent(event),
+		Photographers:       items,
+		FeaturedWorks:       mapFeaturedWorks(works),
+		PhotographersSource: source,
 	}, nil
 }
 

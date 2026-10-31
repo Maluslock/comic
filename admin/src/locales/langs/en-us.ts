@@ -240,7 +240,8 @@ const local: App.I18n.Schema = {
     notification: 'Notification',
     content: 'Content',
     'audit-log': 'Audit Log',
-    dispute: 'Disputes'
+    dispute: 'Disputes',
+    'event-apply': 'Event Photographer Apply'
   },
   page: {
     login: {

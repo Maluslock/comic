@@ -92,7 +92,22 @@
           <text class="menu-text">接单管理</text>
           <text class="menu-arrow">›</text>
         </view>
-        <view v-else class="menu-item" @click="goActivate">
+        <!--
+          定价入口以前只藏在「开通摄影师」页里，摄影师自己也找不到（用户原话：
+          「三天去三场漫展，我自己怎么定价？看半天没看到入口」）。这里把它提到
+          接单管理正下方常驻可见 —— 紧邻接单入口，符合"接单 → 定价"的操作顺序。
+        -->
+        <view v-if="isPhotographer" class="menu-item" @click="goPhotographerServices">
+          <image class="menu-icon" src="/static/icons/action-tag.png" mode="aspectFit" />
+          <text class="menu-text">我的套餐 · 定价</text>
+          <text class="menu-arrow">›</text>
+        </view>
+        <view v-if="isPhotographer" class="menu-item" @click="goPhotographerEventApply">
+          <image class="menu-icon" src="/static/icons/action-calendar.png" mode="aspectFit" />
+          <text class="menu-text">我的漫展入驻</text>
+          <text class="menu-arrow">›</text>
+        </view>
+        <view v-if="!isPhotographer" class="menu-item" @click="goActivate">
           <image class="menu-icon" src="/static/icons/menu-camera.svg" mode="aspectFit" />
           <text class="menu-text">我是摄影师</text>
           <text class="menu-arrow">›</text>
@@ -250,6 +265,16 @@ function goActivate() {
 
 function goPhotographerOrders() {
   uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
+}
+
+// 定价入口：从「我的套餐」页直接改价/建套餐（此前只有 activate.vue 一个入口）。
+function goPhotographerServices() {
+  uni.navigateTo({ url: '/pages/photographer/services', animationType: 'none' })
+}
+
+// 漫展入驻：tab=mine 让申请页直接落在「我的申请」而不是申请表单。
+function goPhotographerEventApply() {
+  uni.navigateTo({ url: '/pages/photographer/event-apply?tab=mine', animationType: 'none' })
 }
 
 function goOrders() {

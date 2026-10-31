@@ -14,7 +14,12 @@
     </view>
 
     <scroll-view scroll-y class="content">
-      <view v-if="orders.length === 0" class="empty">
+      <!-- 首屏骨架：避免首帧直接落到空态（视觉上像"没数据"），也避免白底闪一下 -->
+      <view v-if="loading && orders.length === 0" class="skeleton-wrap">
+        <ListSkeleton :rows="4" variant="card" />
+      </view>
+
+      <view v-else-if="orders.length === 0" class="empty">
         <image class="empty-icon" src="/static/icons/menu-order.svg" mode="aspectFit" />
         <text class="empty-text">暂无订单</text>
         <view class="empty-btn" @click="goHome">去逛逛</view>
@@ -72,6 +77,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
+import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useUserStore } from '@/stores/user'
 import type { OrderPriceFields, BookingSubStatus, EscrowBookingFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } from '@/utils/quote'
@@ -97,6 +103,8 @@ interface DisplayOrder extends OrderPriceFields, EscrowBookingFields {
 }
 
 const currentTab = ref('all')
+// 首帧骨架：接口未返回前不渲染空态，避免"白闪 + 暂无订单"再跳成列表
+const loading = ref(true)
 const fullOrders = ref<DisplayOrder[]>([])
 const orders = ref<DisplayOrder[]>([])
 
@@ -127,9 +135,11 @@ async function loadBookings() {
   if (!userStore.isLoggedIn || !userStore.user) {
     fullOrders.value = readStoredBookings()
     applyFilter()
+    loading.value = false
     return
   }
 
+  loading.value = true
   try {
     const res = await apiGet<any[]>(`/v1/bookings/${userStore.user.id}`)
     const stored = readStoredBookings()
@@ -175,6 +185,8 @@ async function loadBookings() {
     fullOrders.value = [...serverOrders, ...keptLocal]
   } catch {
     fullOrders.value = readStoredBookings()
+  } finally {
+    loading.value = false
   }
 
   applyFilter()
@@ -377,6 +389,11 @@ function goHome() {
 
 .content {
   height: calc(100vh - env(safe-area-inset-top) - 100rpx);
+}
+
+.skeleton-wrap {
+  padding: $spacing-md;
+  background: $dark-bg-primary;
 }
 
 .empty {

@@ -16,6 +16,18 @@
       </view>
 
       <view v-if="mode === 'list'">
+        <!--
+          定价引导：用户原话「我三天去三场漫展，我自己怎么定价？」——
+          答案就是「一场一个套餐，或者三天打个包」。这条放在 loading/空态/列表
+          三个分支之外，所以空态和已有套餐两种情况下都在最顶部可见：
+          第一次进来的人（空态）先学会怎么拆档，老手改价前也能看到建议。
+        -->
+        <view class="pricing-guide">
+          <text class="pricing-guide-title">怎么定价</text>
+          <text class="pricing-guide-body">接了几天漫展就建几个场次套餐；多日连拍可建一个打包套餐。</text>
+          <text class="pricing-guide-example">例：单场半天 ￥299 · 单日全天 ￥599 · 三天通拍 ￥1499</text>
+        </view>
+
         <view v-if="loading" class="service-list">
           <ListSkeleton :rows="4" variant="card" />
         </view>
@@ -417,7 +429,56 @@ function goBack() {
 }
 
 
+/*
+ * 定价引导卡：进页第一眼回答「我该怎么定价」。
+ * 用青色描边（= 平台建议/参考色，与「一键预填平台模板」按钮同色系）而非品牌橙，
+ * 因为橙色在本页已经属于主行动按钮（新增套餐），引导卡不能抢主 CTA 的注意力。
+ */
+.pricing-guide {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24rpx;
+  padding: 24rpx;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1rpx solid rgba(6, 182, 212, 0.28);
+  border-radius: 20rpx;
+  opacity: 0;
+  animation: guide-in $motion-base both;
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pricing-guide-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $neon-cyan;
+}
+
+.pricing-guide-body {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+  color: $dark-text-primary;
+}
+
+.pricing-guide-example {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: $dark-text-secondary;
+}
+
 .empty { display: flex; flex-direction: column; align-items: center; padding: 120rpx 0; }
+
 .empty-icon { font-size: 80rpx; color: $neon-purple; text-shadow: 0 0 24rpx $neon-purple-glow; }
 .empty-text { font-size: 30rpx; color: $dark-text-secondary; margin-top: 24rpx; }
 .empty-hint { font-size: 24rpx; color: $dark-text-secondary; margin-top: 12rpx; }

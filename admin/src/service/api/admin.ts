@@ -269,3 +269,24 @@ export async function fetchDisputeDetail(id: number) {
 export function resolveDispute(id: number, payload: { action: Api.Admin.DisputeResolveAction; reason?: string }) {
   return adminRequest.put<Api.Admin.Dispute, Api.Admin.Dispute>(`/disputes/${id}/resolve`, payload);
 }
+
+/**
+ * GET /event-applications — 摄影师入驻漫展申请列表。
+ * 后端分页参数名是 `size`（不是 pageSize），对外沿用本文件统一的 pageSize 写法，在这里映射。
+ * status 传空串表示「全部」。
+ */
+export async function fetchEventApplications(params: { status?: string; page?: number; pageSize?: number }) {
+  const data = await adminRequest.get<Api.Admin.EventApplicationList | null, Api.Admin.EventApplicationList | null>(
+    '/event-applications',
+    {
+      params: { status: params.status, page: params.page, size: params.pageSize }
+    }
+  );
+
+  return data ?? { list: [], total: 0 };
+}
+
+/** PUT /event-applications/:id/review — 审核入驻申请；status=rejected 时 reason 必填 */
+export function reviewEventApplication(id: number, payload: { status: 'approved' | 'rejected'; reason?: string }) {
+  return adminRequest.put<{ ok: boolean }, { ok: boolean }>(`/event-applications/${id}/review`, payload);
+}

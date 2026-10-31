@@ -120,6 +120,16 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'event-apply',
+    path: '/event-apply',
+    component: 'layout.base$view.event-apply',
+    meta: {
+      title: 'event-apply',
+      i18nKey: 'route.event-apply',
+      icon: 'mdi:camera'
+    }
+  },
+  {
     name: 'iframe-page',
     path: '/iframe-page/:url',
     component: 'layout.base$view.iframe-page',

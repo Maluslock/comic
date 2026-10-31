@@ -304,5 +304,35 @@ declare namespace Api {
     }
 
     type DisputeResolveAction = 'approve' | 'reject' | 'escalate';
+
+    /** 摄影师入驻漫展申请的状态；withdrawn = 摄影师自己撤回 */
+    type EventApplicationStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
+    /** 列表筛选 tab：'all' 表示不带 status 参数 */
+    type EventApplicationFilter = 'pending' | 'approved' | 'rejected' | 'all';
+
+    /** GET /api/admin/v1/event-applications 的行（后端 AdminEventApplication） */
+    interface AdminEventApplication {
+      id: number;
+      eventId: number;
+      photographerId: number;
+      userId: number;
+      status: EventApplicationStatus;
+      message?: string | null;
+      reviewReason?: string | null;
+      appliedAt: string;
+      reviewedAt?: string | null;
+      adminId?: number | null;
+      eventName: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      photographerName: string;
+      userName: string;
+    }
+
+    interface EventApplicationList {
+      list: AdminEventApplication[];
+      total: number;
+    }
   }
 }

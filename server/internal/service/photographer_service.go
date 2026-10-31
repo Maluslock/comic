@@ -639,12 +639,56 @@ func (s *PhotographerService) DeleteService(ctx context.Context, userID int64, s
 	return nil
 }
 
+// servicePricePtr 是模板价格的取址助手。生产代码里只此一处需要「字面量 → *int32」，
+// 因此就近定义；名字带 service 前缀是为了避开 _test.go 里同包的 int32Ptr。
+func servicePricePtr(v int32) *int32 { return &v }
+
+// platformServiceTemplates 是「一键预填平台模板」下发的定价参考，纯静态常量。
+//
+// 历史实现是 `GetServices` 全表返回：把**真实摄影师的套餐**当成「平台模板」下发给
+// 所有人 —— 既是数据泄漏（别人的售价/说明被整份抄走），语义也不对（那是竞品的价目表，
+// 不是平台给的定价建议）。而且某个摄影师一改价，所有人的“模板”跟着变。
+//
+// 模板是产品文案：不入库、不可售（下单引用会因「无主套餐」被拒），改价改文案走发版，
+// 不牵扯数据迁移，也不会被任何摄影师的套餐改动影响。
+//
+// ID 是虚拟标识（9001 起）：只用于前端列表 key 与稳定顺序，**不对应 services 表任何行**，
+// 因此不复用真实套餐 id，避免前端把它当可下单的 serviceId。
+//
+// 三档覆盖「三天去三场漫展」的实际卖法：按场次（半天/全天）零售，或按天打包。
+var platformServiceTemplates = []ServiceItem{
+	{
+		ID:   9001,
+		Name: "漫展单场跟拍（半天）",
+		Price: servicePricePtr(299),
+		Description: "单场漫展半天跟拍（约 4 小时），含 15 张精修。" +
+			"一天只打算逛半天、或只拍一两套衣服时选它。",
+		Duration: 240,
+	},
+	{
+		ID:   9002,
+		Name: "漫展单日跟拍（全天）",
+		Price: servicePricePtr(599),
+		Description: "单日漫展全天跟拍（约 8 小时），含 30 张精修，含场馆内外多处取景。" +
+			"客户想从入场拍到闭馆时选它。",
+		Duration: 480,
+	},
+	{
+		ID:   9003,
+		Name: "漫展多日通拍（3 天打包）",
+		Price: servicePricePtr(1499),
+		Description: "同一场漫展连续 3 天打包价，每天按全天跟拍算（3 天共约 24 小时），含 100 张精修。" +
+			"比单日单订三天便宜，适合连拍三天、换多套装的客户。",
+		Duration: 1440,
+	},
+}
+
+// ListTemplates 返回平台定价模板。刻意不碰数据库：模板一旦要从表里读，就又回到
+// 「谁写进去谁就是模板」的老问题。返回副本，调用方改切片不会污染全局常量。
 func (s *PhotographerService) ListTemplates(ctx context.Context) ([]ServiceItem, error) {
-	rows, err := s.queries.GetServices(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return mapServiceItems(rows), nil
+	out := make([]ServiceItem, len(platformServiceTemplates))
+	copy(out, platformServiceTemplates)
+	return out, nil
 }
 
 // attachCredit fills the optional credit badge for a page of photographers in a

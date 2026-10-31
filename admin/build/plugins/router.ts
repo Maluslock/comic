@@ -33,7 +33,8 @@ export function setupElegantRouter() {
         'admin-accounts': 'mdi:account-cog-outline',
         notification: 'mdi:bell-outline',
         content: 'mdi:book-open-page-variant-outline',
-        'audit-log': 'mdi:history'
+        'audit-log': 'mdi:history',
+        'event-apply': 'mdi:camera'
       };
 
       const meta: Partial<RouteMeta> = {

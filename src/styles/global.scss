@@ -6,10 +6,25 @@ page {
   line-height: 1.5;
 }
 
+html,
+body,
+#app,
 uni-page,
-uni-page-wrapper {
+uni-page-wrapper,
+uni-page-body,
+uni-app,
+uni-app-body {
   background: $dark-bg-primary;
   min-height: 100vh;
+}
+
+// 原生导航页（非 custom）滚动时上下露出的底色，与 pages.json 的
+// backgroundColorTop/Bottom 保持一致，避免 H5/小程序切换页时的白闪。
+html,
+body,
+#app {
+  color-scheme: dark;
+  margin: 0;
 }
 
 view, text {

@@ -236,7 +236,8 @@ const local: App.I18n.Schema = {
     notification: '通知公告',
     content: '内容管理',
     'audit-log': '操作日志',
-    dispute: '争议处理'
+    dispute: '争议处理',
+    'event-apply': '漫展入驻'
   },
   page: {
     login: {

@@ -28,6 +28,7 @@ declare module "@elegant-router/types" {
     "dashboard": "/dashboard";
     "dispute": "/dispute";
     "event": "/event";
+    "event-apply": "/event-apply";
     "iframe-page": "/iframe-page/:url";
     "login": "/login";
     "notification": "/notification";
@@ -76,6 +77,7 @@ declare module "@elegant-router/types" {
     | "dashboard"
     | "dispute"
     | "event"
+    | "event-apply"
     | "iframe-page"
     | "login"
     | "notification"
@@ -110,6 +112,7 @@ declare module "@elegant-router/types" {
     | "content"
     | "dashboard"
     | "dispute"
+    | "event-apply"
     | "event"
     | "notification"
     | "order"

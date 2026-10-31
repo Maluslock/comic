@@ -34,7 +34,7 @@
       <view class="footer">
         <view class="footer-left">
           <MPriceTag v-if="price.text" :text="price.text" :tone="price.tone" size="md" />
-          <text v-if="!price.text" class="muted">私信咨询</text>
+          <text v-if="!price.text" class="muted">价格面议</text>
         </view>
         <view class="footer-right">
           <text class="meta">{{ photographer.location }}</text>
@@ -220,7 +220,7 @@ function goDetail() {
  *   名称行 48rpx / 描述 6rpx+2 行×33.6rpx / 标签 8rpx+36rpx / 页脚 8rpx+74rpx
  *   = 内容约 400rpx，最小高度取 420rpx 留 20rpx 余量，保证内容不被裁、卡片等高
  */
-$grid-card-min-height: 420rpx;
+$grid-card-min-height: 360rpx;
 
 .variant-grid {
   flex-direction: column;

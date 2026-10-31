@@ -1,5 +1,8 @@
 {
   "navigationBarTitleText": "摄影师详情",
+  "backgroundColor": "#0C0D14",
+  "backgroundColorTop": "#0C0D14",
+  "backgroundColorBottom": "#0C0D14",
   "usingComponents": {
     "review-card": "../../components/ReviewCard"
   }

@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "漫展日历",
+  "backgroundColor": "#0C0D14",
+  "backgroundColorTop": "#0C0D14",
+  "backgroundColorBottom": "#0C0D14",
   "usingComponents": {}
 }

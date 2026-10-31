@@ -1,4 +1,9 @@
 {
   "navigationBarTitleText": "我的订单",
-  "usingComponents": {}
+  "backgroundColor": "#0C0D14",
+  "backgroundColorTop": "#0C0D14",
+  "backgroundColorBottom": "#0C0D14",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton"
+  }
 }

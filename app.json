@@ -22,6 +22,7 @@
     "pages/photographer/works",
     "pages/photographer/services",
     "pages/photographer/profile-edit",
+    "pages/photographer/event-apply",
     "pages/profile/index",
     "pages/profile/edit",
     "pages/credit/index",
@@ -35,7 +36,9 @@
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "米拉漫展",
     "navigationBarBackgroundColor": "#0C0D14",
-    "backgroundColor": "#0C0D14"
+    "backgroundColor": "#0C0D14",
+    "backgroundColorTop": "#0C0D14",
+    "backgroundColorBottom": "#0C0D14"
   },
   "tabBar": {
     "color": "#64748b",

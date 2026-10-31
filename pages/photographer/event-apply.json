@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "申请入驻",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton"
+  }
+}

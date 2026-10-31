@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),n=require("./mappers.js");exports.previewImages=function(r,t=0){const i=(r||[]).map(e=>n.resolveImage(e)).filter(e=>!!e);if(!i.length)return;const s=Math.min(Math.max(t,0),i.length-1);e.index.previewImage({current:i[s],urls:i,fail:()=>{e.index.showToast({title:"图片预览失败",icon:"none"})}})};

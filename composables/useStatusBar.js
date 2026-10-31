@@ -1,0 +1,1 @@
+"use strict";const t=require("../common/vendor.js");exports.useStatusBar=function(){const e=t.ref(0),n=()=>{e.value=function(){try{const e=t.index.getSystemInfoSync().statusBarHeight;return"number"==typeof e&&e>0?e:0}catch{return 0}}()};return n(),{statusBarHeight:e,sync:n}};

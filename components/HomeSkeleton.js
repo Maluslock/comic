@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),o=e.defineComponent({name:"HomeSkeleton",setup:o=>(o,t)=>({a:e.f(4,(e,o,t)=>({a:"a"+e})),b:e.f(3,(e,o,t)=>({a:"e"+e})),c:e.f(6,(e,o,t)=>({a:"t"+e})),d:e.f(4,(e,o,t)=>({a:"p"+e})),e:e.gei(o,"")})}),t=e._export_sfc(o,[["__scopeId","data-v-40b020f2"]]);wx.createComponent(t);

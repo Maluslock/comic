@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "m-price-tag": "./MPriceTag",
+    "m-tag": "./MTag"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "漫展摄影",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "photographer-card": "../../components/PhotographerCard",
+    "quick-action-bar": "../../components/QuickActionBar",
+    "home-skeleton": "../../components/HomeSkeleton"
+  }
+}

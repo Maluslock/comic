@@ -1,0 +1,1 @@
+"use strict";exports.describePrice=function(e){return"number"!=typeof e.serviceCount?{text:"",tone:"muted"}:e.serviceCount<=0?{text:"暂未设置",tone:"muted"}:e.hasFree?{text:"互勉",tone:"free"}:"number"==typeof e.minPrice&&e.minPrice>0?{text:`¥${e.minPrice} 起`,tone:"price"}:e.hasNegotiable?{text:"面议",tone:"negotiable"}:{text:"暂未设置",tone:"muted"}};

@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "信用明细",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton"
+  }
+}

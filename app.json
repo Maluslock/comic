@@ -1,0 +1,74 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/event/detail",
+    "pages/event/list",
+    "pages/calendar/index",
+    "pages/search/search",
+    "pages/photographer/list",
+    "pages/photographer/detail",
+    "pages/portfolio/index",
+    "pages/booking/index",
+    "pages/order/list",
+    "pages/order/detail",
+    "pages/chat/index",
+    "pages/message/index",
+    "pages/comment/index",
+    "pages/favorite/list",
+    "pages/follow/list",
+    "pages/photographer/activate",
+    "pages/photographer/orders",
+    "pages/photographer/cert-apply",
+    "pages/photographer/works",
+    "pages/photographer/services",
+    "pages/photographer/profile-edit",
+    "pages/profile/index",
+    "pages/profile/edit",
+    "pages/credit/index",
+    "pages/settings/index",
+    "pages/settings/doc",
+    "pages/settings/security",
+    "pages/settings/blocks",
+    "pages/login/index"
+  ],
+  "window": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "米拉漫展",
+    "navigationBarBackgroundColor": "#0C0D14",
+    "backgroundColor": "#0C0D14"
+  },
+  "tabBar": {
+    "color": "#64748b",
+    "selectedColor": "#ff6b00",
+    "borderStyle": "black",
+    "backgroundColor": "#151722",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/photographer/list",
+        "text": "摄影师",
+        "iconPath": "static/tab/photographer.png",
+        "selectedIconPath": "static/tab/photographer-active.png"
+      },
+      {
+        "pagePath": "pages/message/index",
+        "text": "消息",
+        "iconPath": "static/tab/message.png",
+        "selectedIconPath": "static/tab/message-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/profile.png",
+        "selectedIconPath": "static/tab/profile-active.png"
+      }
+    ]
+  },
+  "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {}
+}

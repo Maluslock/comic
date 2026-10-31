@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),t=e.defineComponent({__name:"MPriceTag",props:{text:{default:""},tone:{default:"price"},size:{default:"md"}},setup:t=>(t,n)=>e.e({a:t.text},t.text?{b:e.t(t.text),c:e.n(`tone-${t.tone}`),d:e.n(`size-${t.size}`),e:e.gei(t,"")}:{})}),n=e._export_sfc(t,[["__scopeId","data-v-ff7c4caa"]]);wx.createComponent(n);

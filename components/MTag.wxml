@@ -1,0 +1,1 @@
+<text class="{{['m-tag', 'data-v-624613c3', a, b, virtualHostClass]}}" style="{{virtualHostStyle}}" hidden="{{virtualHostHidden || false}}" id="{{c}}"><slot/></text>

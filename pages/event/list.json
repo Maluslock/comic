@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "漫展列表",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton"
+  }
+}

@@ -1,0 +1,1 @@
+"use strict";exports.formatDuration=function(r){if(null==r)return"未填写";if("number"!=typeof r||!isFinite(r)||r<=0)return"未填写";if(r<60)return`${r} 分钟`;const t=Math.floor(r/60),n=r%60;return 0===n?`${t} 小时`:`${t} 小时 ${n} 分钟`};

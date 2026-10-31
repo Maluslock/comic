@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "摄影师",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton",
+    "photographer-card": "../../components/PhotographerCard"
+  }
+}

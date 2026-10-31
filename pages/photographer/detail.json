@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "摄影师详情",
+  "usingComponents": {
+    "review-card": "../../components/ReviewCard"
+  }
+}

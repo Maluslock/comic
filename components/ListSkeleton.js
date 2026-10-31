@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),t=e.defineComponent({__name:"ListSkeleton",props:{rows:{default:5},variant:{default:"card"}},setup:t=>(t,a)=>({a:e.f(t.rows,(e,t,a)=>({a:e})),b:e.n(`variant-${t.variant}`),c:e.gei(t,"")})}),a=e._export_sfc(t,[["__scopeId","data-v-e2f73f6c"]]);wx.createComponent(a);

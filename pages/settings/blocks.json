@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "黑名单管理",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "list-skeleton": "../../components/ListSkeleton"
+  }
+}

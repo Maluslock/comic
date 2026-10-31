@@ -1,0 +1,1 @@
+"use strict";const t=require("../api/client.js");exports.loadFollowedIds=async function(e){try{const o=await t.apiGet(`/v1/follows/${e}`);return new Set((o.list||[]).map(t=>String(t.eventId)))}catch{return new Set}},exports.toggleFollow=async function(e,o,n){return n?(await t.apiDelete(`/v1/follows/${e}/${o}`),!1):(await t.apiPost("/v1/follows",{userId:e,eventId:Number(o)}),!0)};

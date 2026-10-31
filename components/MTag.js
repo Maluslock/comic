@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),a=e.defineComponent({__name:"MTag",props:{variant:{default:"neutral"},size:{default:"sm"}},setup:a=>(a,n)=>({a:e.n(`variant-${a.variant}`),b:e.n(`size-${a.size}`),c:e.gei(a,"")})}),n=e._export_sfc(a,[["__scopeId","data-v-624613c3"]]);wx.createComponent(n);

@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "漫展详情",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "photographer-card": "../../components/PhotographerCard"
+  }
+}

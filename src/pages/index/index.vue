@@ -230,7 +230,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useStatusBar } from '@/composables/useStatusBar'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onReady } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
@@ -277,21 +277,34 @@ const heroImage = computed(() => {
   return ''
 })
 
+// 胶囊避让：inset 必须是「屏幕右边界 → 胶囊左边界」的整段距离，
+// 用 rect.right 只会让出胶囊与屏幕之间那几像素，图标照样被压。
+// 小程序首帧 getMenuButtonBoundingClientRect 可能返回全 0，所以 onShow/onReady 都重算一次。
+function updateCapsuleInset() {
+  try {
+    const rect = uni.getMenuButtonBoundingClientRect()
+    const width = uni.getSystemInfoSync().windowWidth
+    if (rect && rect.width && rect.left && width) {
+      capsuleInset.value = Math.max(width - rect.left + 8, 0)
+      return
+    }
+  } catch (e) {
+    // 取不到就保持 0，H5 与老版本基础库都能正常工作
+  }
+  capsuleInset.value = 0
+}
+
 onShow(() => {
+  updateCapsuleInset()
   loadUnread()
 })
 
+onReady(() => {
+  updateCapsuleInset()
+})
+
 onMounted(() => {
-  const sysInfo = uni.getSystemInfoSync()
-  // 小程序端右上角是微信胶囊，图标要主动让位；H5 下 getMenuButtonBoundingClientRect 返回全 0，用 width 判断。
-  try {
-    const rect = uni.getMenuButtonBoundingClientRect()
-    if (rect && rect.width && sysInfo.windowWidth) {
-      capsuleInset.value = Math.max(sysInfo.windowWidth - rect.right, 0) + 8
-    }
-  } catch {
-    capsuleInset.value = 0
-  }
+  updateCapsuleInset()
   if (!store.loaded) {
     store.fetchHomeData()
   }

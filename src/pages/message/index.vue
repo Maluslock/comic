@@ -146,13 +146,22 @@ function formatSessionTime(iso: string): string {
   } catch { return '' }
 }
 
-async function readNotification(item: any) {
-  try {
-    await markNotificationRead(item.id)
-    item.read = true
-  } catch {
-    item.read = false
-  }
+const lastNotifyClickAt = new Map<string, number>()
+
+function readNotification(item: any) {
+  // 防抖去重：同一通知 1s 内的重复点击忽略，避免连开两个页面
+  const now = Date.now()
+  if (now - (lastNotifyClickAt.get(item.id) || 0) < 1000) return
+  lastNotifyClickAt.set(item.id, now)
+
+  // 本地先置已读；已读接口 fire-and-forget，失败静默回滚，不影响跳转
+  const wasRead = !!item.read
+  item.read = true
+  markNotificationRead(item.id).catch(() => {
+    item.read = wasRead
+  })
+
+  // 点击后立即跳转：此处到 navigateTo 之间不得有 await
   if (item.linkType === 'order' && item.linkId) {
     uni.navigateTo({ url: `/pages/order/detail?id=${item.linkId}`, animationType: 'none' })
     return

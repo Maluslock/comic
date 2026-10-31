@@ -89,7 +89,7 @@
               :key="work.id" 
               class="work-item"
             >
-              <image v-if="work.images?.length" :src="work.images[0]" class="work-image" mode="aspectFill" lazy-load />
+              <image v-if="work.images?.length" :src="work.images[0]" class="work-image" mode="aspectFill" lazy-load @click.stop="previewWorkImages(work, 0)" />
               <view v-else class="work-image work-image--empty"><text>暂无图片</text></view>
               <text class="work-title">{{ work.title }}</text>
             </view>
@@ -144,9 +144,10 @@ import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser, getPhotographerReviews } from '@/api/index'
 import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRedirect } from '@/utils/mappers'
+import { previewImages } from '@/utils/preview'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
-import type { Photographer, Service } from '@/types'
+import type { Photographer, Service, Work } from '@/types'
 
 interface PhotographerDetailResponse {
   id: number
@@ -361,6 +362,11 @@ function goBooking() {
 function goPortfolio() {
   const pid = photographer.value?.id ?? id
   uni.navigateTo({ url: `/pages/portfolio/index?photographerId=${pid}` })
+}
+
+// 作品大图预览：work.images 可能是多图，点第几张就从第几张开始看
+function previewWorkImages(work: Work, index = 0) {
+  previewImages(work.images, index)
 }
 
 // duration 单位分钟；描述里已写「N小时拍摄」时不再重复一行时长

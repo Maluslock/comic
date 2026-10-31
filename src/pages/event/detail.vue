@@ -124,8 +124,9 @@
                 :key="work.id"
                 class="work-item"
               >
-                <image :src="work.images[0]" class="work-img" mode="aspectFill" />
-                <view class="work-overlay">
+                <image v-if="work.images?.length" :src="work.images[0]" class="work-img" mode="aspectFill" @click.stop="previewFeaturedWork(work, 0)" />
+                <view v-else class="work-img work-img--empty"><text>暂无图片</text></view>
+                <view class="work-overlay" @click.stop="previewFeaturedWork(work, 0)">
                   <text class="work-title">{{ work.title }}</text>
                   <text class="work-author">by {{ work.photographerName }}</text>
                 </view>
@@ -155,6 +156,7 @@ import PhotographerCard from '@/components/PhotographerCard.vue'
 import type { ComicEvent, Photographer, Work } from '@/types'
 import { apiGet } from '@/api/client'
 import { mapEventItem, mapPhotographerItem, mapWorkItem, encodeRedirect } from '@/utils/mappers'
+import { previewImages } from '@/utils/preview'
 import { loadFollowedIds, toggleFollow } from '@/utils/follow'
 import { useUserStore } from '@/stores/user'
 
@@ -283,6 +285,11 @@ function formatFullDate(ts: number): string {
 
 function goBack() {
   uni.navigateBack()
+}
+
+// 精选作品大图预览：单 cover 就传单元素数组，多图可左右滑动
+function previewFeaturedWork(work: Work, index = 0) {
+  previewImages(work.images, index)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -615,6 +622,14 @@ function onGalleryImgError(_idx: number) {
 .work-img {
   width: 100%;
   height: 100%;
+}
+
+.work-img--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  color: $text-3;
 }
 
 .work-overlay {

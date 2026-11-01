@@ -95,9 +95,12 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.Default()
-	// gzip text assets: the admin bundle is ~5MB and the tunnel is slow.
+	// gzip text assets & JSON endpoints
 	router.Use(middleware.Gzip())
 	router.Use(corsMiddleware())
+
+	// Static cache headers & ETag negotiation
+	router.Use(middleware.StaticCache("./static"))
 
 	// Static path is relative to CWD: run the API from server/ so /static works.
 	router.Static("/static", "./static")

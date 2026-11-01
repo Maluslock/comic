@@ -1,9 +1,14 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"net"
@@ -14,7 +19,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chai2010/webp"
 	"github.com/jackc/pgx/v5/pgxpool"
+	xdraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 
 	"github.com/Maluslock/comic/server/internal/cache"
 	"github.com/Maluslock/comic/server/internal/config"
@@ -96,7 +104,8 @@ const (
 )
 
 // coverExts 是 findExistingCover 会去找的扩展名，顺序影响复用优先级。
-var coverExts = []string{"jpg", "jpeg", "png", "webp", "gif"}
+// webp 排最前优先命中已优化封面。
+var coverExts = []string{"webp", "jpg", "jpeg", "png", "gif"}
 
 // sourceFetchTimeout 是单个源单轮抓取的整体超时（适配器会用它包 ctx）。
 // 10 页 × (请求 + 300~500ms 翻页间隔) 远用不到这么久，留足余量给上游抽风。
@@ -645,7 +654,45 @@ func findExistingCover(dir, base string) string {
 	return ""
 }
 
+// compressCoverToWebP 将图片按长边 <= maxSide 缩放并转为 webp quality (75)。
+func compressCoverToWebP(data []byte, maxSide int, quality float32) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image: %w", err)
+	}
+
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	longest := w
+	if h > longest {
+		longest = h
+	}
+
+	var target image.Image = img
+	if longest > maxSide {
+		scale := float64(maxSide) / float64(longest)
+		newW := int(float64(w)*scale + 0.5)
+		newH := int(float64(h)*scale + 0.5)
+		if newW < 1 {
+			newW = 1
+		}
+		if newH < 1 {
+			newH = 1
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+		xdraw.BiLinear.Scale(dst, dst.Bounds(), img, bounds, xdraw.Over, nil)
+		target = dst
+	}
+
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, target, &webp.Options{Lossless: false, Quality: quality}); err != nil {
+		return nil, fmt.Errorf("encode webp: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
 // downloadCover 下载并落盘单个封面，返回文件名（不含目录）。
+// 落盘前尝试压缩：长边 > 750 缩放、转 webp quality 75；压缩失败退回原图并记日志，不丢弃封面。
 func (s *EventIngestService) downloadCover(ctx context.Context, dir, base, rawURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -665,6 +712,7 @@ func (s *EventIngestService) downloadCover(ctx context.Context, dir, base, rawUR
 	}
 
 	// 多读 1 字节用于判超限，避免把 50MB 的怪东西整个读进内存。
+	// coverMaxBytes 超限判定在压缩前执行。
 	data, err := io.ReadAll(io.LimitReader(resp.Body, coverMaxBytes+1))
 	if err != nil {
 		return "", err
@@ -676,9 +724,21 @@ func (s *EventIngestService) downloadCover(ctx context.Context, dir, base, rawUR
 		return "", fmt.Errorf("响应体只有 %d 字节，疑似占位图", len(data))
 	}
 
-	name := base + "." + detectCoverExt(data, resp.Header.Get("Content-Type"), rawURL)
+	// 尝试压缩为 webp (长边 <= 750, quality 75)
+	var finalData []byte
+	var ext string
+	if compressed, err := compressCoverToWebP(data, 750, 75); err == nil && len(compressed) > 0 {
+		finalData = compressed
+		ext = "webp"
+	} else {
+		log.Printf("ingest cover: compress %s failed (%v), fallback to original", rawURL, err)
+		finalData = data
+		ext = detectCoverExt(data, resp.Header.Get("Content-Type"), rawURL)
+	}
+
+	name := base + "." + ext
 	tmp := filepath.Join(dir, name+".tmp")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, finalData, 0o644); err != nil {
 		return "", err
 	}
 	// 先写 .tmp 再 rename：cron 中途被杀不会留下半个文件被人当成封面。

@@ -1,8 +1,7 @@
 {
   "description": "项目配置文件。",
   "packOptions": {
-    "ignore": [],
-    "include": []
+    "ignore": []
   },
   "setting": {
     "urlCheck": false,
@@ -12,24 +11,7 @@
     "newFeature": true,
     "bigPackageSizeSupport": true,
     "ignoreDevUnusedFiles": false,
-    "ignoreUploadUnusedFiles": true,
-    "compileWorklet": false,
-    "uglifyFileName": false,
-    "uploadWithSourceMap": true,
-    "enhance": false,
-    "packNpmManually": false,
-    "packNpmRelationList": [],
-    "minifyWXSS": true,
-    "minifyWXML": true,
-    "localPlugins": false,
-    "disableUseStrict": false,
-    "useCompilerPlugins": false,
-    "condition": false,
-    "babelSetting": {
-      "ignore": [],
-      "disablePlugins": [],
-      "outputPath": ""
-    }
+    "ignoreUploadUnusedFiles": true
   },
   "compileType": "miniprogram",
   "libVersion": "",
@@ -52,7 +34,5 @@
       "current": -1,
       "list": []
     }
-  },
-  "simulatorPluginLibVersion": {},
-  "editorSetting": {}
+  }
 }

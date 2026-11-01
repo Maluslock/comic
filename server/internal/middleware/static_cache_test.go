@@ -93,3 +93,57 @@ func TestStaticCacheMiddleware(t *testing.T) {
 		}
 	})
 }
+
+// TestStaticCache_BlocksPrivateArchive 覆盖 _orig_covers 备份目录的封堵。
+//
+// 归档原图既不被业务引用也不该被公开下载，但 router.Static 会把 ./static 整棵树挂出去，
+// 所以必须在中间件层统一 404，并且不能影响同目录下正常封面的可访问性。
+func TestStaticCache_BlocksPrivateArchive(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tmpDir := t.TempDir()
+	archiveDir := filepath.Join(tmpDir, "remote", "_orig_covers")
+	_ = os.MkdirAll(archiveDir, 0o755)
+	_ = os.WriteFile(filepath.Join(archiveDir, "1006166.jpg"), []byte("original backup bytes"), 0o644)
+
+	// 对照组：正常封面必须仍可访问。
+	coversDir := filepath.Join(tmpDir, "remote", "covers")
+	_ = os.MkdirAll(coversDir, 0o755)
+	_ = os.WriteFile(filepath.Join(coversDir, "1006166.webp"), []byte("optimized cover"), 0o644)
+
+	r := gin.New()
+	r.Use(StaticCache(tmpDir))
+	r.Static("/static", tmpDir)
+
+	cases := []struct {
+		name     string
+		path     string
+		wantCode int
+	}{
+		{"归档文件被拒绝", "/static/remote/_orig_covers/1006166.jpg", http.StatusNotFound},
+		{"归档目录本身被拒绝", "/static/remote/_orig_covers", http.StatusNotFound},
+		{"正常封面不受影响", "/static/remote/covers/1006166.webp", http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodGet, tc.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != tc.wantCode {
+				t.Fatalf("%s: expected %d, got %d", tc.path, tc.wantCode, w.Code)
+			}
+			if tc.wantCode == http.StatusNotFound && w.Body.Len() != 0 {
+				t.Errorf("非 200 不应带内容，实际 %d 字节", w.Body.Len())
+			}
+		})
+	}
+
+	// 带 Accept-Encoding 也必须 404，避免又出现「状态码随 AE 变化」的回归。
+	req, _ := http.NewRequest(http.MethodGet, "/static/remote/_orig_covers/1006166.jpg", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("带 Accept-Encoding 时归档仍应 404，实际 %d", w.Code)
+	}
+}

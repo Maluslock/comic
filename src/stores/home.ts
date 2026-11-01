@@ -24,8 +24,12 @@ export const useHomeStore = defineStore('home', () => {
    *  「先按日去重再把同日补到末尾」会把顺序打乱成 1天/7天/1天（用户实测报告）；
    *  纯按时间排又会被同一天的 12 场占满。配额法两头都兼顾，结果天然单调。 */
   const upcomingEvents = computed(() => {
+    // 时间窗口径与后端 GetUpcomingEvents 一致：用 endDate 判断「还没结束」，
+    // 而不是 startDate「还没开场」。多日漫展开场之后仍在办，按 startDate 过滤会让
+    // 进行中的场次从首页整体消失（首页曾因此在开场当天直接落空态）。
+    const now = Date.now()
     const sorted = events.value
-      .filter(e => e.status === 'upcoming' && e.startDate > Date.now())
+      .filter(e => e.status === 'upcoming' && e.endDate >= now)
       .sort((a, b) => a.startDate - b.startDate)
     if (!sorted.length) return []
 
@@ -135,6 +139,14 @@ export const useHomeStore = defineStore('home', () => {
     return Math.max(0, Math.ceil((ts - now) / (1000 * 60 * 60 * 24)))
   }
 
+  /** 卡片角标文案：已开场但没结束的场次显示「进行中」，
+   *  否则「0天后」会被读成「今天要开但还没开」，和实际状态不符。 */
+  function countdownLabel(startDate: number, endDate?: number): string {
+    const now = Date.now()
+    if (startDate <= now && (endDate === undefined || endDate >= now)) return '进行中'
+    return `${countdownDays(startDate)}天后`
+  }
+
   return {
     // state
     loading,
@@ -155,5 +167,6 @@ export const useHomeStore = defineStore('home', () => {
     refresh,
     formatDate,
     countdownDays,
+    countdownLabel,
   }
 })

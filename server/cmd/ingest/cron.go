@@ -61,7 +61,9 @@ func openPool() (*pgxpool.Pool, error) {
 func markExpired(pool *pgxpool.Pool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	res, err := pool.Exec(ctx, "UPDATE comic_events SET del_flag = true WHERE start_date < NOW() AND del_flag = false")
+	// 与 cmd/ingest/main.go 同一口径：按 end_date 判定「已结束」，
+	// 这样跨过开场时间但仍在办的多日漫展不会被一并软删。
+	res, err := pool.Exec(ctx, "UPDATE comic_events SET del_flag = true WHERE end_date < NOW() AND del_flag = false")
 	if err != nil {
 		log.Printf("expire-cleanup: %v", err)
 		return

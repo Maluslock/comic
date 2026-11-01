@@ -10,7 +10,7 @@ import (
 const getUpcomingEvents = `-- name: GetUpcomingEvents :many
 SELECT id, allcpp_id, name, location, venue, address, start_date, end_date, cover_url, tags, image_gallery, type_name, status
 FROM comic_events
-WHERE status = 'upcoming' AND del_flag = false
+WHERE status = 'upcoming' AND del_flag = false AND end_date >= NOW()
 ORDER BY start_date ASC, id ASC
 LIMIT $1
 `

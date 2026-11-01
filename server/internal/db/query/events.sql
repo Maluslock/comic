@@ -1,7 +1,9 @@
 -- name: GetUpcomingEvents :many
+-- 时间窗：只排除「已经结束」的场次（end_date < NOW()）。用 end_date 而不是 start_date，
+-- 是因为多日漫展跨过开场时间后仍然在办，首页要照样能看到（否则一开场就凭空消失）。
 SELECT id, allcpp_id, name, location, venue, start_date, end_date, cover_url, tags, type_name, status
 FROM comic_events
-WHERE status = 'upcoming' AND del_flag = false
+WHERE status = 'upcoming' AND del_flag = false AND end_date >= NOW()
 ORDER BY start_date ASC, id ASC
 LIMIT $1;
 

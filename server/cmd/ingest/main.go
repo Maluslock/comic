@@ -313,8 +313,9 @@ func runOnce(p runParams) {
 
 	log.Printf("done: %d cards fetched, %d upserted", len(cards), upserted)
 
-	// Soft-delete expired events so the home page stops showing "0天后".
-	expired, err := pool.Exec(ctx, "UPDATE comic_events SET del_flag = true WHERE start_date < NOW() AND del_flag = false")
+	// Soft-delete expired events so the home page stops showing events that already ended.
+	// 口径是 end_date：多日漫展跨过开场时间后仍在办，按 start_date 清理会把进行中的场次一起下架。
+	expired, err := pool.Exec(ctx, "UPDATE comic_events SET del_flag = true WHERE end_date < NOW() AND del_flag = false")
 	if err != nil {
 		log.Printf("mark expired events: %v", err)
 	} else {

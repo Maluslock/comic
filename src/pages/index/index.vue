@@ -66,9 +66,9 @@
         <view v-if="nearestEvent" class="ticket" @click="goEventDetail(nearestEvent.id)">
           <view class="ticket-stub">
             <view class="ticket-stub-row">
-              <text class="ticket-label">距开展</text>
-              <text class="ticket-days">{{ store.countdownDays(nearestEvent.startDate) }}</text>
-              <text class="ticket-unit">天</text>
+              <text class="ticket-label">{{ nearestStarted ? '正在开展' : '距开展' }}</text>
+              <text class="ticket-days">{{ nearestStarted ? '进行中' : store.countdownDays(nearestEvent.startDate) }}</text>
+              <text v-if="!nearestStarted" class="ticket-unit">天</text>
             </view>
             <text class="ticket-meta">{{ store.formatDate(nearestEvent.startDate) }} · {{ nearestEvent.venue || nearestEvent.location }}</text>
           </view>
@@ -102,8 +102,8 @@
             >{{ opt.label }}</view>
           </view>
           <view v-if="!filteredEvents.length" class="empty-inline">
-            <text class="empty-inline-title">{{ eventRange === 'all' ? '这个城市还没有漫展' : '这段时间还没有漫展' }}</text>
-            <text class="empty-inline-sub" @click="eventRange = 'all'">看看全部漫展 ›</text>
+            <text class="empty-inline-title">{{ emptyState.title }}</text>
+            <text v-if="emptyState.sub" class="empty-inline-sub" @click="onEmptyAction">{{ emptyState.sub }}</text>
           </view>
           <scroll-view v-else scroll-x class="event-scroll" :show-scrollbar="false">
             <view class="event-list">
@@ -115,7 +115,7 @@
               >
                 <image class="event-cover" lazy-load :src="event.cover" mode="aspectFill" />
                 <view class="event-countdown-badge">
-                  <text>{{ store.countdownDays(event.startDate) }}天后</text>
+                  <text>{{ store.countdownLabel(event.startDate, event.endDate) }}</text>
                 </view>
                 <view class="event-info">
                   <text class="event-name ellipsis">{{ event.name }}</text>
@@ -262,13 +262,20 @@ const filteredCityOptions = computed(() => {
 })
 
 const nearestEvent = computed(() => {
+  // 用 endDate 判断「还没结束」：进行中的多日漫展已经在办，但仍应出现在「距开展」票根上
+  // （此前按 startDate 过滤，开场当天票根直接消失）。startDate 在过去时倒计时为 0 天。
+  const now = Date.now()
   const upcoming = filteredEvents.value
-    .filter(e => e.startDate > Date.now())
+    .filter(e => e.endDate >= now)
     .sort((a, b) => a.startDate - b.startDate)
   return upcoming.length > 0 ? upcoming[0] : null
 })
 
 const heroEvent = computed(() => nearestEvent.value || (filteredEvents.value.length ? filteredEvents.value[0] : null))
+
+/** 票根文案开关：最近的这场是否已经开场（还在办）。 */
+const nearestStarted = computed(() => !!nearestEvent.value && nearestEvent.value.startDate <= Date.now())
+
 const heroImage = computed(() => {
   if (heroEvent.value?.cover) return heroEvent.value.cover
   if (store.banners.length) return store.banners[0].image
@@ -279,13 +286,14 @@ const heroImage = computed(() => {
 
 // 胶囊避让：inset 必须是「屏幕右边界 → 胶囊左边界」的整段距离，
 // 用 rect.right 只会让出胶囊与屏幕之间那几像素，图标照样被压。
+// 保留 12px 的呼吸间距，避免与微信官方胶囊贴脸。
 // 小程序首帧 getMenuButtonBoundingClientRect 可能返回全 0，所以 onShow/onReady 都重算一次。
 function updateCapsuleInset() {
   try {
     const rect = uni.getMenuButtonBoundingClientRect()
     const width = uni.getSystemInfoSync().windowWidth
     if (rect && rect.width && rect.left && width) {
-      capsuleInset.value = Math.max(width - rect.left + 8, 0)
+      capsuleInset.value = Math.max(width - rect.left + 12, 0)
       return
     }
   } catch (e) {
@@ -369,28 +377,73 @@ function selectCity(city: string) {
 }
 
 const filteredEvents = computed(() => {
+  const now = Date.now()
   const base = currentCity.value === '全部'
     ? store.upcomingEvents
     : store.events
-      .filter(e => e.status === 'upcoming' && e.startDate > Date.now() && e.location === currentCity.value)
+      // 与后端 / store 同一口径：endDate 判定「还没结束」，进行中的场次照样可见
+      .filter(e => e.status === 'upcoming' && e.endDate >= now && e.location === currentCity.value)
       .sort((a, b) => a.startDate - b.startDate)
       .slice(0, 8)
   if (eventRange.value === 'all') return base
   const days = eventRange.value === 'week' ? 7 : 30
-  const limit = Date.now() + days * 24 * 3600 * 1000
+  const limit = now + days * 24 * 3600 * 1000
+  // 时间窗是「开场时间落在窗口内」；已经开场仍在办的场次（startDate 在过去）保留，
+  // 否则「本周」在最忙的那天会突然空掉。
   return base.filter(e => e.startDate <= limit)
 })
 
 const posterWall = computed(() => {
   // 只展示当前城市、且没被「近期漫展」实际展示过的漫展，避免同一场出现两次。
   // 按 id 去重而不是按日期：数据只有几个档期时按日期会把整段海报墙清空。
+  const now = Date.now()
   const shownIds = new Set(filteredEvents.value.map(e => e.id))
   return store.events
-    .filter(e => e.status === 'upcoming' && e.startDate > Date.now() && (currentCity.value === '全部' || e.location === currentCity.value))
+    .filter(e => e.status === 'upcoming' && e.endDate >= now && (currentCity.value === '全部' || e.location === currentCity.value))
     .filter(e => !shownIds.has(e.id))
     .sort((a, b) => a.startDate - b.startDate)
     .slice(0, 4)
 })
+
+/** 空态文案：必须分清「这个城市本来就没有漫展」和「有时间窗 / 都已结束」，
+ *  否则会把「数据过期」说成「城市没漫展」，用户会以为是城市选错了。
+ *  三种情形：① 本周/本月筛空 → 说时间；② 城市一场都没有 → 说城市；
+ *  ③ 城市有但都不在「即将开展」的区间（多为已结束）→ 说「近期」。 */
+type EmptyAction = 'resetRange' | 'resetCity' | 'none'
+const emptyState = computed<{ title: string; sub: string; action: EmptyAction }>(() => {
+  const now = Date.now()
+  const cityScoped = currentCity.value !== '全部'
+  const cityName = currentCity.value
+  // 当前城市在库里的全部漫展（不看时间窗，用来判断「这个城市到底有没有漫展」）
+  const cityAll = cityScoped ? store.events.filter(e => e.location === cityName) : store.events
+
+  if (eventRange.value !== 'all') {
+    return {
+      title: cityScoped ? `${cityName}近期暂无即将开展的漫展` : '近期暂无即将开展的漫展',
+      sub: '看看全部漫展 ›',
+      action: 'resetRange',
+    }
+  }
+  if (!cityAll.length) {
+    return {
+      title: cityScoped ? `${cityName}暂无漫展` : '近期暂无即将开展的漫展',
+      sub: cityScoped ? '看全部城市的漫展 ›' : '',
+      action: cityScoped ? 'resetCity' : 'none',
+    }
+  }
+  // 城市有漫展但都被时间窗滤掉了（绝大多数是已经结束）—— 文案落在「近期」，不落在城市
+  const hasEnded = cityAll.some(e => e.endDate < now || e.status === 'ended')
+  return {
+    title: cityScoped && hasEnded ? `${cityName}近期暂无即将开展的漫展` : '近期暂无即将开展的漫展',
+    sub: cityScoped ? '看全部城市的漫展 ›' : '',
+    action: cityScoped ? 'resetCity' : 'none',
+  }
+})
+
+function onEmptyAction() {
+  if (emptyState.value.action === 'resetRange') eventRange.value = 'all'
+  else if (emptyState.value.action === 'resetCity') selectCity('全部')
+}
 
 const formatShortDate = (ts: number) => {
   const d = new Date(ts)
@@ -495,19 +548,37 @@ function onQuickNav(_url: string) {}
 }
 
 .city-selector {
+  position: relative;
   display: flex;
   align-items: center;
-  height: 88rpx;
-  padding: 0 28rpx;
-  background: rgba(21, 23, 34, 0.66);
-  border-radius: 44rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  height: 64rpx;
+  padding: 0 22rpx;
+  background: rgba(18, 20, 30, 0.72);
+  border-radius: 32rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(16px);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease;
+
+  // 热区扩展层：保证触控热区 ≥ 44px（全向各外扩 14rpx）
+  &::after {
+    content: '';
+    position: absolute;
+    top: -14rpx;
+    bottom: -14rpx;
+    left: -14rpx;
+    right: -14rpx;
+  }
+
+  &:active {
+    background: rgba(28, 32, 48, 0.85);
+    transform: scale(0.97);
+  }
 }
 
 .city-dot {
-  width: 12rpx;
-  height: 12rpx;
+  width: 10rpx;
+  height: 10rpx;
   border-radius: 50%;
   background: $neon-cyan;
   margin-right: 10rpx;
@@ -515,58 +586,78 @@ function onQuickNav(_url: string) {}
 }
 
 .city-text {
-  font-size: 26rpx;
+  font-size: 25rpx;
   color: $dark-text-primary;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
 }
 
 .city-arrow {
-  font-size: 24rpx;
-  color: $dark-text-tertiary;
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.5);
   margin-left: 8rpx;
+  transform: translateY(1rpx);
 }
 
 .hero-actions {
   display: flex;
-  gap: 16rpx;
+  align-items: center;
+  gap: 28rpx;
 }
 
 .hero-icon-btn {
   position: relative;
-  width: 88rpx;
-  height: 88rpx;
+  width: 64rpx;
+  height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(21, 23, 34, 0.66);
+  background: rgba(18, 20, 30, 0.45);
   border-radius: 50%;
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(16px);
+  border: 1rpx solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+
+  // 热区扩展层：保证触控热区 ≥ 44px（全向各外扩 14rpx，配合 gap: 28rpx 互不相交重叠）
+  &::after {
+    content: '';
+    position: absolute;
+    top: -14rpx;
+    bottom: -14rpx;
+    left: -14rpx;
+    right: -14rpx;
+  }
 
   &:active {
-    background: rgba(29, 32, 47, 0.9);
+    background: rgba(29, 32, 47, 0.8);
+    transform: scale(0.95);
   }
 }
 
 .hero-icon-svg {
-  width: 36rpx;
-  height: 36rpx;
-  opacity: 0.8;
+  width: 30rpx;
+  height: 30rpx;
+  opacity: 0.85;
 }
 
 .badge {
   position: absolute;
-  top: -4rpx;
-  right: -4rpx;
+  top: -6rpx;
+  right: -6rpx;
   min-width: 32rpx;
   height: 32rpx;
   line-height: 32rpx;
   text-align: center;
-  font-size: 24rpx;
+  font-size: 22rpx;
+  font-weight: 600;
   color: #fff;
   background: $neon-pink;
-  border-radius: 14rpx;
+  border-radius: 16rpx;
   padding: 0 6rpx;
+  box-shadow: 0 2rpx 6rpx rgba(255, 45, 85, 0.4);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .hero-copy {

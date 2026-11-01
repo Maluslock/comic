@@ -334,5 +334,46 @@ declare namespace Api {
       list: AdminEventApplication[];
       total: number;
     }
+
+    /** 抓取源；与后端 repository.SourceAllcpp/Bilibili/Nyato/Manual 白名单一致 */
+    type EventSourceKey = 'allcpp' | 'bilibili' | 'nyato' | 'manual';
+
+    /** 一轮抓取的结果状态；running 表示进程还没回来（或已崩溃卡在这一行） */
+    type EventSourceRunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'empty';
+
+    /** GET /api/admin/v1/event-sources 的 runs[]（后端 repository.SourceRun） */
+    interface AdminEventSourceRun {
+      id: number;
+      source: string;
+      startedAt: string;
+      finishedAt?: string | null;
+      status: EventSourceRunStatus;
+      items: number;
+      inserted: number;
+      updated: number;
+      errors: number;
+      durationMs?: number | null;
+      message?: string | null;
+    }
+
+    /** 单个来源的状态卡片；从未跑过的源 lastStatus 是空串、lastRun 为 null */
+    interface AdminEventSourceStatus {
+      source: string;
+      lastRun: string | null;
+      lastStatus: EventSourceRunStatus | '';
+      lastItems: number;
+      successRate7d: number;
+      runCount7d: number;
+      totalItems: number;
+      activeItems: number;
+    }
+
+    /** GET /api/admin/v1/event-sources 的完整响应 */
+    interface AdminEventSourceOverview {
+      sources: AdminEventSourceStatus[];
+      runs: AdminEventSourceRun[];
+      totals: Record<string, number>;
+      generatedAt: string;
+    }
   }
 }

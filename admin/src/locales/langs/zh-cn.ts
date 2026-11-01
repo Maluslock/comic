@@ -237,7 +237,8 @@ const local: App.I18n.Schema = {
     content: '内容管理',
     'audit-log': '操作日志',
     dispute: '争议处理',
-    'event-apply': '漫展入驻'
+    'event-apply': '漫展入驻',
+    'event-source': '数据源'
   },
   page: {
     login: {

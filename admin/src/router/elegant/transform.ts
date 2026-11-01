@@ -175,6 +175,7 @@ const routeMap: RouteMap = {
   "dispute": "/dispute",
   "event": "/event",
   "event-apply": "/event-apply",
+  "event-source": "/event-source",
   "iframe-page": "/iframe-page/:url",
   "login": "/login",
   "notification": "/notification",

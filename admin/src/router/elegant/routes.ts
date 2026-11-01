@@ -130,6 +130,16 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'event-source',
+    path: '/event-source',
+    component: 'layout.base$view.event-source',
+    meta: {
+      title: 'event-source',
+      i18nKey: 'route.event-source',
+      icon: 'mdi:database-sync'
+    }
+  },
+  {
     name: 'iframe-page',
     path: '/iframe-page/:url',
     component: 'layout.base$view.iframe-page',

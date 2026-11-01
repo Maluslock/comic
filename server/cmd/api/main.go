@@ -355,6 +355,12 @@ func main() {
 		adminStatsSvc := service.NewAdminStatsService(adminStatsRepo)
 		adminDashboardH := handler.NewAdminDashboardHandler(adminStatsSvc)
 		adminGroup.GET("/dashboard", adminDashboardH.Dashboard)
+		// 数据源状态页：每源最新一轮 + 近 7 天成功率 + 全局运行历史。
+		// 仓储是 t1 手写的 EventSourcesRepo（裸 pgxpool，不走 sqlc），只读，不写库。
+		eventSourceRepo := repository.NewEventSourcesRepo(pool)
+		eventSourceSvc := service.NewEventSourceService(eventSourceRepo)
+		adminEventSourceH := handler.NewAdminEventSourceHandler(eventSourceSvc)
+		adminGroup.GET("/event-sources", adminEventSourceH.EventSources)
 		adminManageRepo := repository.NewAdminManageRepo(pool)
 		adminManageSvc := service.NewAdminManageService(adminManageRepo, bookingSvc)
 		adminManageH := handler.NewAdminManageHandler(adminManageSvc)

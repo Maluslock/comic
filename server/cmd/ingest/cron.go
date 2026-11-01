@@ -11,6 +11,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
+	appconfig "github.com/Maluslock/comic/server/internal/config"
 	"github.com/Maluslock/comic/server/internal/repository"
 	"github.com/Maluslock/comic/server/internal/service"
 )
@@ -69,6 +70,31 @@ func markExpired(pool *pgxpool.Pool) {
 		return
 	}
 	log.Printf("expire-cleanup: marked %d expired events as deleted", res.RowsAffected())
+}
+
+// runEventsIngest 跑一轮多源编排（eventsource 适配器 + EventIngestService）。
+//
+// 与老的 nyato 抓取是两条并存的路径：nyato 走 internal/ingest 的 HTML 抓取，
+// 这里走结构化接口（allcpp / bilibili），两者写同一张 comic_events，靠
+// allcpp_id 唯一键 upsert，不会互相覆盖。每轮都会往 event_source_runs 写运行日志。
+//
+// 老入口（cmd/ingest -config config/cron.yaml）能继续用，只是把 source: events
+// 的任务派发到新编排器上；新代码（cmd/events-ingest）是同一套服务的独立常驻进程。
+func runEventsIngest(ctx context.Context, pool *pgxpool.Pool) {
+	cfg, err := appconfig.Load()
+	if err != nil {
+		log.Printf("task events: 加载配置失败: %v", err)
+		return
+	}
+	svc := service.NewEventIngestService(repository.New(pool), repository.NewEventSourcesRepo(pool), cfg).
+		WithPool(pool)
+	report, err := svc.IngestAll(ctx)
+	if report != nil {
+		log.Printf("task events: %s", report.Line())
+	}
+	if err != nil {
+		log.Printf("task events: 本轮失败: %v", err)
+	}
 }
 
 func runEscrowCron(ctx context.Context, pool *pgxpool.Pool, name string) {
@@ -141,6 +167,12 @@ func runCronMode(configPath string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 				defer cancel()
 				runEscrowCron(ctx, pool, t.Name)
+			case "events":
+				// 多源编排一轮（allcpp → bilibili，单源失败自动跳过继续）。
+				// 抓取+封面下载+upsert 可能几分钟，给 20 分钟上限。
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+				defer cancel()
+				runEventsIngest(ctx, pool)
 			default:
 				log.Printf("task %q: unknown source %q", t.Name, t.Source)
 			}

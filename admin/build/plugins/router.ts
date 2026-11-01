@@ -34,7 +34,8 @@ export function setupElegantRouter() {
         notification: 'mdi:bell-outline',
         content: 'mdi:book-open-page-variant-outline',
         'audit-log': 'mdi:history',
-        'event-apply': 'mdi:camera'
+        'event-apply': 'mdi:camera',
+        'event-source': 'mdi:database-sync'
       };
 
       const meta: Partial<RouteMeta> = {

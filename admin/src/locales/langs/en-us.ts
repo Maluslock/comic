@@ -241,7 +241,8 @@ const local: App.I18n.Schema = {
     content: 'Content',
     'audit-log': 'Audit Log',
     dispute: 'Disputes',
-    'event-apply': 'Event Photographer Apply'
+    'event-apply': 'Event Photographer Apply',
+    'event-source': 'Event Source'
   },
   page: {
     login: {

@@ -290,3 +290,23 @@ export async function fetchEventApplications(params: { status?: string; page?: n
 export function reviewEventApplication(id: number, payload: { status: 'approved' | 'rejected'; reason?: string }) {
   return adminRequest.put<{ ok: boolean }, { ok: boolean }>(`/event-applications/${id}/review`, payload);
 }
+
+/**
+ * GET /event-sources — admin「数据源状态」页一次拿全：每源卡片 + 运行历史 + 各源在库总数。
+ * 后端把所有已知来源都补齐了（没跑过的返回零值），前端不需要再兜底。
+ */
+export async function fetchEventSources() {
+  const data = await adminRequest.get<
+    Api.Admin.AdminEventSourceOverview | null,
+    Api.Admin.AdminEventSourceOverview | null
+  >('/event-sources');
+
+  return (
+    data ?? {
+      sources: [],
+      runs: [],
+      totals: {},
+      generatedAt: ''
+    }
+  );
+}

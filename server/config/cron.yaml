@@ -5,12 +5,14 @@
 #   "30 2,14 * * *" = 每天 02:30 和 14:30
 tasks:
   # nyato(喵特) 漫展列表同步 — 每天凌晨 3 点全量抓取 5 页
+  # 上游 https://www.nyato.com/manzhan 已于 2026-10 返回 404，抓取恒为空；
+  # 数据改由下面的 events 任务（allcpp + bilibili 双源）承担，这里保留条目待上游恢复。
   - name: nyato-daily-full
     schedule: "0 3 * * *"
     source: nyato
     pages: 5
     url: "https://www.nyato.com/manzhan"
-    enabled: true
+    enabled: false
 
   # nyato 增量补充 — 每天 14:30 再抓 2 页，捕获白天新增的展会
   - name: nyato-afternoon-incremental
@@ -18,7 +20,7 @@ tasks:
     source: nyato
     pages: 2
     url: "https://www.nyato.com/manzhan"
-    enabled: true
+    enabled: false
 
   # 过期事件清理 — 每天 01:00 标记已结束展会 (del_flag)
   - name: expire-cleanup
@@ -31,6 +33,24 @@ tasks:
     schedule: "0 4 * * *"
     source: bilibili
     enabled: false
+
+  # 多源漫展同步 (eventsource 适配器 + 编排服务) — 每天 03:00 全量跑一轮
+  # source: events 会调 service.EventIngestService.IngestAll：
+  #   allcpp → bilibili 按优先级顺序，单源失败自动跳过继续下一个源，
+  #   每轮结果写 event_source_runs（admin「数据源状态」页读这张表）。
+  # 注意：这条和老 nyato 任务是并存的两套抓取路径，nyato 走 internal/ingest 的
+  # HTML 抓取，events 走 eventsource 的结构化接口，两者写同一张 comic_events，
+  # 靠 allcpp_id 唯一键 upsert，不会互相覆盖。
+  - name: events-sync-morning
+    schedule: "0 3 * * *"
+    source: events
+    enabled: true
+
+  # 多源漫展同步 — 每天 15:00 再补一轮，捕获白天新增的展会
+  - name: events-sync-afternoon
+    schedule: "0 15 * * *"
+    source: events
+    enabled: true
 
   # 担保交易 escrow 定时任务
   - name: booking-auto-cancel

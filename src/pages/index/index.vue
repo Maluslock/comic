@@ -35,20 +35,26 @@
           <view class="vf-corner vf-tr" />
 
           <view class="hero-content">
-            <view class="hero-top-bar" :style="{ paddingRight: capsuleInset + 'px' }">
+            <!--
+              第一行只放城市选择器（贴左），并用 minHeight 把微信胶囊那一整条的高度让出来。
+              搜索/通知不再跟城市挤同一行：之前靠 paddingRight=capsuleInset 把右侧整段让给
+              胶囊，两个图标就被推到屏幕左侧 1/3，既不平衡也难看。
+              现在胶囊区域整条留空，图标落到第二行、正常右对齐。
+            -->
+            <view class="hero-top-bar" :style="{ minHeight: capsuleRowHeight + 'px' }">
               <view class="city-selector" @click="goCitySelect">
                 <text class="city-dot" />
                 <text class="city-text">{{ currentCity }}</text>
                 <text class="city-arrow">▾</text>
               </view>
-              <view class="hero-actions">
-                <view class="hero-icon-btn" @click="goSearch">
-                  <image class="hero-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
-                </view>
-                <view class="hero-icon-btn" @click="goMessages">
-                  <image class="hero-icon-svg" src="/static/icons/bell.svg" mode="aspectFit" />
-                  <view v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
-                </view>
+            </view>
+            <view class="hero-action-bar">
+              <view class="hero-icon-btn" @click="goSearch">
+                <image class="hero-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
+              </view>
+              <view class="hero-icon-btn" @click="goMessages">
+                <image class="hero-icon-svg" src="/static/icons/bell.svg" mode="aspectFit" />
+                <view v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
               </view>
             </view>
 
@@ -243,7 +249,13 @@ const store = useHomeStore()
 const userStore = useUserStore()
 const { cityOptions } = storeToRefs(store)
 const { statusBarHeight } = useStatusBar()
-const capsuleInset = ref(0)
+// 微信胶囊底边相对 hero-stage 顶部的距离（px）。hero-stage 紧贴状态栏下方，
+// 而 scroll-content 已经用 paddingTop=statusBarHeight 把状态栏让出去了，
+// 所以「胶囊底边 - 状态栏高度」就是胶囊在 hero-stage 坐标系里的垂直底线。
+const capsuleBottom = ref(0)
+// 第一行（城市选择器）的最小高度：把整条胶囊高度让出来，
+// 保证第二行的搜索/通知一定落在胶囊下方，而不是被胶囊压着往左躲。
+const capsuleRowHeight = computed(() => Math.max(capsuleBottom.value + 8, 32))
 const currentCity = ref('全部')
 const eventRange = ref<'all' | 'week' | 'month'>('all')
 const rangeOptions = [
@@ -284,35 +296,36 @@ const heroImage = computed(() => {
   return ''
 })
 
-// 胶囊避让：inset 必须是「屏幕右边界 → 胶囊左边界」的整段距离，
-// 用 rect.right 只会让出胶囊与屏幕之间那几像素，图标照样被压。
-// 保留 12px 的呼吸间距，避免与微信官方胶囊贴脸。
+// 胶囊避让改成「纵向让位」：不再把右侧一整段宽度让给胶囊（那样会把图标推到屏幕左侧），
+// 而是量出胶囊底边在 hero-stage 里的高度，让第一行整条留白，
+// 第二行的搜索/通知自然落到胶囊下方、回到正常右边距。
 // 小程序首帧 getMenuButtonBoundingClientRect 可能返回全 0，所以 onShow/onReady 都重算一次。
-function updateCapsuleInset() {
+function updateCapsuleBottom() {
   try {
     const rect = uni.getMenuButtonBoundingClientRect()
-    const width = uni.getSystemInfoSync().windowWidth
-    if (rect && rect.width && rect.left && width) {
-      capsuleInset.value = Math.max(width - rect.left + 12, 0)
+    if (rect && rect.height && rect.bottom) {
+      // rect.bottom / statusBarHeight 都是 px，且都以屏幕顶为原点
+      const relative = rect.bottom - statusBarHeight.value
+      capsuleBottom.value = Math.max(relative, 0)
       return
     }
   } catch (e) {
-    // 取不到就保持 0，H5 与老版本基础库都能正常工作
+    // 取不到就保持 0（H5 / 老基础库走这条：胶囊不渲染，纵向让位无意义）
   }
-  capsuleInset.value = 0
+  capsuleBottom.value = 0
 }
 
 onShow(() => {
-  updateCapsuleInset()
+  updateCapsuleBottom()
   loadUnread()
 })
 
 onReady(() => {
-  updateCapsuleInset()
+  updateCapsuleBottom()
 })
 
 onMounted(() => {
-  updateCapsuleInset()
+  updateCapsuleBottom()
   if (!store.loaded) {
     store.fetchHomeData()
   }
@@ -543,8 +556,9 @@ function onQuickNav(_url: string) {}
 
 .hero-top-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: flex-start;
+  align-items: flex-start;
+  // minHeight 由 JS 按微信胶囊底边算出（H5 恒为 32px），这里只负责竖向排布
 }
 
 .city-selector {
@@ -599,10 +613,14 @@ function onQuickNav(_url: string) {}
   transform: translateY(1rpx);
 }
 
-.hero-actions {
+// 第二行：搜索 + 通知。右对齐到页面右边距（32rpx），不再为胶囊让出宽度，
+// 因为它已经在第一行的留白之下，任何宽度都不会被胶囊盖住。
+.hero-action-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 28rpx;
+  margin-top: 8rpx;
 }
 
 .hero-icon-btn {

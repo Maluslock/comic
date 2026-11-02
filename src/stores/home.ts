@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Photographer, Work, ComicEvent, HomeResponse } from '@/types'
-import { getHomeData } from '@/api/index'
+import { getHomeData, getCities, type CityItem } from '@/api/index'
 import { apiGet } from '@/api/client'
 import { mapBannerItem, mapEventItem, mapPhotographerItem, mapWorkItem } from '@/utils/mappers'
 
@@ -63,12 +63,42 @@ export const useHomeStore = defineStore('home', () => {
     events.value.filter(e => e.status === 'ongoing')
   )
 
-  /** Derived from event locations — always starts with '全部' */
+  // --- City list ---
+  // 城市选择器要的是「全库还有未结束漫展的城市」（73 个），首页 events 只有 50 场、
+  // 前端推导只能拿到 20 来个。所以走 /v1/cities 接口；接口挂了才退回 events 推导，
+  // 保证断网时弹层至少还能选到眼前这几场所在的城市。
+  const cityList = ref<CityItem[]>([])
+  const cityListLoaded = ref(false)
+
+  /** 弹层用的城市名数组，'全部' 永远在第一位 */
   const cityOptions = computed(() => {
+    if (cityList.value.length) {
+      return ['全部', ...cityList.value.map(c => c.name)]
+    }
     const cities = new Set<string>(['全部'])
     events.value.forEach(e => { if (e.location) cities.add(e.location) })
     return Array.from(cities)
   })
+
+  /** 城市 → 在办场次数。走接口时用它给弹层显示「N 场」，回落推导时为空对象。 */
+  const cityEventCounts = computed<Record<string, number>>(() => {
+    const map: Record<string, number> = {}
+    cityList.value.forEach(c => { map[c.name] = c.eventCount })
+    return map
+  })
+
+  async function fetchCities() {
+    if (cityListLoaded.value) return
+    try {
+      const res = await getCities()
+      cityList.value = res?.list || []
+      cityListLoaded.value = true
+    } catch (e) {
+      // 城市清单是辅助功能：失败不置全局 error，也不打断首页，只留上下文供排查。
+      const msg = e instanceof Error ? e.message : String(e)
+      console.warn('[HomeStore] /v1/cities failed, fallback to events:', msg)
+    }
+  }
 
   // --- Actions ---
   async function fetchHomeData(preserveLoaded = false) {
@@ -162,8 +192,11 @@ export const useHomeStore = defineStore('home', () => {
     upcomingEvents,
     ongoingEvents,
     cityOptions,
+    cityEventCounts,
+    cityList,
     // actions
     fetchHomeData,
+    fetchCities,
     refresh,
     formatDate,
     countdownDays,

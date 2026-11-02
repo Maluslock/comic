@@ -193,6 +193,10 @@ func main() {
 		router.GET("/api/v1/events", eventH.List)
 		router.GET("/api/v1/events/:id", eventH.Detail)
 
+		// Cities（城市选择器要吃全库城市，不能靠首页 50 场 events 在前端推导）
+		cityH := handler.NewCityHandler(service.NewCityService(repository.NewCityRepo(pool)), redisCache)
+		router.GET("/api/v1/cities", cityH.List)
+
 		// Bookings
 		bookingH := handler.NewBookingHandler(bookingSvc)
 		router.POST("/api/v1/bookings", middleware.AuthRequired(userRepo), bookingH.Create)

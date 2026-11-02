@@ -439,3 +439,20 @@ export function withdrawEventApplication(eventId: number | string) {
 export function getMyEventApplications() {
   return apiGet<{ list: MyEventApplication[] | null }>('/v1/photographer/event-applications')
 }
+
+/** 城市选择器的一行：城市名 + 该城市在办漫展场次数。 */
+export interface CityItem {
+  name: string
+  eventCount: number
+}
+
+/**
+ * 全量城市清单（按在办场次降序）。
+ *
+ * 不能用首页 `/v1/home` 里的 50 场 events 在前端推导城市 —— 那样只能得到
+ * 首页那一页出现过的二十来个城市，全库有 73 个（见 server/internal/repository/cities.go）。
+ * 后端只统计 del_flag=false 且 end_date>=NOW() 的场次，与 C 端列表口径一致。
+ */
+export function getCities() {
+  return apiGet<{ list: CityItem[]; total: number }>('/v1/cities')
+}

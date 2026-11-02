@@ -206,25 +206,62 @@
           <text class="city-popup-title">选择城市</text>
           <text class="city-popup-close" @click="closeCityPicker">✕</text>
         </view>
-        <input
-          v-model="cityKeyword"
-          class="city-search"
-          type="text"
-          placeholder="搜索城市"
-          placeholder-class="city-search-ph"
-        />
-        <view class="city-list">
-          <view
-            v-for="city in filteredCityOptions"
-            :key="city"
-            class="city-option"
-            :class="{ active: currentCity === city }"
-            @click="selectCity(city)"
-          >
-            <text>{{ city }}</text>
-            <text v-if="currentCity === city" class="city-check">✓</text>
-          </view>
+        <!-- 搜索框独立成行：原实现紧贴 header 的下边框，两条 1rpx 边叠在一起，
+             用户看到的就是「搜索框上方多出一条线」。现在 header 无边框、搜索框自带上边框替代分隔。 -->
+        <view class="city-search-row">
+          <input
+            v-model="cityKeyword"
+            class="city-search"
+            type="text"
+            placeholder="搜索城市"
+            placeholder-class="city-search-ph"
+          />
         </view>
+        <scroll-view class="city-list" scroll-y>
+          <!-- 热门城市：取场次最多的前 8 个（数据来自 /v1/cities 的 eventCount） -->
+          <view v-if="!cityKeyword.trim() && hotCities.length" class="city-section">
+            <text class="city-section-title">热门城市</text>
+            <view class="city-grid">
+              <view
+                v-for="city in hotCities"
+                :key="'hot-' + city"
+                class="city-chip"
+                :class="{ active: currentCity === city }"
+                @click="selectCity(city)"
+              >
+                {{ city }}
+              </view>
+            </view>
+          </view>
+          <view v-if="!cityKeyword.trim()" class="city-section">
+            <text class="city-section-title">全部城市<text class="city-section-count">· {{ cityOptionsCount }} 个</text></text>
+            <view class="city-grid">
+              <view
+                v-for="city in restCities"
+                :key="city"
+                class="city-chip"
+                :class="{ active: currentCity === city }"
+                @click="selectCity(city)"
+              >
+                {{ city }}
+              </view>
+            </view>
+          </view>
+          <!-- 有搜索词时退回单列列表，扫读更快 -->
+          <view v-else class="city-plain-list">
+            <view
+              v-for="city in filteredCityOptions"
+              :key="city"
+              class="city-option"
+              :class="{ active: currentCity === city }"
+              @click="selectCity(city)"
+            >
+              <text>{{ city }}</text>
+              <text v-if="currentCity === city" class="city-check">✓</text>
+            </view>
+            <view v-if="!filteredCityOptions.length" class="city-empty">没有匹配的城市</view>
+          </view>
+        </scroll-view>
       </view>
     </view>
   </view>
@@ -293,6 +330,31 @@ const filteredCityOptions = computed(() => {
   const kw = cityKeyword.value.trim()
   const list = (store.cityOptions || []) as string[]
   return kw ? list.filter(c => c.includes(kw)) : list
+})
+
+/** '全部' 之外的候选城市（热门/全部两组都从它切） */
+const cityChoices = computed(() => {
+  const list = (store.cityOptions || []) as string[]
+  return list.filter(c => c !== '全部')
+})
+
+/** 城市总数：弹层标题里的「73 个」用它，让用户一眼看出库有多大 */
+const cityOptionsCount = computed(() => cityChoices.value.length)
+
+/** 热门城市：按在办场次降序取前 8。走接口时 store.cityEventCounts 有值；
+ *  接口失败回落 events 推导时它为空对象，此时退化为原顺序前 8 个。 */
+const hotCities = computed(() => {
+  const counts = store.cityEventCounts || {}
+  return cityChoices.value
+    .slice()
+    .sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+    .slice(0, 8)
+})
+
+/** 全部城市：去掉热门那 8 个，避免同一城市在弹层里出现两次 */
+const restCities = computed(() => {
+  const hot = new Set(hotCities.value)
+  return cityChoices.value.filter(c => !hot.has(c))
 })
 
 const nearestEvent = computed(() => {
@@ -374,6 +436,8 @@ onMounted(() => {
   if (!store.loaded) {
     store.fetchHomeData()
   }
+  // 城市清单独立拉取：它比首页数据大（73 城），失败也不影响首屏
+  store.fetchCities()
 })
 
 async function onRefresh() {
@@ -388,7 +452,10 @@ function goSearch() {
 }
 
 function goSearchByTag(tag: string) {
-  uni.navigateTo({ url: `/pages/search/search?keyword=${encodeURIComponent(tag)}`, animationType: 'none' })
+  // 这里必须走 tags 通道：后端 keyword 只对 p.name / p.description 做 ILIKE，不碰标签表，
+  // 而「日系」「哥特」这类词几乎只作为标签存在 → 走 keyword 会命中 0（用户实测的「没有结果」）。
+  // 直达结果页而不是先进入口页：入口页 onLoad 会立刻 redirectTo，用户会看到一次白帧/闪烁。
+  uni.navigateTo({ url: `/pages/search/result?tags=${encodeURIComponent(tag)}`, animationType: 'none' })
 }
 
 function goPhotographerList() {
@@ -1223,8 +1290,9 @@ function onQuickNav(_url: string) {}
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: $spacing-md $spacing-lg;
-  border-bottom: 1rpx solid $dark-border;
+  padding: $spacing-md $spacing-lg $spacing-sm;
+  /* 不再画下边框：它和下面 .city-search 自己的 1rpx 上边框只隔 8rpx，
+     两条浅色线在深色底上会合成一条看起来"多出来的"线（用户截图里那条）。 */
 }
 
 .city-popup-title {
@@ -1239,8 +1307,15 @@ function onQuickNav(_url: string) {}
   padding: $spacing-xs;
 }
 
+/* 搜索框独占一行，用上边框 + 内边距当分隔，替代原 header 的 border-bottom */
+.city-search-row {
+  padding: $spacing-sm $spacing-lg $spacing-xs;
+  border-top: 1rpx solid $dark-border;
+}
+
 .city-search {
-  margin: 0 $spacing-lg $spacing-sm;
+  width: 100%;
+  box-sizing: border-box;
   padding: 0 24rpx;
   height: 80rpx;
   line-height: 80rpx;
@@ -1257,9 +1332,73 @@ function onQuickNav(_url: string) {}
 
 .city-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: $spacing-sm 0;
+  padding: $spacing-sm $spacing-lg $spacing-lg;
+}
+
+.city-section {
+  margin-bottom: $spacing-md;
+}
+
+.city-section-title {
+  display: block;
+  font-size: $font-size-xs;
+  color: $text-tertiary;
+  padding: $spacing-xs 0 $spacing-sm;
+  letter-spacing: 0.5rpx;
+}
+
+.city-section-count {
+  margin-left: $spacing-xs;
+  color: $border-subtle;
+}
+
+/* 双列网格：73 个城市用单列要滚 5 屏，双列一屏半就能看完 */
+.city-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.city-chip {
+  height: 76rpx;
+  line-height: 76rpx;
+  padding: 0 20rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  font-size: $font-size-sm;
+  color: $dark-text-primary;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:active {
+    background: $dark-bg-card-hover;
+  }
+
+  &.active {
+    color: $brand;
+    border-color: rgba($brand, 0.5);
+    background: rgba($brand, 0.12);
+    font-weight: 600;
+  }
+}
+
+/* 有搜索词时退回单列长列表（一眼扫全，不用在网格里找） */
+.city-plain-list {
+  padding-top: $spacing-xs;
+}
+
+.city-empty {
+  padding: $spacing-xl 0;
+  text-align: center;
+  font-size: $font-size-sm;
+  color: $text-tertiary;
 }
 
 .city-option {

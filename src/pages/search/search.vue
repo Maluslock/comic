@@ -3,28 +3,29 @@
     <view class="search-bar">
       <view class="search-input-wrap">
         <image class="search-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
-        <input 
-          class="search-input" 
+        <input
+          class="search-input"
           v-model="keyword"
           placeholder="搜索摄影师、标签"
           placeholder-class="search-placeholder"
-          @confirm="handleSearch"
+          confirm-type="search"
+          @confirm="submitSearch"
         />
         <text v-if="keyword" class="clear-btn" @click="clearKeyword">✕</text>
       </view>
       <text class="cancel-btn" @click="goBack">取消</text>
     </view>
 
-    <view v-if="!keyword" class="hot-search">
+    <view class="hot-search">
       <view class="section-header">
         <text class="section-title">热门搜索</text>
       </view>
       <view class="hot-list">
-        <view 
-          v-for="(item, index) in hotKeywords" 
-          :key="index" 
+        <view
+          v-for="(item, index) in hotKeywords"
+          :key="index"
           class="hot-item"
-          @click="handleSearch(item)"
+          @click="goResult({ tags: [item] })"
         >
           {{ item }}
         </view>
@@ -32,109 +33,160 @@
 
       <view class="section-header mt-lg">
         <text class="section-title">热门标签</text>
+        <text class="multi-toggle" :class="{ active: multiSelect }" @click="toggleMultiMode">
+          {{ multiSelect ? '退出多选' : '多选' }}
+        </text>
       </view>
       <view class="tags-container">
-        <view 
-          v-for="tag in tags" 
-          :key="tag" 
+        <view
+          v-for="tag in tags"
+          :key="tag"
           class="tag-item"
           :class="{ active: selectedTags.includes(tag) }"
-          @click="toggleTag(tag)"
+          @click="onTapTag(tag)"
         >
           {{ tag }}
         </view>
       </view>
-    </view>
 
-    <view v-if="searched" class="search-result">
-      <view class="result-header">
-        <text class="result-count">找到 {{ photographers.length }} 位摄影师</text>
-      </view>
-      <view class="photographer-list">
-        <PhotographerCard 
-          v-for="p in photographers" 
-          :key="p.id" 
-          :photographer="p"
-        />
-      </view>
-      <view v-if="photographers.length === 0" class="empty">
-        <text class="empty-icon">暂无结果</text>
-        <text class="empty-text">没有找到相关摄影师</text>
+      <view v-if="multiSelect" class="action-row">
+        <view
+          class="action-btn"
+          :class="{ disabled: selectedTags.length === 0 }"
+          @click="submitTags"
+        >
+          按 {{ selectedTags.length }} 个标签搜索
+        </view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import PhotographerCard from '@/components/PhotographerCard.vue'
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
-import { mapPhotographerItem } from '@/utils/mappers'
-import type { Photographer } from '@/types'
 
 const keyword = ref('')
 const tags = ref<string[]>([])
 const selectedTags = ref<string[]>([])
-const photographers = ref<Photographer[]>([])
+const multiSelect = ref(false)
 
-const hotKeywords = ['原神', '鬼灭之刃', '古风', '日系', '暗黑', '漫展跟拍']
-const searched = ref(false)
+/**
+ * 热门搜索词表：这 6 个词全部是库里真实存在、且确有摄影师引用的标签。
+ * 后端 keyword 通道（photographers.sql.go:91）只对 p.name / p.description 做 ILIKE，不碰标签表，
+ * 所以只作为标签存在的词（原神、鬼灭之刃、动漫、影视、游戏…）走 keyword 必然 0 命中；
+ * 而 tags 通道是 `t2.name = ANY(string_to_array($3, ','))` 精确匹配，命中率 100%。
+ * 因此这批热词点击时统一走标签通道 goResult({ tags: [item] })，不走 keyword 通道。
+ */
+const hotKeywords = ['古风', '日系', '暗黑', '仙侠', '哥特', '汉服']
+// /v1/tags 取不到时的兜底：只放确认存在于标签库的名字，入口页不允许点出 0 结果
+const fallbackTags = ['古风', '日系', '暗黑', '仙侠', '哥特', '汉服', '少女', '清新']
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1] as any
-  if (currentPage?.options?.keyword) {
-    keyword.value = currentPage.options.keyword
-    handleSearch(currentPage.options.keyword)
+/**
+ * 小程序 navigateTo 的 options 是**未解码原串**（H5 hash 路由由框架自动解码），
+ * 所以这里统一只解一层：值里含 % 才 decodeURIComponent，失败返回原串。
+ */
+function safeDecode(value?: string): string {
+  const raw = (value ?? '').trim()
+  if (!raw.includes('%')) return raw
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
   }
-  loadTags()
+}
+
+/** `tags` 是标签名用逗号拼接后整体编码：先整体解一层，再按逗号切，各段不再二次解码 */
+function parseTags(value?: string): string[] {
+  return safeDecode(value)
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0)
+}
+
+/** 结果页 URL：keyword / tags 都由这里统一编码，避免调用点各写一套 */
+function buildResultUrl(kw: string, tagList: string[]): string {
+  const query: string[] = []
+  if (kw) query.push(`keyword=${encodeURIComponent(kw)}`)
+  if (tagList.length > 0) query.push(`tags=${encodeURIComponent(tagList.join(','))}`)
+  return `/pages/search/result?${query.join('&')}`
+}
+
+onLoad((options: Record<string, string> | undefined) => {
+  // 小程序 options 是未解码原串，H5 hash 路由已被框架解过一层；safeDecode 只解一层，两端一致
+  const kw = safeDecode(options?.keyword)
+  const tagList = parseTags(options?.tags)
+
+  // 首页「热门风格」等带参入口：条件已经定死，直接落到独立结果页（redirectTo 不涨页面栈，返回即回首页）
+  if (kw || tagList.length > 0) {
+    keyword.value = kw
+    selectedTags.value = tagList
+    multiSelect.value = tagList.length > 1
+    const url = buildResultUrl(kw, tagList)
+    // redirectTo 失败时退回 navigateTo，保证带参入口不会停在空白入口页
+    uni.redirectTo({ url, fail: () => uni.navigateTo({ url }) })
+    return
+  }
+
+  void loadTags()
 })
 
 async function loadTags() {
   try {
     const res = await apiGet<Array<{ id: number; name: string }>>('/v1/tags')
-    tags.value = (res || []).map(t => t.name)
+    const names = (res || []).map((t) => t.name).filter(Boolean)
+    tags.value = names.length > 0 ? names : fallbackTags
   } catch {
-    tags.value = []
+    tags.value = fallbackTags
   }
 }
 
-async function handleSearch(kw?: string) {
-  if (kw) keyword.value = kw
-  const searchKeyword = keyword.value
-  if (!searchKeyword && selectedTags.value.length === 0) {
-    searched.value = false
-    photographers.value = []
+/** 搜索入口页只负责收集条件，结果一律在独立结果页展示 */
+function goResult(params: { keyword?: string; tags?: string[] }) {
+  const kw = (params.keyword ?? '').trim()
+  const tagList = params.tags ?? []
+  if (!kw && tagList.length === 0) {
+    uni.showToast({ title: '请输入关键词或选择标签', icon: 'none' })
     return
   }
-  uni.showLoading({ title: '搜索中...' })
-  try {
-    const params: Record<string, string> = {}
-    if (searchKeyword) params.keyword = searchKeyword
-    if (selectedTags.value.length) params.tags = selectedTags.value.join(',')
-    const res = await apiGet<{ list: any[] }>('/v1/photographers', params)
-    photographers.value = (res.list || []).map(mapPhotographerItem)
-    searched.value = true
-  } finally {
-    uni.hideLoading()
-  }
+  uni.navigateTo({ url: buildResultUrl(kw, tagList) })
 }
 
-function toggleTag(tag: string) {
+function submitSearch() {
+  goResult({ keyword: keyword.value, tags: selectedTags.value })
+}
+
+function submitTags() {
+  if (selectedTags.value.length === 0) {
+    uni.showToast({ title: '请先选择标签', icon: 'none' })
+    return
+  }
+  goResult({ tags: [...selectedTags.value] })
+}
+
+function onTapTag(tag: string) {
+  // 非多选模式：点标签直接出结果页
+  if (!multiSelect.value) {
+    goResult({ tags: [tag] })
+    return
+  }
   const index = selectedTags.value.indexOf(tag)
   if (index > -1) {
     selectedTags.value.splice(index, 1)
   } else {
     selectedTags.value.push(tag)
   }
-  handleSearch()
+}
+
+function toggleMultiMode() {
+  multiSelect.value = !multiSelect.value
+  if (!multiSelect.value) selectedTags.value = []
 }
 
 function clearKeyword() {
   keyword.value = ''
   selectedTags.value = []
-  photographers.value = []
-  searched.value = false
 }
 
 function goBack() {
@@ -152,16 +204,16 @@ function goBack() {
   display: flex;
   align-items: center;
   padding: $spacing-md;
-  background: $dark-bg-secondary;
 }
 
 .search-input-wrap {
   flex: 1;
   display: flex;
   align-items: center;
-  background: $dark-bg-secondary;
-  border: 1rpx solid $dark-border;
-  border-radius: $border-radius-lg;
+  // 与首页 .nav-search-box 保持一致：磨砂玻璃输入框，靠边框与页面/条带拉出边界
+  background: rgba(21, 23, 34, 0.68);
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
+  border-radius: 32rpx;
   padding: $spacing-sm $spacing-md;
 }
 
@@ -189,7 +241,7 @@ function goBack() {
 
 .cancel-btn {
   font-size: $font-size-base;
-  color: $neon-cyan;
+  color: $text-2;
   margin-left: $spacing-md;
 
   &:active {
@@ -199,9 +251,13 @@ function goBack() {
 
 .hot-search {
   padding: $spacing-md;
+  padding-bottom: calc(#{$spacing-xl} + env(safe-area-inset-bottom));
 }
 
 .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: $spacing-md;
 }
 
@@ -222,6 +278,24 @@ function goBack() {
     height: 28rpx;
     background: $neon-gradient;
     border-radius: 3rpx;
+  }
+}
+
+.multi-toggle {
+  font-size: $font-size-sm;
+  color: $dark-text-tertiary;
+  padding: $spacing-xs $spacing-sm;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-xl;
+
+  &.active {
+    color: $neon-purple;
+    border-color: $neon-purple;
+    background: $neon-purple-dim;
+  }
+
+  &:active {
+    opacity: 0.7;
   }
 }
 
@@ -270,41 +344,27 @@ function goBack() {
   }
 }
 
-.search-result {
+.action-row {
+  margin-top: $spacing-lg;
+}
+
+.action-btn {
+  text-align: center;
   padding: $spacing-md;
-}
-
-.result-header {
-  margin-bottom: $spacing-md;
-}
-
-.result-count {
-  font-size: $font-size-sm;
-  color: $dark-text-tertiary;
-}
-
-.photographer-list {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-  padding-bottom: $spacing-xl;
-}
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: $spacing-xl * 2;
-}
-
-.empty-icon {
-  font-size: 80rpx;
-  margin-bottom: $spacing-md;
-  color: $dark-text-tertiary;
-}
-
-.empty-text {
+  border-radius: $border-radius-lg;
   font-size: $font-size-base;
-  color: $dark-text-secondary;
+  font-weight: 500;
+  color: #fff;
+  background: $neon-purple;
+
+  &.disabled {
+    color: $dark-text-tertiary;
+    background: $dark-bg-card;
+    border: 1rpx solid $dark-border;
+  }
+
+  &:active {
+    opacity: 0.85;
+  }
 }
 </style>

@@ -49,6 +49,15 @@
       }
     },
     {
+      "path": "pages/search/result",
+      "style": {
+        "navigationBarTitleText": "搜索结果",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
+      }
+    },
+    {
       "path": "pages/photographer/list",
       "style": {
         "navigationBarTitleText": "摄影师",

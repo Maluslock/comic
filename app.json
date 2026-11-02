@@ -5,6 +5,7 @@
     "pages/event/list",
     "pages/calendar/index",
     "pages/search/search",
+    "pages/search/result",
     "pages/photographer/list",
     "pages/photographer/detail",
     "pages/portfolio/index",

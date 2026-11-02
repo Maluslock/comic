@@ -36,25 +36,22 @@
 
           <view class="hero-content">
             <!--
-              第一行只放城市选择器（贴左），并用 minHeight 把微信胶囊那一整条的高度让出来。
-              搜索/通知不再跟城市挤同一行：之前靠 paddingRight=capsuleInset 把右侧整段让给
-              胶囊，两个图标就被推到屏幕左侧 1/3，既不平衡也难看。
-              现在胶囊区域整条留空，图标落到第二行、正常右对齐。
+              顶部栏单行（视觉方案 A · 极致通透）：
+              左 = 纯文字城市 —— 城市不再独占一整行，也不再套玻璃胶囊（调研 9 家平台 0 家这么做）；
+              右 = 假搜索框 flex:1，吃满城市按钮与微信胶囊之间的全部宽度，右边界止于胶囊左侧 8px。
+              铃铛已从顶栏移除：未读由底栏「消息」Tab 角标承担（src/utils/badge.ts 的
+              refreshMessageBadge → uni.setTabBarBadge(index: 2)，读的正是首页原先那个
+              /v1/chat/unread 接口），顶栏再挂一个是重复曝光。
             -->
-            <view class="hero-top-bar" :style="{ minHeight: capsuleRowHeight + 'px' }">
-              <view class="city-selector" @click="goCitySelect">
-                <text class="city-dot" />
-                <text class="city-text">{{ currentCity }}</text>
-                <text class="city-arrow">▾</text>
+            <view class="hero-nav-bar" :style="navBarStyle">
+              <view class="nav-city-btn" @click="goCitySelect">
+                <text class="nav-city-name">{{ currentCity }}</text>
+                <text class="nav-city-caret">▾</text>
               </view>
-            </view>
-            <view class="hero-action-bar">
-              <view class="hero-icon-btn" @click="goSearch">
-                <image class="hero-icon-svg" src="/static/icons/search.svg" mode="aspectFit" />
-              </view>
-              <view class="hero-icon-btn" @click="goMessages">
-                <image class="hero-icon-svg" src="/static/icons/bell.svg" mode="aspectFit" />
-                <view v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
+              <view class="nav-search-box" @click="goSearch">
+                <image class="search-ico" src="/static/icons/search.svg" mode="aspectFit" />
+                <text class="search-ph">搜索漫展 / 摄影师</text>
+                <view class="search-action-pill">搜索</view>
               </view>
             </view>
 
@@ -242,20 +239,46 @@ import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
 import HomeSkeleton from '@/components/HomeSkeleton.vue'
 import { useHomeStore } from '@/stores/home'
-import { useUserStore } from '@/stores/user'
-import { apiGet } from '@/api/client'
 
 const store = useHomeStore()
-const userStore = useUserStore()
 const { cityOptions } = storeToRefs(store)
 const { statusBarHeight } = useStatusBar()
-// 微信胶囊底边相对 hero-stage 顶部的距离（px）。hero-stage 紧贴状态栏下方，
-// 而 scroll-content 已经用 paddingTop=statusBarHeight 把状态栏让出去了，
-// 所以「胶囊底边 - 状态栏高度」就是胶囊在 hero-stage 坐标系里的垂直底线。
-const capsuleBottom = ref(0)
-// 第一行（城市选择器）的最小高度：把整条胶囊高度让出来，
-// 保证第二行的搜索/通知一定落在胶囊下方，而不是被胶囊压着往左躲。
-const capsuleRowHeight = computed(() => Math.max(capsuleBottom.value + 8, 32))
+// ── 顶部栏（单行）胶囊避让 ────────────────────────────────────────────────
+// 顶栏挂在 .hero-content 里面，而 .hero-content 已有 padding: 24rpx 32rpx 0。
+// 因此：
+//   横向 = 「搜索框右缘到屏幕右边」的目标值 navRightPx 减去容器已给的 32rpx，
+//          否则内联 padding-right 会跟容器叠加成双倍右留白，整条看起来往左缩。
+//   纵向 = 「胶囊中线」与「顶栏中线」的差值，直接写成 margin-top。
+// 兜底（H5 / 首帧未就绪 / 老基础库）：微信胶囊根本不存在 →
+//   navRightPx 归零，内联 padding-right 也归零（容器自带的 32rpx 就是视觉右边距）；
+//   margin-top 归零。绝不能用一个假装有胶囊的大数字去偷搜索框宽度
+//   （视觉方案文档 §6.3 里写死 102px 的那个默认值，在 H5 上就是错的）。
+const NOMENU_HEIGHT_RPX = 64
+// .hero-content 的内边距（rpx）：把「屏幕坐标」换算到「容器坐标」时减掉它。
+const CONTENT_PAD_H_RPX = 32
+const CONTENT_PAD_TOP_RPX = 24
+// 胶囊与搜索框之间要留的视觉间隙（px）
+const CAPSULE_GAP_PX = 8
+
+// 一律用 px 存（胶囊 rect 就是 px），渲染时再跟 rpx 换算出来的容器内边距对减。
+const navRightPx = ref(0)
+const navHeightPx = ref(0)
+const navOffsetTopPx = ref(0)
+// 750rpx 对应的实际像素宽度，用于把上面两个 rpx 常量换成 px
+const windowWidth = ref(375)
+
+const navBarStyle = computed(() => {
+  const toPx = (rpx: number) => (rpx * windowWidth.value) / 750
+  // 容器自身已经给了 32rpx 右内边距，内联这一层只补差额
+  const extraRight = Math.max(navRightPx.value - toPx(CONTENT_PAD_H_RPX), 0)
+  // 兜底环境 navHeightPx=0 → 直接用 64rpx 的自然高度
+  const height = navHeightPx.value > 0 ? navHeightPx.value : toPx(NOMENU_HEIGHT_RPX)
+  return {
+    paddingRight: `${extraRight}px`,
+    height: `${height}px`,
+    marginTop: `${navOffsetTopPx.value}px`,
+  }
+})
 const currentCity = ref('全部')
 const eventRange = ref<'all' | 'week' | 'month'>('all')
 const rangeOptions = [
@@ -263,7 +286,6 @@ const rangeOptions = [
   { key: 'week' as const, label: '本周' },
   { key: 'month' as const, label: '本月' },
 ]
-const unreadCount = ref(0)
 const showCityPicker = ref(false)
 const cityKeyword = ref('')
 
@@ -296,53 +318,63 @@ const heroImage = computed(() => {
   return ''
 })
 
-// 胶囊避让改成「纵向让位」：不再把右侧一整段宽度让给胶囊（那样会把图标推到屏幕左侧），
-// 而是量出胶囊底边在 hero-stage 里的高度，让第一行整条留白，
-// 第二行的搜索/通知自然落到胶囊下方、回到正常右边距。
-// 小程序首帧 getMenuButtonBoundingClientRect 可能返回全 0，所以 onShow/onReady 都重算一次。
-function updateCapsuleBottom() {
+/**
+ * 量一次微信胶囊，算出顶栏的右边界、高度与竖向偏移。
+ * H5 / 首帧未就绪（rect 全 0）→ 全部归零走兜底：右边界就是页面自身的 32rpx 边距。
+ */
+function updateNavMetrics() {
+  let winWidth = 375
+  try {
+    winWidth = uni.getSystemInfoSync().windowWidth || 375
+  } catch (e) {
+    // 拿不到就按 375 算，只影响 rpx 换算精度，不影响兜底安全性
+  }
+  windowWidth.value = winWidth
+
+  // 兜底：无胶囊环境。padding-right 归零（容器自带的 32rpx 就是视觉右边距），
+  // margin-top 归零（顶栏就待在 .hero-content 的 24rpx 上边距里，绝不顶歪）。
+  navRightPx.value = 0
+  navHeightPx.value = 0
+  navOffsetTopPx.value = 0
+
   try {
     const rect = uni.getMenuButtonBoundingClientRect()
-    if (rect && rect.height && rect.bottom) {
-      // rect.bottom / statusBarHeight 都是 px，且都以屏幕顶为原点
-      const relative = rect.bottom - statusBarHeight.value
-      capsuleBottom.value = Math.max(relative, 0)
-      return
-    }
+    // width/left 全 0 是首帧未就绪的典型表现，不能当成「胶囊贴在左边」来算，
+    // 否则 navRightPx 会变成 (屏宽 - 0) + 8 = 满屏宽，顶栏被挤成 0 宽。
+    if (!rect || !(rect.width > 0) || !(rect.left > 0)) return
+
+    // 横向：胶囊左边界到屏幕右边的整段都让出去，再加 8px 视觉间隙。
+    navRightPx.value = Math.max(winWidth - rect.left + CAPSULE_GAP_PX, CAPSULE_GAP_PX)
+    if (rect.height > 0) navHeightPx.value = rect.height
+
+    // 纵向：让顶栏中线与胶囊中线齐平。
+    // hero-stage 紧跟状态栏之下，.hero-content 又自带 24rpx 上边距，
+    // 两者都要从「屏幕坐标」里减掉，差值才是在容器内的偏移。
+    const toPx = (rpx: number) => (rpx * winWidth) / 750
+    const barTop = statusBarHeight.value + toPx(CONTENT_PAD_TOP_RPX)
+    const capsuleCenter = rect.top + rect.height / 2
+    const delta = capsuleCenter - barTop - navHeightPx.value / 2
+    // 夹在 ±12px：个别机型把 rect 报得很离谱时也不会把内容顶出屏幕
+    navOffsetTopPx.value = Math.min(Math.max(delta, -12), 12)
   } catch (e) {
-    // 取不到就保持 0（H5 / 老基础库走这条：胶囊不渲染，纵向让位无意义）
+    // 取不到就走上面的兜底值，不抛出、不影响首屏渲染
   }
-  capsuleBottom.value = 0
 }
 
 onShow(() => {
-  updateCapsuleBottom()
-  loadUnread()
+  updateNavMetrics()
 })
 
 onReady(() => {
-  updateCapsuleBottom()
+  updateNavMetrics()
 })
 
 onMounted(() => {
-  updateCapsuleBottom()
+  updateNavMetrics()
   if (!store.loaded) {
     store.fetchHomeData()
   }
 })
-
-async function loadUnread() {
-  if (!userStore.isLoggedIn || !userStore.user) {
-    unreadCount.value = 0
-    return
-  }
-  try {
-    const res = await apiGet<{ count: number }>(`/v1/chat/unread/${userStore.user.id}`)
-    unreadCount.value = res.count || 0
-  } catch {
-    unreadCount.value = 0
-  }
-}
 
 async function onRefresh() {
   await store.refresh()
@@ -369,10 +401,6 @@ function goEventMore() {
 
 function goEventDetail(id: string) {
   uni.navigateTo({ url: `/pages/event/detail?id=${id}`, animationType: 'none' })
-}
-
-function goMessages() {
-  uni.switchTab({ url: '/pages/message/index' })
 }
 
 function goCitySelect() {
@@ -554,128 +582,135 @@ function onQuickNav(_url: string) {}
   padding: 24rpx 32rpx 0;
 }
 
-.hero-top-bar {
+// ── 顶部栏（单行）────────────────────────────────────────────────────────
+// 高度和 paddingRight 都由脚本按胶囊实测算出后内联注入；这里只管横向排布。
+.hero-nav-bar {
+  position: relative;
+  z-index: 10;
   display: flex;
-  justify-content: flex-start;
-  align-items: flex-start;
-  // minHeight 由 JS 按微信胶囊底边算出（H5 恒为 32px），这里只负责竖向排布
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: 0;
 }
 
-.city-selector {
+// 城市：纯文字 + 小三角，不套玻璃胶囊。城市只是「筛选条件」，
+// 给它一个药丸外框会让它在视觉权重上跟搜索框平级，反而抢戏。
+.nav-city-btn {
   position: relative;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   height: 64rpx;
-  padding: 0 22rpx;
-  background: rgba(18, 20, 30, 0.72);
+  margin-right: 16rpx;
+  transition: opacity 0.2s ease;
+
+  // 热区扩展：上下各 24rpx（宽松，顶栏本身给足了竖向空间），
+  // 右侧只扩 8rpx —— 必须 ≤ 间距的一半（16rpx / 2），
+  // 否则会压进搜索框的点击区，点搜索时误触发城市选择器。
+  &::after {
+    content: '';
+    position: absolute;
+    top: -24rpx;
+    bottom: -24rpx;
+    left: -12rpx;
+    right: -8rpx;
+  }
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.nav-city-name {
+  max-width: 132rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $text-1;
+  letter-spacing: 0.5rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.45);
+}
+
+.nav-city-caret {
+  margin-left: 6rpx;
+  font-size: 18rpx;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.6);
+  transform: translateY(1rpx);
+}
+
+// 假搜索框：flex:1 吃满城市按钮与胶囊之间的全部宽度。
+// 它只是「看起来像输入框的按钮」，点击直接跳搜索页，所以内部没有真实 input。
+.nav-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  padding-left: 20rpx;
+  padding-right: 8rpx;
+  background: rgba(21, 23, 34, 0.68);
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
   border-radius: 32rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(16px);
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.25);
   transition: all 0.2s ease;
 
-  // 热区扩展层：保证触控热区 ≥ 44px（全向各外扩 14rpx）
+  &:active {
+    background: rgba(29, 32, 47, 0.85);
+    border-color: rgba(255, 107, 0, 0.4);
+  }
+
+  // 竖向热区补足：搜索框自身 64rpx（H5 ≈33px）不足 44px，上下各外扩 12rpx
+  // 补到 ≈45px。左右不外扩 —— 左边是城市按钮，扩了会抢它的点击。
   &::after {
     content: '';
     position: absolute;
-    top: -14rpx;
-    bottom: -14rpx;
-    left: -14rpx;
-    right: -14rpx;
-  }
-
-  &:active {
-    background: rgba(28, 32, 48, 0.85);
-    transform: scale(0.97);
+    top: -12rpx;
+    bottom: -12rpx;
+    left: 0;
+    right: 0;
   }
 }
 
-.city-dot {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: $neon-cyan;
-  margin-right: 10rpx;
-  box-shadow: 0 0 8rpx $neon-cyan-glow;
+.search-ico {
+  width: 28rpx;
+  height: 28rpx;
+  margin-right: 12rpx;
+  opacity: 0.65;
+  flex-shrink: 0;
 }
 
-.city-text {
-  font-size: 25rpx;
-  color: $dark-text-primary;
-  font-weight: 600;
-  letter-spacing: 0.5rpx;
+.search-ph {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 24rpx;
+  color: $text-2;
+  letter-spacing: 0.3rpx;
 }
 
-.city-arrow {
+// 右侧「搜索」小药丸：给假搜索框一个明确的行动暗示，同时把右端收住，
+// 避免文字拉成一条长线显得更空。
+.search-action-pill {
+  flex-shrink: 0;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+  background: $brand;
+  border-radius: 24rpx;
   font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.5);
-  margin-left: 8rpx;
-  transform: translateY(1rpx);
-}
-
-// 第二行：搜索 + 通知。右对齐到页面右边距（32rpx），不再为胶囊让出宽度，
-// 因为它已经在第一行的留白之下，任何宽度都不会被胶囊盖住。
-.hero-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 28rpx;
-  margin-top: 8rpx;
-}
-
-.hero-icon-btn {
-  position: relative;
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(18, 20, 30, 0.45);
-  border-radius: 50%;
-  border: 1rpx solid rgba(255, 255, 255, 0.10);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
-
-  // 热区扩展层：保证触控热区 ≥ 44px（全向各外扩 14rpx，配合 gap: 28rpx 互不相交重叠）
-  &::after {
-    content: '';
-    position: absolute;
-    top: -14rpx;
-    bottom: -14rpx;
-    left: -14rpx;
-    right: -14rpx;
-  }
-
-  &:active {
-    background: rgba(29, 32, 47, 0.8);
-    transform: scale(0.95);
-  }
-}
-
-.hero-icon-svg {
-  width: 30rpx;
-  height: 30rpx;
-  opacity: 0.85;
-}
-
-.badge {
-  position: absolute;
-  top: -6rpx;
-  right: -6rpx;
-  min-width: 32rpx;
-  height: 32rpx;
-  line-height: 32rpx;
-  text-align: center;
-  font-size: 22rpx;
   font-weight: 600;
   color: #fff;
-  background: $neon-pink;
-  border-radius: 16rpx;
-  padding: 0 6rpx;
-  box-shadow: 0 2rpx 6rpx rgba(255, 45, 85, 0.4);
-  pointer-events: none;
-  z-index: 1;
+  letter-spacing: 0.5rpx;
+  box-shadow: 0 2rpx 8rpx rgba(255, 107, 0, 0.35);
 }
 
 .hero-copy {
@@ -1274,8 +1309,7 @@ function onQuickNav(_url: string) {}
 /* 低端机/旧内核不支持 backdrop-filter 时退回不透明底，避免文字压图不可读 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .status-bar,
-  .city-selector,
-  .hero-icon-btn,
+  .nav-search-box,
   .event-countdown-badge {
     background: rgba(12, 13, 20, 0.94);
   }

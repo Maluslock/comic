@@ -82,6 +82,7 @@ import { useUserStore } from '@/stores/user'
 import type { OrderPriceFields, BookingSubStatus, EscrowBookingFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } from '@/utils/quote'
 import { escrowState, escrowTodoWeight } from '@/utils/escrow'
+import { resolveImage } from '@/utils/mappers'
 import { acceptDelivery } from '@/api'
 
 interface DisplayOrder extends OrderPriceFields, EscrowBookingFields {
@@ -125,7 +126,14 @@ onMounted(() => {
 function readStoredBookings(): any[] {
   const storedJson = uni.getStorageSync('bookings') || '[]'
   try {
-    return JSON.parse(storedJson)
+    const list = JSON.parse(storedJson)
+    if (!Array.isArray(list)) return []
+    // 本地历史订单里的 avatar 也可能是相对路径（早期版本直接存了后端返回值），
+    // 进模板前同样补 origin；resolveImage 对已是绝对地址/包内图是幂等的。
+    return list.map((o: any) => ({
+      ...o,
+      photographerAvatar: resolveImage(o.photographerAvatar || ''),
+    }))
   } catch {
     return []
   }
@@ -150,7 +158,9 @@ async function loadBookings() {
       photographerId: String(b.photographerId),
       photographerUserId: b.photographerUserId,
       photographerName: b.photographerName || `摄影师${b.photographerId}`,
-      photographerAvatar: b.photographerAvatar || '',
+      // 后端 join 出来的 photographers.avatar 是 /static/remote/** 或 /static/uploads/** 相对路径，
+      // 小程序端会被当包内资源读取（404 → 头像位只剩深色底）。统一在这里补 origin。
+      photographerAvatar: resolveImage(b.photographerAvatar || ''),
       location: b.location || '',
       serviceId: String(b.serviceId),
       serviceName: b.serviceName || `服务${b.serviceId}`,

@@ -32,9 +32,28 @@ import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useStatusBar } from '@/composables/useStatusBar'
 import { apiGet, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { resolveImage } from '@/utils/mappers'
+
+/** 收藏列表 DTO：后端 GET /v1/favorites/:userId 返回裸数组，字段见 service.FavoriteItem */
+interface FavoriteDTO {
+  photographerId: number
+  name: string
+  avatar?: string
+  location?: string
+  rating?: string | number
+}
+
+/** 模板视图：avatar 已由 resolveImage 补成绝对地址（/static/remote、/static/uploads 在小程序端没有同源代理） */
+interface FavoriteView {
+  photographerId: number
+  name: string
+  avatar: string
+  location: string
+  rating: string
+}
 
 const { statusBarHeight } = useStatusBar()
-const favorites = ref<any[]>([])
+const favorites = ref<FavoriteView[]>([])
 const loading = ref(true)
 const userStore = useUserStore()
 
@@ -45,8 +64,16 @@ onMounted(async () => {
     return
   }
   try {
-    const res = await apiGet<any[]>(`/v1/favorites/${userStore.user.id}`)
-    favorites.value = res || []
+    const res = await apiGet<FavoriteDTO[]>(`/v1/favorites/${userStore.user.id}`)
+    // 头像必须走 resolveImage：后端存的是 /static/remote/**、/static/uploads/** 相对路径，
+    // 小程序端会被当包内资源读取（404 → 只剩深色底，看起来是一块黑方块）
+    favorites.value = (res || []).map((f) => ({
+      photographerId: f.photographerId,
+      name: f.name,
+      avatar: resolveImage(f.avatar || ''),
+      location: f.location || '',
+      rating: f.rating === undefined || f.rating === null ? '0' : String(f.rating),
+    }))
   } catch {
     favorites.value = []
   } finally {

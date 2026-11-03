@@ -117,6 +117,8 @@ export interface ReviewDTO {
   photographerId?: number | string
   rating?: number
   content?: string
+  /** 评价附图：后端同样存相对路径（/static/remote/**、/static/uploads/**） */
+  images?: string[]
   createdAt?: string | number
 }
 
@@ -163,7 +165,9 @@ export function mapEventItem(e: EventDTO): ComicEvent {
     endDate: new Date(e.endDate).getTime(),
     cover: resolveImage(e.coverUrl || ''),
     tags: e.tags || [],
-    imageGallery: e.imageGallery || [],
+    // 相册图同样托管在 /static/remote/**：小程序端不补 origin 会被当包内资源读取（404 →
+    // 露出深色底，用户看成「黑色海报」）。mapWorkItem 的 images 已同样收口，保持口径一致。
+    imageGallery: (e.imageGallery || []).map((url) => resolveImage(url)).filter((url) => !!url),
     photographerCount: e.photographers?.length || 0,
     status: (e.status as ComicEvent['status']) || 'upcoming',
     description: e.description || '',
@@ -210,6 +214,8 @@ export function mapReviewItem(r: ReviewDTO): Review {
     photographerId: String(r.photographerId || ''),
     rating: r.rating || 0,
     content: r.content || '',
+    // 评价附图与其它图片同源：相对路径在小程序端会被当包内资源 404，统一收口到 resolveImage
+    images: (r.images || []).map(resolveImage).filter((url) => !!url),
     createdAt: typeof r.createdAt === 'string' ? new Date(r.createdAt).getTime() : (r.createdAt || Date.now()),
   }
 }

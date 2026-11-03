@@ -368,7 +368,8 @@ async function loadOrder() {
           photographerId: String(serverOrder.photographerId),
           photographerUserId: serverOrder.photographerUserId,
           photographerName: serverOrder.photographerName || `摄影师${serverOrder.photographerId}`,
-          photographerAvatar: serverOrder.photographerAvatar || '',
+          // 小程序端没有 /static 同源代理：后端回的 /static/remote、/static/uploads 相对路径会被当包内资源 404，露出深色底看似全黑。
+          photographerAvatar: resolveImage(serverOrder.photographerAvatar || ''),
           location: serverOrder.location || '',
           serviceId: String(serverOrder.serviceId),
           serviceName: serverOrder.serviceName || `服务${serverOrder.serviceId}`,
@@ -402,6 +403,10 @@ async function loadOrder() {
       const storedJson = uni.getStorageSync('bookings') || '[]'
       const storedBookings: OrderDetail[] = JSON.parse(storedJson)
       found = storedBookings.find((b: OrderDetail) => String(b.id) === bookingId.value)
+      // 老缓存里同样可能存着 /static/remote、/static/uploads 相对路径，读取时统一补成绝对地址（resolveImage 幂等）。
+      if (found) {
+        found.photographerAvatar = resolveImage(found.photographerAvatar || '')
+      }
     } catch {
       // Ignore parse errors
     }

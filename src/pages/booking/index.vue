@@ -86,7 +86,7 @@ import ServiceCard from '@/components/ServiceCard.vue'
 import { apiGet, apiPost, ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { TMPL, requestSubscribe, markSubscribed } from '@/utils/subscribe'
-import { formatPrice, encodeRedirect } from '@/utils/mappers'
+import { formatPrice, encodeRedirect, resolveImage } from '@/utils/mappers'
 import { todayKey } from '@/utils/date'
 import type { Service } from '@/types'
 
@@ -144,7 +144,9 @@ async function loadServices() {
       description: s.description, duration: s.duration,
     }))
     photographerName.value = res.name || '摄影师'
-    photographerAvatar.value = res.avatar || ''
+    // 后端 avatar 是 /static/remote/** 或 /static/uploads/** 相对路径，小程序端会被当包内资源读（404 →
+    // 只剩 ph-avatar 的深色底）。补成绝对地址后再进 <image :src>。
+    photographerAvatar.value = resolveImage(res.avatar || '')
     photographerLocation.value = res.location || '北京'
     if (!selectedService.value && services.value.length) {
       selectedService.value = services.value[0]

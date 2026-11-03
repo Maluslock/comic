@@ -15,7 +15,7 @@
     </view>
     <view v-else class="list">
       <view v-for="f in follows" :key="f.eventId" class="follow-card" @click="goDetail(f.eventId)">
-        <image class="cover" :src="f.coverUrl" mode="aspectFill" />
+        <image class="cover" :src="f.cover" mode="aspectFill" />
         <view class="info">
           <text class="name ellipsis">{{ f.name }}</text>
           <text class="meta">{{ f.location }} · {{ f.venue }}</text>
@@ -35,9 +35,32 @@ import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow } from '@dcloudio/uni-app'
 import { apiGet, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { resolveImage } from '@/utils/mappers'
+
+/** 关注列表 DTO：后端 GET /v1/follows/:userId 返回 {list:[{id,eventId,name,location,venue,startDate,endDate,coverUrl,status}]} */
+interface FollowDTO {
+  eventId: number
+  name: string
+  location?: string
+  venue?: string
+  startDate: string
+  endDate: string
+  coverUrl?: string
+}
+
+/** 模板只用这几个字段；cover 已由 resolveImage 补成绝对地址（小程序端没有 /static 代理）。 */
+interface FollowedEvent {
+  eventId: number
+  name: string
+  location: string
+  venue: string
+  startDate: string
+  endDate: string
+  cover: string
+}
 
 const { statusBarHeight } = useStatusBar()
-const follows = ref<any[]>([])
+const follows = ref<FollowedEvent[]>([])
 const loading = ref(true)
 const userStore = useUserStore()
 
@@ -48,8 +71,17 @@ onShow(async () => {
     return
   }
   try {
-    const res = await apiGet<{ list: any[] }>(`/v1/follows/${userStore.user.id}`)
-    follows.value = res.list || []
+    const res = await apiGet<{ list: FollowDTO[] }>(`/v1/follows/${userStore.user.id}`)
+    // 封面必须走 resolveImage：后端给的是 /static/remote/** 相对路径，小程序端会被当包内资源读（404 → 深色底看似全黑）
+    follows.value = (res.list || []).map((f) => ({
+      eventId: f.eventId,
+      name: f.name,
+      location: f.location || '',
+      venue: f.venue || '',
+      startDate: f.startDate,
+      endDate: f.endDate,
+      cover: resolveImage(f.coverUrl || ''),
+    }))
   } catch {
     follows.value = []
   } finally {

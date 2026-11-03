@@ -45,7 +45,30 @@
             class="event-card"
             @click="goDetail(evt.id)"
           >
-            <view class="event-cover" :style="{ backgroundImage: 'url(' + evt.cover + ')' }" />
+            <!-- 封面三态兜底（见 list.vue 同款实现）：骨架 → <image> 淡入 → 图标兜底。
+                 180rpx×180rpx 的盒子在三态下不变，flex 行高不受影响。 -->
+            <view
+              class="event-cover"
+              :class="{
+                'is-loaded': coverState(evt) === 'loaded',
+                'is-error': coverState(evt) === 'error',
+              }"
+            >
+              <view v-if="coverState(evt) === 'loading'" class="cover-skeleton" />
+              <image
+                v-if="evt.cover && coverState(evt) !== 'error'"
+                class="cover-img"
+                :src="evt.cover"
+                mode="aspectFill"
+                lazy-load
+                @load="onCoverLoad(evt.id)"
+                @error="onCoverError(evt.id)"
+              />
+              <view v-if="coverState(evt) === 'error'" class="cover-fallback">
+                <text class="cover-fallback-icon">▧</text>
+                <text class="cover-fallback-text">封面加载失败</text>
+              </view>
+            </view>
             <view class="event-info">
               <text class="event-name">{{ evt.name }}</text>
               <text class="event-location">{{ evt.location }} &#183; {{ evt.venue }}</text>
@@ -78,7 +101,29 @@
           class="preview-row"
           @click="goDetail(evt.id)"
         >
-          <image class="preview-cover" :src="evt.cover" mode="aspectFill" />
+          <!-- 月份预览缩略图同样是三态：骨架 / 图片 / 图标兜底，96rpx 定尺不跳动 -->
+          <view
+            class="preview-cover"
+            :class="{
+              'is-loaded': coverState(evt) === 'loaded',
+              'is-error': coverState(evt) === 'error',
+            }"
+          >
+            <view v-if="coverState(evt) === 'loading'" class="cover-skeleton" />
+            <image
+              v-if="evt.cover && coverState(evt) !== 'error'"
+              class="cover-img"
+              :src="evt.cover"
+              mode="aspectFill"
+              lazy-load
+              @load="onCoverLoad(evt.id)"
+              @error="onCoverError(evt.id)"
+            />
+            <view v-if="coverState(evt) === 'error'" class="cover-fallback">
+              <text class="cover-fallback-icon">▧</text>
+              <text class="cover-fallback-text">失败</text>
+            </view>
+          </view>
           <view class="preview-info">
             <text class="preview-name">{{ evt.name }}</text>
             <text class="preview-meta">{{ formatRange(evt.startDate, evt.endDate) }} · {{ evt.location }}</text>
@@ -125,33 +170,22 @@ import { onShow } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
 import { loadFollowedIds, toggleFollow } from '@/utils/follow'
 import { useUserStore } from '@/stores/user'
+import type { ComicEvent } from '@/types'
+// 统一走 mapping 层：cover 由 resolveImage 补成绝对地址（小程序端没有 /static 代理，
+// 后端相对路径会被当包内资源读取失败，背景色露出来就是一块深色「黑海报」）。
+import { mapEventItem, type EventDTO } from '@/utils/mappers'
 
-interface CalendarEvent {
-  id: string
-  name: string
-  location: string
-  venue: string
-  startDate: number
-  endDate: number
-  cover: string
-  tags: string[]
-  status: string
-}
-
-interface EventItem {
-  id: number
-  name: string
-  location: string
-  venue: string
-  startDate: string
-  endDate: string
-  coverUrl: string
-  tags: string[]
-  status: string
-}
+/**
+ * 日历只用这几个字段；`cover` 来自 mapEventItem（已 resolveImage 成绝对地址），
+ * 抬头卡片（background-image）与月份预览（<image :src>）共用同一个值。
+ */
+type CalendarEvent = Pick<
+  ComicEvent,
+  'id' | 'name' | 'location' | 'venue' | 'startDate' | 'endDate' | 'cover' | 'tags' | 'status'
+>
 
 interface EventListResponse {
-  list: EventItem[]
+  list: EventDTO[]
   total: number
 }
 
@@ -172,6 +206,25 @@ const events = ref<CalendarEvent[]>([])
 const follows = ref<Set<string>>(new Set())
 const selectedKey = ref<string | null>(null)
 const loading = ref(false)
+
+// --- 封面三态（与 event/list.vue 同一套口径）---
+// 只记录已有结果的卡片；未记录＝仍在加载。状态完全由 <image> 的 @load/@error 驱动，
+// 不额外发任何探测请求。
+type CoverState = 'loading' | 'loaded' | 'error'
+const coverStates = ref<Record<string, 'loaded' | 'error'>>({})
+
+function coverState(evt: CalendarEvent): CoverState {
+  if (!evt.cover) return 'error'
+  return coverStates.value[evt.id] ?? 'loading'
+}
+
+function onCoverLoad(id: string) {
+  coverStates.value = { ...coverStates.value, [id]: 'loaded' }
+}
+
+function onCoverError(id: string) {
+  coverStates.value = { ...coverStates.value, [id]: 'error' }
+}
 
 const todayKey = dateKey(new Date())
 
@@ -321,16 +374,18 @@ function goDetail(id: string) {
 async function loadEvents() {
   try {
     const res = await apiGet<EventListResponse>('/v1/events', { status: 'upcoming' })
-    events.value = (res.list || []).map(item => ({
-      id: String(item.id),
-      name: item.name,
-      location: item.location,
-      venue: item.venue,
-      startDate: new Date(item.startDate).getTime(),
-      endDate: new Date(item.endDate).getTime(),
-      cover: item.coverUrl,
-      tags: item.tags || [],
-      status: item.status,
+    // 走 mapEventItem：cover 已被 resolveImage 解析成绝对地址，
+    // 抬头卡片 background-image 与下方 <image> 预览共用这一个值，不再各自拼相对路径。
+    events.value = (res.list || []).map(mapEventItem).map(evt => ({
+      id: evt.id,
+      name: evt.name,
+      location: evt.location,
+      venue: evt.venue,
+      startDate: evt.startDate,
+      endDate: evt.endDate,
+      cover: evt.cover,
+      tags: evt.tags,
+      status: evt.status,
     }))
   } catch (e: unknown) {
     events.value = []
@@ -624,13 +679,97 @@ onShow(() => {
 }
 
 .event-cover {
+  position: relative;
   width: 180rpx;
   height: 180rpx;
   flex-shrink: 0;
   border-radius: $border-radius-md;
-  background-size: cover;
-  background-position: center top;
-  background-color: $dark-bg-card;
+  overflow: hidden;
+  // 中性占位底：$surface-2(#1d202f)，不用 $dark-bg-card(#151722)。
+  // 弱网时这层会先露出来，近黑会被读成「封面全黑」。
+  background: $surface-2;
+}
+
+// 图片与骨架都绝对定位铺满宿主盒子，三态高度恒为 180rpx。
+.cover-img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: $surface-2;
+  opacity: 0;
+  transition: opacity $motion-base;
+}
+
+.event-cover.is-loaded .cover-img,
+.preview-cover.is-loaded .cover-img {
+  opacity: 1;
+}
+
+// 骨架：低对比灰 + shimmer。纯白 0.04~0.08 叠在 $surface-2 上，
+// 设计系统里没有骨架专用 token，沿用 HomeSkeleton.vue 的取值，避免新造颜色。
+.cover-skeleton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: $surface-2;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  // shimmer 写在基础规则上：小程序 wxss 不支持 prefers-reduced-motion，
+  // 放进媒体查询里动画永远不跑。H5 由下方 reduce 分支关闭。
+  animation: cover-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes cover-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+// H5：系统开启「减少动效」时停掉 shimmer（骨架静态仍可见）。小程序端忽略此查询。
+@media (prefers-reduced-motion: reduce) {
+  .cover-skeleton {
+    animation: none;
+  }
+}
+
+// 兜底：居中图标 + 文案，尺寸与加载态完全一致
+.cover-fallback {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $s-xs;
+  background: $surface-2;
+}
+
+.cover-fallback-icon {
+  font-size: $t-xl;
+  line-height: 1;
+  color: $text-3;
+}
+
+.cover-fallback-text {
+  font-size: $font-size-xs;
+  color: $text-3;
 }
 
 .event-info {
@@ -745,10 +884,13 @@ onShow(() => {
 }
 
 .preview-cover {
+  position: relative;
   width: 96rpx;
   height: 96rpx;
   border-radius: $border-radius-sm;
   flex-shrink: 0;
+  overflow: hidden;
+  // 同 .event-cover：中性占位而非近黑
   background: $surface-2;
 }
 

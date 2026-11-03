@@ -147,7 +147,7 @@ import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRed
 import { previewImages } from '@/utils/preview'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
-import type { Photographer, Service, Work } from '@/types'
+import type { Photographer, Review, Service, Work } from '@/types'
 
 interface PhotographerDetailResponse {
   id: number
@@ -168,7 +168,7 @@ interface PhotographerDetailResponse {
   description: string
   services: Array<{ id: number; name: string; price: number | null; description: string; duration: number }>
   works: Array<{ id: number; title: string; images: string[]; photographerName?: string }>
-  reviews: Array<{ id: number; rating: number; content: string; userName: string; userAvatar?: string; createdAt: string }>
+  reviews: Array<{ id: number; rating: number; content: string; userName: string; userAvatar?: string; images?: string[]; createdAt: string }>
 }
 
 type PhotographerView = Photographer & {
@@ -195,7 +195,7 @@ const creditLabel = computed(() => {
 const creditTone = computed(() => creditToneOf(photographer.value?.creditLevel, photographer.value?.creditScore))
 
 const collected = ref(false)
-const reviews = ref<any[]>([])
+const reviews = ref<Review[]>([])
 const reviewTotal = ref(0)
 const reviewHasMore = ref(false)
 const reviewLoading = ref(false)
@@ -211,7 +211,10 @@ async function loadReviews(reset = false) {
   try {
     const offset = reset ? 0 : reviews.value.length
     const res = await getPhotographerReviews(pid, REVIEW_PAGE_SIZE, offset)
-    reviews.value = reset ? res.list : reviews.value.concat(res.list)
+    // 分页接口返回的是后端裸 DTO（userAvatar / images 都是 /static/** 相对路径），
+    // 必须过 mapReviewItem 才能进 ReviewCard，否则小程序里头像与评价附图全 404。
+    const page = (res.list || []).map(mapReviewItem)
+    reviews.value = reset ? page : reviews.value.concat(page)
     reviewTotal.value = res.total
     reviewHasMore.value = res.hasMore
   } catch {

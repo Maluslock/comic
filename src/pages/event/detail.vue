@@ -10,12 +10,31 @@
       </template>
 
       <template v-else-if="event">
-        <!-- Cover -->
+        <!-- Cover：三态兜底。用 <image> 而非 background-image 才能拿到 @load/@error；
+             .event-cover-wrap 固定 480rpx，遮罩/返回键/标题都叠在同一个盒子上，
+             图片加载失败时版面高度不变。 -->
         <view class="event-cover-wrap">
           <view
             class="event-cover"
-            :style="{ backgroundImage: 'url(' + event.cover + ')' }"
-          />
+            :class="{
+              'is-loaded': coverState === 'loaded',
+              'is-error': coverState === 'error',
+            }"
+          >
+            <view v-if="coverState === 'loading'" class="cover-skeleton" />
+            <image
+              v-if="event.cover && coverState !== 'error'"
+              class="cover-img"
+              :src="event.cover"
+              mode="aspectFill"
+              @load="onCoverLoad"
+              @error="onCoverError"
+            />
+            <view v-if="coverState === 'error'" class="cover-fallback">
+              <text class="cover-fallback-icon">▧</text>
+              <text class="cover-fallback-text">封面加载失败</text>
+            </view>
+          </view>
           <view class="cover-overlay" />
           <view class="back-btn" @click="goBack">
             <text class="back-arrow">‹</text>
@@ -75,8 +94,21 @@
                 v-for="(img, idx) in event.imageGallery.slice(0, 3)"
                 :key="idx"
               >
-                <view class="gallery-item">
-                  <image :src="img" class="gallery-img" mode="aspectFill" @error="onGalleryImgError(idx)" />
+                <view class="gallery-item" :class="{ 'is-loaded': galleryState(idx) === 'loaded' }">
+                  <view v-if="galleryState(idx) === 'loading'" class="cover-skeleton" />
+                  <image
+                    v-if="img && galleryState(idx) !== 'error'"
+                    :src="img"
+                    class="gallery-img"
+                    mode="aspectFill"
+                    lazy-load
+                    @load="onGalleryImgLoad(idx)"
+                    @error="onGalleryImgError(idx)"
+                  />
+                  <view v-if="galleryState(idx) === 'error'" class="gallery-fallback">
+                    <text class="gallery-fallback-icon">▧</text>
+                    <text class="gallery-fallback-text">图片加载失败</text>
+                  </view>
                 </view>
               </swiper-item>
             </swiper>
@@ -237,6 +269,48 @@ const photographersSource = ref('')
 const statusText = ref('')
 const countdownDays = ref(0)
 
+// --- 封面三态（与 event/list.vue、calendar/index.vue 同一套口径）---
+// 状态完全由 <image> 的 @load/@error 驱动，不额外请求探测图片是否存在。
+type CoverState = 'loading' | 'loaded' | 'error'
+const coverResult = ref<'loaded' | 'error' | null>(null)
+
+const coverState = computed<CoverState>(() => {
+  // 详情页一进来 event 为 null，模板在 loading 分支里，不渲染封面区
+  if (!event.value?.cover) return 'error'
+  return coverResult.value ?? 'loading'
+})
+
+function onCoverLoad() {
+  coverResult.value = 'loaded'
+}
+
+function onCoverError() {
+  coverResult.value = 'error'
+}
+
+// --- 相册三态 ---
+// loadedGallery / galleryFailed 都是按下标记录；两者都没有 = 仍在加载（显示骨架）。
+const loadedGallery = ref<Set<number>>(new Set())
+const galleryFailed = ref<Set<number>>(new Set())
+
+function galleryState(idx: number): CoverState {
+  if (galleryFailed.value.has(idx)) return 'error'
+  return loadedGallery.value.has(idx) ? 'loaded' : 'loading'
+}
+
+function onGalleryImgLoad(idx: number) {
+  const next = new Set(loadedGallery.value)
+  next.add(idx)
+  loadedGallery.value = next
+}
+
+function onGalleryImgError(idx: number) {
+  // 失败时换成占位图标+文案，不再静默留一个空盒子
+  const next = new Set(galleryFailed.value)
+  next.add(idx)
+  galleryFailed.value = next
+}
+
 const userStore = useUserStore()
 const isFollowed = ref(false)
 
@@ -380,11 +454,6 @@ function goBack() {
 function previewFeaturedWork(work: Work, index = 0) {
   previewImages(work.images, index)
 }
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function onGalleryImgError(_idx: number) {
-  // Silently ignore broken gallery images
-}
 </script>
 
 <style lang="scss" scoped>
@@ -418,11 +487,94 @@ function onGalleryImgError(_idx: number) {
 }
 
 .event-cover {
+  position: relative;
   width: 100%;
   height: 100%;
-  background-size: cover;
-  background-position: center top;
-  background-color: $dark-bg-secondary;
+  overflow: hidden;
+  // 中性占位底：$surface-2(#1d202f)。原来这里是 $dark-bg-secondary(同色)，
+  // 但弱网下整块 480rpx 接近黑会被读成「海报全黑」；骨架层再叠一层浅灰解决。
+  background-color: $surface-2;
+}
+
+// 图片绝对定位铺满，三态高度恒为 480rpx
+.cover-img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: $surface-2;
+  opacity: 0;
+  transition: opacity $motion-base;
+}
+
+.event-cover.is-loaded .cover-img {
+  opacity: 1;
+}
+
+// 加载中骨架：低对比灰 + shimmer。纯白 0.04~0.08 叠在 $surface-2 上，
+// 沿用 HomeSkeleton.vue 取值（设计系统无骨架专用 token），不新造硬编码色。
+.cover-skeleton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-color: $surface-2;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+  // shimmer 写在基础规则上：小程序 wxss 不支持 prefers-reduced-motion，
+  // 放进媒体查询里动画永远不跑。H5 由下方 reduce 分支关闭。
+  animation: cover-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes cover-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+// H5：系统开启「减少动效」时停掉 shimmer（骨架静态仍可见）。小程序端忽略此查询。
+@media (prefers-reduced-motion: reduce) {
+  .cover-skeleton {
+    animation: none;
+  }
+}
+
+// 兜底：居中图标 + 文案，压在 .cover-overlay/z-index 之下但可见
+.cover-fallback {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $s-xs;
+  background: $surface-2;
+}
+
+.cover-fallback-icon {
+  font-size: $t-3xl;
+  line-height: 1;
+  color: $text-3;
+}
+
+.cover-fallback-text {
+  font-size: $font-size-sm;
+  color: $text-3;
 }
 
 .cover-overlay {
@@ -578,14 +730,53 @@ function onGalleryImgError(_idx: number) {
 }
 
 .gallery-item {
+  position: relative;
   width: 100%;
   height: 100%;
-  background: $dark-bg-secondary;
+  // 中性占位而非近黑（$surface-2 = #1d202f）
+  background: $surface-2;
 }
 
 .gallery-img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
+  background-color: $surface-2;
+  opacity: 0;
+  transition: opacity $motion-base;
+}
+
+.gallery-item.is-loaded .gallery-img {
+  opacity: 1;
+}
+
+.gallery-fallback {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $s-xs;
+  background: $surface-2;
+}
+
+.gallery-fallback-icon {
+  font-size: $t-2xl;
+  line-height: 1;
+  color: $text-3;
+}
+
+.gallery-fallback-text {
+  font-size: $font-size-xs;
+  color: $text-3;
 }
 
 // Countdown

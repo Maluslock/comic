@@ -457,8 +457,22 @@ function previewFeaturedWork(work: Work, index = 0) {
 </script>
 
 <style lang="scss" scoped>
+/*
+ * 与首页同构的修复：固定定位 + 内部唯一滚动容器。
+ * 旧写法 min-height:100vh + .scroll-content{height:100vh} + 内联 padding-top:statusBarHeight
+ * 在 content-box 下会让文档高度溢出视口（视口 844 而 docH 941），window 可被滚 97px，
+ * 而状态栏与顶部返回栏是 fixed 不位移 → 滑到底再回顶时它们被顶出屏幕。
+ */
 .page {
-  min-height: 100vh;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: $dark-bg-primary;
 }
 
@@ -475,8 +489,15 @@ function previewFeaturedWork(work: Work, index = 0) {
   background: $dark-bg-primary;
 }
 
+/*
+ * 唯一滚动容器：吃掉父容器剩余高度（flex 子项必须显式 min-height:0，否则内容撑破父容器）；
+ * box-sizing:border-box 让内联的 padding-top（状态栏高度）算进自身高度，不再产生溢出。
+ */
 .scroll-content {
-  height: 100vh;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 // Cover

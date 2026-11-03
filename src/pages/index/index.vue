@@ -567,8 +567,28 @@ function onQuickNav(_url: string) {}
 </script>
 
 <style lang="scss" scoped>
+/*
+ * 页面根用「固定定位 + 内部唯一滚动容器」锁死高度。
+ *
+ * 旧写法 min-height:100vh + .scroll-content{height:100vh} + 内联 padding-top:statusBarHeight
+ * 会让文档实际高度溢出视口：content-box 下 100vh 不含 padding，再加 47px 状态栏 padding，
+ * 又叠加 uni-tabbar 撑出的 50px，document.documentElement.scrollHeight 变成 941（视口 844），
+ * 于是**整个 window 能被滚 97px**。而 .status-bar 是 position:fixed 不跟随位移，
+ * 滚到底再回顶时顶部导航被顶出视口、压在状态栏下面 —— 用户报的「搜索框和『全部』不见了」。
+ *
+ * 改成 position:fixed;inset:0 后页面自成一块视口大小的盒子，window 不再参与滚动，
+ * 位移全部收敛到内部 scroll-view，fixed 的状态栏与顶部导航永远贴在原位。
+ */
 .page {
-  min-height: 100vh;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: $surface-page;
 }
 
@@ -589,8 +609,17 @@ function onQuickNav(_url: string) {}
   backdrop-filter: blur(20px);
 }
 
+/*
+ * 唯一滚动容器：吃掉父容器剩余高度。
+ * 必须显式写 min-height:0 —— flex 子项默认 min-height:auto，内容一多就把父容器顶破，
+ * 页面又会被撑出视口。box-sizing:border-box 让内联的 padding-top（状态栏高度）算进自身高度，
+ * 否则 100vh + padding 又会溢出（见 .page 注释）。
+ */
 .scroll-content {
-  height: 100vh;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 // ===== Hero Stage =====

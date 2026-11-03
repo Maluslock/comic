@@ -57,6 +57,7 @@ import { apiGet } from '@/api/client'
 import { markNotificationRead } from '@/api/index'
 import { updateMessageBadge } from '@/utils/badge'
 import { useUserStore } from '@/stores/user'
+import { resolveImage } from '@/utils/mappers'
 
 const userStore = useUserStore()
 
@@ -122,7 +123,7 @@ async function loadSessions() {
       id: String(s.id),
       userId: String(s.peerId),
       userName: s.peerName,
-      userAvatar: s.peerAvatar,
+      userAvatar: resolveImage(s.peerAvatar || '') || '/static/img/avatar-user.svg',
       lastMessage: s.lastMessage,
       unreadCount: s.unreadCount || 0,
       updatedAt: formatSessionTime(s.lastTime)

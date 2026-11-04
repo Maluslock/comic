@@ -63,7 +63,7 @@
           >
             <view class="service-head">
               <text class="service-name">{{ s.name }}</text>
-              <text class="price-tag" :class="priceClass(s.price)">{{ renderPrice(s.price) }}</text>
+              <text class="price-tag" :class="priceClass(s.price)">{{ renderPrice(s) }}</text>
             </view>
             <view class="service-meta">
               <text class="meta-item">时长 {{ formatDuration(s.duration) }}</text>
@@ -107,7 +107,20 @@
         </view>
 
         <view class="field">
-          <text class="field-label">价格（元）</text>
+          <text class="field-label">计价方式</text>
+          <view class="mode-row">
+            <view
+              v-for="m in priceUnitModes"
+              :key="m.value"
+              class="mode-item"
+              :class="{ active: form.priceUnit === m.value }"
+              @click="form.priceUnit = m.value"
+            >{{ m.label }}</view>
+          </view>
+        </view>
+
+        <view class="field">
+          <text class="field-label">{{ priceLabel }}</text>
           <input
             v-model="form.price"
             class="field-input"
@@ -117,8 +130,23 @@
             placeholder-style="color: #64748b"
             @input="priceError = ''"
           />
-          <text class="field-hint">留空 = 面议，填 0 = 互勉，填正数 = 固定价格</text>
+          <text class="field-hint">{{ priceHint }}</text>
           <text v-if="priceError" class="field-error">{{ priceError }}</text>
+        </view>
+
+        <view v-if="form.priceUnit === 'per_photo'" class="field">
+          <text class="field-label">包含张数（可不填）</text>
+          <input
+            v-model="form.photoCount"
+            class="field-input"
+            :class="{ 'has-error': photoCountError }"
+            type="number"
+            placeholder="留空 = 按需议定"
+            placeholder-style="color: #64748b"
+            @input="photoCountError = ''"
+          />
+          <text class="field-hint">一场拍摄包含/起拍的张数；留空 = 按需议定</text>
+          <text v-if="photoCountError" class="field-error">{{ photoCountError }}</text>
         </view>
 
         <view class="field">
@@ -176,7 +204,7 @@
           <view v-for="t in templates" :key="t.id" class="tpl-row">
             <view class="tpl-row-main">
               <text class="tpl-row-name">{{ t.name }}</text>
-              <text class="tpl-row-meta">{{ renderPrice(t.price) }} · {{ formatDuration(t.duration) }}</text>
+              <text class="tpl-row-meta">{{ renderPrice(t) }} · {{ formatDuration(t.duration) }}</text>
             </view>
             <view class="tpl-row-fill" @click="fillFromTemplate(t)">填入表单</view>
           </view>
@@ -210,6 +238,8 @@ import {
 } from '@/api/index'
 import { ApiError } from '@/api/client'
 import { formatDuration } from '@/utils/duration'
+import { describeServicePrice, type ServicePrice } from '@/utils/price'
+import type { PriceUnit } from '@/types'
 import { useUserStore } from '@/stores/user'
 
 const { statusBarHeight } = useStatusBar()
@@ -240,9 +270,52 @@ const tplLoading = ref(false)
 const draftIds = ref<number[]>([])
 const draftNotice = ref('')
 
-const form = reactive({ name: '', price: '', duration: '60', description: '' })
+const form = reactive({
+  name: '',
+  price: '',
+  duration: '60',
+  description: '',
+  priceUnit: 'fixed' as PriceUnit,
+  photoCount: ''
+})
 const priceError = ref('')
 const durationError = ref('')
+const photoCountError = ref('')
+
+/** 计价方式分段：与后端 price_unit 常量一一对应 */
+const priceUnitModes: Array<{ value: PriceUnit; label: string }> = [
+  { value: 'fixed', label: '整套价' },
+  { value: 'per_photo', label: '按张' },
+  { value: 'per_hour', label: '按小时' },
+  { value: 'per_day', label: '按天' }
+]
+
+const priceLabel = computed(() => {
+  switch (form.priceUnit) {
+    case 'per_photo':
+      return '单价（元/张）'
+    case 'per_hour':
+      return '单价（元/小时）'
+    case 'per_day':
+      return '单价（元/天）'
+    default:
+      return '价格（元）'
+  }
+})
+
+const priceHint = computed(() => {
+  switch (form.priceUnit) {
+    case 'per_photo':
+      return '单张价格，例：填 10 = ¥10/张；按张计价必填正数'
+    case 'per_hour':
+      return '留空 = 面议，填 0 = 互勉，填正数 = 每小时价格'
+    case 'per_day':
+      return '留空 = 面议，填 0 = 互勉，填正数 = 每天价格'
+    default:
+      return '留空 = 面议，填 0 = 互勉，填正数 = 固定价格'
+  }
+})
+
 
 const canSubmit = computed(() => form.name.trim() !== '' && !submitting.value)
 
@@ -406,10 +479,8 @@ async function loadServices() {
   if (ok) syncDraftState()
 }
 
-function renderPrice(price: number | null): string {
-  if (price === null || price === undefined) return '面议'
-  if (price === 0) return '互勉'
-  return `¥${price}`
+function renderPrice(x: ServicePrice): string {
+  return describeServicePrice(x)
 }
 
 function priceClass(price: number | null): string {
@@ -418,11 +489,11 @@ function priceClass(price: number | null): string {
   return 'is-fixed'
 }
 
-/** 上架确认里用来描述「按什么价格成交」 */
-function dealText(price: number | null): string {
-  if (price === null || price === undefined) return '面议（coser 可发起预约后议价）'
-  if (price === 0) return '互勉（0 元）'
-  return `¥${price}`
+/** 上架确认里用来描述「按什么价格成交」（带计价单位后缀） */
+function dealText(s: MyService): string {
+  if (s.price === null || s.price === undefined) return '面议（coser 可发起预约后议价）'
+  if (s.price === 0) return '互勉（0 元）'
+  return describeServicePrice(s)
 }
 
 function isActive(s: MyService): boolean {
@@ -460,6 +531,8 @@ async function toggleActive(s: MyService) {
       price: s.price,
       description: s.description || '',
       duration: s.duration,
+      priceUnit: s.priceUnit,
+      photoCount: s.photoCount ?? null,
       isActive: next
     })
     s.isActive = next
@@ -488,7 +561,7 @@ function confirmPublish(s: MyService): Promise<boolean> {
   return new Promise((resolve) => {
     uni.showModal({
       title: `上架「${s.name}」`,
-      content: `上架后 coser 会在你的主页看到该套餐，并可直接按「${dealText(s.price)}」预约成交。确认价格无误再上架？`,
+      content: `上架后 coser 会在你的主页看到该套餐，并可直接按「${dealText(s)}」预约成交。确认价格无误再上架？`,
       confirmText: '确认上架',
       cancelText: '再想想',
       success: (res) => resolve(!!res.confirm),
@@ -506,8 +579,11 @@ function resetForm() {
   form.price = ''
   form.duration = '60'
   form.description = ''
+  form.priceUnit = 'fixed'
+  form.photoCount = ''
   priceError.value = ''
   durationError.value = ''
+  photoCountError.value = ''
 }
 
 function openForm() {
@@ -522,8 +598,11 @@ function openEdit(s: MyService) {
   form.price = s.price === null || s.price === undefined ? '' : String(s.price)
   form.duration = s.duration > 0 ? String(s.duration) : ''
   form.description = s.description || ''
+  form.priceUnit = s.priceUnit || 'fixed'
+  form.photoCount = s.photoCount == null ? '' : String(s.photoCount)
   priceError.value = ''
   durationError.value = ''
+  photoCountError.value = ''
   mode.value = 'form'
 }
 
@@ -537,6 +616,15 @@ function normalizedPrice(): number | null | undefined {
   if (raw === '') return null
   const n = Number(raw)
   if (!isFinite(n) || n < 0) return undefined
+  return Math.round(n)
+}
+
+/** 包含张数：空 = 按需议定（null）；正整数 = 具体张数；非法 = undefined（报错） */
+function normalizedPhotoCount(): number | null | undefined {
+  const raw = form.photoCount.trim()
+  if (raw === '') return null
+  const n = Number(raw)
+  if (!isFinite(n) || n <= 0) return undefined
   return Math.round(n)
 }
 
@@ -557,6 +645,23 @@ async function submit() {
     return
   }
   priceError.value = ''
+  // 按张计价：单价必须为正数（后端 CHECK: price_unit <> 'per_photo' OR price > 0）
+  if (form.priceUnit === 'per_photo' && !(price !== null && price > 0)) {
+    priceError.value = '按张计价的单价必须为正数'
+    uni.showToast({ title: '按张计价的单价必须为正数', icon: 'none' })
+    return
+  }
+  // 包含张数：按张时可空（= 按需议定），填了必须是正整数；其它计价方式一律不传
+  let photoCount: number | null = null
+  if (form.priceUnit === 'per_photo') {
+    const pc = normalizedPhotoCount()
+    if (pc === undefined) {
+      photoCountError.value = '张数需为正整数，或留空按需议定'
+      uni.showToast({ title: '张数需为正整数，或留空', icon: 'none' })
+      return
+    }
+    photoCount = pc
+  }
   const duration = normalizedDuration()
   if (duration === undefined) {
     durationError.value = '时长需为大于 0 的分钟数'
@@ -574,7 +679,9 @@ async function submit() {
       name: form.name.trim(),
       price,
       description: form.description.trim(),
-      duration
+      duration,
+      priceUnit: form.priceUnit,
+      photoCount
     }
     if (asDraft) payload.isActive = false
     if (id) {
@@ -650,8 +757,11 @@ function fillFromTemplate(t: ServiceTemplate) {
   form.price = t.price === null || t.price === undefined ? '' : String(t.price)
   form.duration = t.duration > 0 ? String(t.duration) : ''
   form.description = t.description || ''
+  form.priceUnit = 'fixed'
+  form.photoCount = ''
   priceError.value = ''
   durationError.value = ''
+  photoCountError.value = ''
   tplPanelOpen.value = false
   mode.value = 'form'
   uni.showToast({ title: '已填入表单，还没保存', icon: 'none' })
@@ -696,6 +806,8 @@ async function runDraftPrefill(list: ServiceTemplate[]) {
           price: t.price === null || t.price === undefined ? null : t.price,
           description: t.description || '',
           duration: t.duration || 0,
+          priceUnit: 'fixed',
+          photoCount: null,
           // 关键：预填只建草稿，落库即 is_active=false，GetBookableServicePhotographerID
           // 查不到这一行，所以预填完不可能被 coser 下单。
           isActive: false
@@ -909,6 +1021,11 @@ function goBack() {
 .field-input { height: 88rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; color: $dark-text-primary; box-sizing: border-box; }
 .field-textarea { width: 100%; height: 200rpx; background: $dark-bg-secondary; border: 1rpx solid $dark-border; border-radius: 16rpx; padding: 20rpx 24rpx; font-size: 28rpx; color: $dark-text-primary; box-sizing: border-box; }
 .field-hint { display: block; font-size: 24rpx; color: $dark-text-secondary; margin-top: 12rpx; }
+
+.mode-row { display: flex; gap: 16rpx; }
+.mode-item { flex: 1; text-align: center; padding: 20rpx 0; background: $dark-bg-secondary; border: 2rpx solid $dark-border; border-radius: 16rpx; font-size: 28rpx; color: $dark-text-secondary;
+  &.active { border-color: $neon-purple; color: $neon-purple; background: $neon-purple-dim; box-shadow: 0 0 12rpx $neon-purple-glow; font-weight: 500; }
+}
 .field-error { display: block; font-size: 24rpx; color: $error-color; margin-top: 12rpx; }
 .field-input.has-error { border-color: rgba(239, 68, 68, 0.6); }
 

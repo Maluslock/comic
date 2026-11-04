@@ -116,3 +116,20 @@ func (r *UserRepo) GetOpenID(ctx context.Context, id int64) (string, error) {
 	}
 	return *openid, nil
 }
+
+// UpdateNickname 只写 users.name（账号昵称），**永远不碰 photographers 表**。
+//
+// 口径（单向跟随，方向恒为 photographers → users）：
+//   - photographers.name 是「对外展示的摄影师艺名」，只有两个入口能改——
+//     摄影师本人在 PUT /api/v1/photographers/profile 里改、或 Activate 首次建档；
+//     账号昵称没有资格覆盖艺名（否则任何人改自己昵称就能"改名"某个摄影师）。
+//   - 本方法用于反向的那一半：摄影师主动改艺名 / 首次激活时，把同一个名字写进
+//     users.name，让「我的」页和列表里显示一致。
+//   - name 为空表示「本次没填」，直接返回不改库（避免清空昵称）。
+func (r *UserRepo) UpdateNickname(ctx context.Context, userID int64, name string) error {
+	if userID == 0 || name == "" {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, "UPDATE users SET name = $2 WHERE id = $1", userID, name)
+	return err
+}

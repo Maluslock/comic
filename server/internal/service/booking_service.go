@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/Maluslock/comic/server/internal/repository"
@@ -19,6 +20,10 @@ type CreateBookingRequest struct {
 	Date           string `json:"date" binding:"required"`
 	Time           string `json:"time" binding:"required"`
 	Remarks        string `json:"remarks"`
+	// PhotoCount 只在套餐是按张计价（price_unit='per_photo'）时有意义：下单人想要的
+	// 张数。不填则取套餐的起拍张数（services.photo_count），套餐也没填则按 1 张；
+	// 无论哪种路径，落库的 photo_count 快照都有确定值，不存在「张数待议定」的订单。
+	PhotoCount *int32 `json:"photoCount"`
 }
 
 type BookingItem struct {
@@ -50,6 +55,14 @@ type BookingItem struct {
 	// ServiceDuration is the下单时冻结的时长快照（分钟）。指针对待：快照列可能为空
 	// （000027 之前的旧行），此时前端应显示「—」而不是 0 分钟。
 	ServiceDuration *int32 `json:"serviceDuration"`
+	// PhotoCount / PriceUnit 是下单时冻结的计价单位快照。金额（TotalPrice）已经算好
+	// 落库，这两列只是让老订单在摄影师改价之后仍然读得懂「当时是按张 10 元 × 3 张」。
+	PhotoCount *int32 `json:"photoCount"`
+	PriceUnit  string `json:"priceUnit"`
+	// PricePending 是历史遗留字段，保留只为兼容还读它的老前端：2026-11 起按张订单
+	// 必定带着张数快照落库（见 deriveBookingPricing），因此它恒为 false。
+	// 新代码不要再依赖它判断「金额是否只是占位」——金额就是成交价。
+	PricePending bool `json:"pricePending"`
 }
 
 type BookingItemWithCoser struct {
@@ -184,10 +197,10 @@ const (
 
 // dispute type constants.
 const (
-	disputeTypeNoShow      = "no_show"
+	disputeTypeNoShow       = "no_show"
 	disputeTypeNotDelivered = "not_delivered"
-	disputeTypeQuality     = "quality"
-	disputeTypeOther       = "other"
+	disputeTypeQuality      = "quality"
+	disputeTypeOther        = "other"
 )
 
 // isPastSlot 判断请求的档期是否已经过去，按**服务器本地时区**判断（唯一能自证的时钟）。
@@ -212,6 +225,120 @@ func parseClock(s string) (int, int, bool) {
 	return 0, 0, false
 }
 
+// priceUnit* 与 services.price_unit 的 CHECK 约束取值一一对应。
+const (
+	priceUnitFixed    = "fixed"
+	priceUnitPerPhoto = "per_photo"
+	priceUnitPerHour  = "per_hour"
+	priceUnitPerDay   = "per_day"
+)
+
+// bookingPricing 是下单时从套餐推导出的全部定价事实。抽成结构体 + 纯函数，是为了让
+// 「按张计价怎么算总价」这条最容易算错的规则能被单测直接覆盖（不需要数据库）。
+type bookingPricing struct {
+	totalPrice      int32
+	priceMode       string
+	priceStatus     string
+	serviceName     *string
+	serviceDuration *int32
+	photoCount      *int32
+	priceUnit       string
+	// selectionErr 表示下单请求里的张数本身不合法（负数 / 0 张）。它不是套餐问题，
+	// 而是参数问题，所以用独立的错误，让 handler 回 400 而不是 404。
+	selectionErr error
+}
+
+// ErrInvalidPhotoSelection 表示「按张计价的张数」不合法（0 张、负数、或乘出溢出）。
+// 这是请求参数问题而不是套餐问题，handler 必须回 400，不能混进 404/409。
+var ErrInvalidPhotoSelection = errors.New("invalid photo count")
+
+// deriveBookingPricing 把「套餐 + 下单人选的张数」算成落库的定价字段。
+//
+// 规则：
+//   - price IS NULL → 面议：total_price 记 0，price_status=awaiting_quote，等报价。
+//   - price = 0     → 互勉：total_price 记 0。
+//   - price > 0 且 price_unit='per_photo' → total_price = 单价 × 张数，其中张数：
+//     1) 下单带了张数 → 用它；但不得少于套餐的起拍张数（services.photo_count），
+//     少了直接判参数错误（摄影师按 5 张起拍，下 1 张的单价没有意义）。
+//     2) 没带张数、套餐有起拍张数 → 用它。这是「起拍/包含张数」真正生效的地方，
+//     此前这里硬编码 1 张，导致表单里填的「包含张数」只展示不生效。
+//     3) 没带张数、套餐也没填 → 按 1 张（单张起拍）。
+//     三条路径都会把张数写进 photoCount 快照：从 2026-11 起，按张订单必定有张数，
+//     不再有「张数待议定」的假成交单（那种单在列表里显示 ¥10，双方都没有补救入口）。
+//     张数 <= 0 视为参数错误（0 张的订单无论多少钱都没有意义）。
+//   - 其它单位（fixed / per_hour / per_day）→ total_price = 单价，photoCount 保持 nil。
+//     时价与日价在这一步没有乘数（时长/天数是摄影师交付时确认的），这是刻意保持的
+//     历史行为：不要在预约环节凭空乘一个 duration，那会把「4 小时套餐 299」算成 1196。
+func deriveBookingPricing(svc repository.Service, requestedPhotoCount *int32) bookingPricing {
+	unit := svc.PriceUnit
+	if unit == "" {
+		// 000041 之前的历史行在 Go 侧读到零值只可能是调用方漏 SELECT 该列；
+		// 兜底成 fixed，与数据库默认值一致，不影响金额。
+		unit = priceUnitFixed
+	}
+
+	p := bookingPricing{priceMode: "fixed", priceStatus: "agreed", priceUnit: unit}
+	if svc.Price != nil {
+		p.totalPrice = *svc.Price
+	}
+	duration := svc.Duration
+	p.serviceDuration = &duration
+	name := svc.Name
+	p.serviceName = &name
+
+	switch {
+	case svc.Price == nil:
+		p.priceMode, p.priceStatus = "negotiable", "awaiting_quote"
+		return p
+	case *svc.Price == 0:
+		p.priceMode = "mutual"
+		return p
+	}
+
+	if unit != priceUnitPerPhoto {
+		return p
+	}
+
+	if requestedPhotoCount != nil && *requestedPhotoCount <= 0 {
+		p.selectionErr = ErrInvalidPhotoSelection
+		return p
+	}
+
+	// services.photo_count 是「起拍/包含张数」的下限，不是建议值：下单张数少于它
+	// 直接拒绝，而不是静默按起拍价收费（那会让用户以为只买 1 张却被收 5 张的钱）。
+	minPhotos := int32(0)
+	if svc.PhotoCount != nil && *svc.PhotoCount > 0 {
+		minPhotos = *svc.PhotoCount
+	}
+
+	photos := minPhotos
+	switch {
+	case requestedPhotoCount != nil:
+		photos = *requestedPhotoCount
+		if photos < minPhotos {
+			// 文案带上起拍张数，前端/日志都能直接看懂差在哪；errors.Is 仍然认
+			// ErrInvalidPhotoSelection，所以 handler 侧不用改判定逻辑。
+			p.selectionErr = fmt.Errorf("%w: 拍摄张数不能少于套餐起拍张数 %d 张", ErrInvalidPhotoSelection, minPhotos)
+			return p
+		}
+	case minPhotos > 0:
+		photos = minPhotos
+	default:
+		photos = 1
+	}
+
+	// int32 乘法溢出会变成一个负数总价，那比拒绝下单危险得多。
+	if *svc.Price > 0 && photos > math.MaxInt32 / *svc.Price {
+		p.selectionErr = ErrInvalidPhotoSelection
+		return p
+	}
+	p.totalPrice = *svc.Price * photos
+	// 快照恒定写入：三种路径（显式张数 / 起拍张数 / 单张）都有确定值。
+	v := photos
+	p.photoCount = &v
+	return p
+}
+
 func bookingToItem(b repository.Booking) *BookingItem {
 	item := &BookingItem{
 		ID:               b.ID,
@@ -233,6 +360,12 @@ func bookingToItem(b repository.Booking) *BookingItem {
 		CancelledBy:      b.CancelledBy,
 		ServiceName:      derefString(b.ServiceName),
 		ServiceDuration:  b.ServiceDuration,
+		PhotoCount:       b.PhotoCount,
+		PriceUnit:        b.PriceUnit,
+		// 恒 false：按张订单落库时必定写了 photo_count（deriveBookingPricing 三条
+		// 路径全覆盖），历史遗留的空张数订单也已随语义收口不再产生。字段本身保留
+		// 只为兼容老前端读取，不再参与任何判断。
+		PricePending: false,
 	}
 	if b.CheckinAt != nil {
 		s := b.CheckinAt.Format("2006-01-02T15:04:05Z07:00")
@@ -260,20 +393,20 @@ const (
 type orderEventType string
 
 const (
-	eventConfirmed      orderEventType = "confirmed"
-	eventCheckin                       = "checkin"
-	eventDeliver                       = "deliver"
-	eventAccept                        = "accept"
-	eventAutoAccept                    = "auto_accept"
-	eventCompleteLegacy                = "complete_legacy"
-	eventCancel                        = "cancel"
-	eventAutoCancel                    = "auto_cancel"
-	eventNoShow                        = "noshow"
-	eventDisputeOpen                   = "dispute_open"
-	eventDisputeRespond                = "dispute_respond"
-	eventDisputeEscalate               = "dispute_escalate"
-	eventDisputeResolve                = "dispute_resolve"
-	eventCreditDelta                   = "credit_delta"
+	eventConfirmed       orderEventType = "confirmed"
+	eventCheckin                        = "checkin"
+	eventDeliver                        = "deliver"
+	eventAccept                         = "accept"
+	eventAutoAccept                     = "auto_accept"
+	eventCompleteLegacy                 = "complete_legacy"
+	eventCancel                         = "cancel"
+	eventAutoCancel                     = "auto_cancel"
+	eventNoShow                         = "noshow"
+	eventDisputeOpen                    = "dispute_open"
+	eventDisputeRespond                 = "dispute_respond"
+	eventDisputeEscalate                = "dispute_escalate"
+	eventDisputeResolve                 = "dispute_resolve"
+	eventCreditDelta                    = "credit_delta"
 )
 
 func (s *BookingService) notify(ctx context.Context, userID int32, typ, title, content string, bookingID int64) {
@@ -394,14 +527,6 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		return nil, ErrInvalidReference
 	}
 
-	// 按套餐价格推导定价模式，并冻结名称/时长快照。
-	// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
-	// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
-	var totalPrice int32
-	priceMode := "fixed"
-	priceStatus := "agreed"
-	var snapName *string
-	var snapDuration *int32
 	svc, err := s.queries.GetServiceById(ctx, serviceID64)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -409,17 +534,13 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		}
 		return nil, err
 	}
-	if svc.Price != nil {
-		totalPrice = *svc.Price
-	}
-	snapDuration = &svc.Duration
-	name := svc.Name
-	snapName = &name
-	switch {
-	case svc.Price == nil:
-		priceMode, priceStatus = "negotiable", "awaiting_quote"
-	case *svc.Price == 0:
-		priceMode = "mutual"
+
+	// 按套餐价格推导定价模式，并冻结名称/时长/计价单位快照。
+	// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
+	// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
+	pricing := deriveBookingPricing(svc, req.PhotoCount)
+	if pricing.selectionErr != nil {
+		return nil, pricing.selectionErr
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{
@@ -429,12 +550,14 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		Date:            date,
 		Time:            req.Time,
 		Status:          "pending",
-		TotalPrice:      totalPrice,
+		TotalPrice:      pricing.totalPrice,
 		Remarks:         remarks,
-		PriceMode:       priceMode,
-		PriceStatus:     priceStatus,
-		ServiceName:     snapName,
-		ServiceDuration: snapDuration,
+		PriceMode:       pricing.priceMode,
+		PriceStatus:     pricing.priceStatus,
+		ServiceName:     pricing.serviceName,
+		ServiceDuration: pricing.serviceDuration,
+		PhotoCount:      pricing.photoCount,
+		PriceUnit:       pricing.priceUnit,
 	})
 	if err != nil {
 		// 唯一约束 uniq_bookings_active_slot 是并发下的最终防线：两个请求可能都通过了上面的
@@ -457,7 +580,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		buildData(s.tmpl.NewFields, []string{
 			dateTimeText(item.Date, item.Time),
 			item.ServiceName,
-			priceText(item.TotalPrice, item.PriceMode),
+			orderPriceText(item.TotalPrice, item.PriceMode, item.PriceUnit, item.PhotoCount),
 			fmt.Sprintf("#%d %s", item.ID, item.Remarks),
 		}))
 
@@ -677,8 +800,6 @@ const (
 	actorSystem       = "system"
 )
 
-
-
 // Credit score constants.
 const (
 	creditReasonNoShow          = "photographer_no_show"
@@ -847,7 +968,6 @@ func (s *BookingService) AcceptDelivery(ctx context.Context, bookingID int64, ac
 	s.applyCreditDelta(ctx, actorUserID, 2, creditReasonOrderComplete, strPtr("booking"), &bookingID, &bookingID, "订单履约完成")
 	return bookingToItem(updated), nil
 }
-
 
 // OpenDispute starts an escrow dispute for a confirmed booking.
 func (s *BookingService) OpenDispute(ctx context.Context, bookingID int64, actorUserID int64, actorRole, disputeType, reason string) (*repository.Dispute, error) {

@@ -4,7 +4,7 @@
       <view class="user-card" :class="{ guest: !isLoggedIn }" @click="goLogin">
         <image :src="displayAvatar" class="avatar" mode="aspectFill" @error="avatarBroken = true" />
         <view class="user-info">
-          <text class="user-name">{{ displayName }}</text>
+          <text class="user-name" :class="{ placeholder: isPlaceholderName }" @click.stop="onNameClick">{{ displayName }}</text>
           <view v-if="isLoggedIn" class="user-role">
             <text class="role-tag" :class="isPhotographer ? 'photographer' : 'coser'">
               {{ isPhotographer ? '摄影师' : 'Coser' }}
@@ -148,6 +148,7 @@ import { getMyPhotographerProfile, getMyCredit } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { getApiBase, setApiBase, resetApiBase } from '@/utils/apiBase'
 import { creditLevelText as levelTextOf, creditTone as toneOf, frozenHint } from '@/utils/credit'
+import { isPlaceholderName as isPlaceholderNameValue } from '@/utils/placeholder-name'
 import type { CreditSummary } from '@/types'
 
 const userStore = useUserStore()
@@ -155,7 +156,16 @@ const userStore = useUserStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const user = computed(() => userStore.user)
 
-const displayName = computed(() => user.value?.name ?? '点击登录')
+// 占位名（空 /「微信用户」/「11」这类纯数字 /「摄影师15」兜底名）不当真名展示：
+// 判定直接复用 isPlaceholderName，与后端 isPlaceholderName() 同源，避免两边漂移。
+const isPlaceholderName = computed(() => {
+  if (!isLoggedIn.value) return false
+  return isPlaceholderNameValue(user.value?.name)
+})
+const displayName = computed(() => {
+  if (!isLoggedIn.value) return '点击登录'
+  return isPlaceholderName.value ? '点击完善昵称' : user.value?.name || '点击完善昵称'
+})
 const avatarBroken = ref(false)
 const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
 const displayAvatar = computed(() => (avatarBroken.value ? DEFAULT_AVATAR : user.value?.avatar || DEFAULT_AVATAR))
@@ -253,6 +263,15 @@ function goEdit() {
     return
   }
   uni.navigateTo({ url: '/pages/profile/edit', animationType: 'none' })
+}
+
+function onNameClick() {
+  if (!isLoggedIn.value) {
+    goLogin()
+    return
+  }
+  // 占位名（空/「微信用户」）点击直达资料编辑补昵称
+  if (isPlaceholderName.value) goEdit()
 }
 
 function goActivate() {
@@ -418,6 +437,12 @@ function onVersionLongPress() {
   font-size: $font-size-xl;
   font-weight: 600;
   color: $dark-text-primary;
+
+  // 占位名「点击完善昵称」：霓虹青提示可点击去补昵称
+  &.placeholder {
+    color: $neon-cyan;
+    text-decoration: underline;
+  }
 }
 
 .user-role {

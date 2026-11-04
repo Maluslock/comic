@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -47,6 +48,13 @@ func (h *BookingHandler) Create(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrForbidden) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "cannot book this photographer"})
+			return
+		}
+		if errors.Is(err, service.ErrInvalidPhotoSelection) {
+			// 透出 service 层的具体原因（「拍摄张数不能少于套餐起拍张数 N 张」），
+			// 用户才知道该填几；此前写死 "photoCount must be > 0"，对「填得比起拍
+			// 张数少」这条新分支是误导性提示。
+			c.JSON(http.StatusBadRequest, gin.H{"error": photoSelectionMessage(err)})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -301,4 +309,22 @@ func (h *BookingHandler) mapNodeErr(c *gin.Context, err error) {
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 	}
+}
+
+// photoSelectionMessage 把 service 层包了 %w 的「张数不合法」错误还原成人话。
+// ErrInvalidPhotoSelection 有两种成因（张数 <= 0、张数少于套餐起拍张数），
+// service 只用 fmt.Errorf("%w: <原因>") 追加细节，哨兵文本 "invalid photo count"
+// 不该直接吐给用户，故剥掉前缀只留细节；没有细节时回落到一句通用提示。
+func photoSelectionMessage(err error) string {
+	const sentinel = "invalid photo count"
+	msg := strings.TrimSpace(err.Error())
+	if rest, ok := strings.CutPrefix(msg, sentinel); ok {
+		if detail := strings.TrimSpace(strings.TrimPrefix(rest, ":")); detail != "" {
+			return detail
+		}
+	}
+	if msg == sentinel {
+		return "photoCount must be > 0"
+	}
+	return msg
 }

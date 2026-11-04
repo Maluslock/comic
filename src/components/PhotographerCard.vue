@@ -10,7 +10,11 @@
     <view v-else class="avatar avatar-fallback"><text class="avatar-initial">{{ initial }}</text></view>
     <view class="info">
       <view class="header">
-        <text class="name">{{ photographer.name }}</text>
+        <view class="name-row">
+          <text class="name">{{ photographer.name }}</text>
+          <!-- 「我」标：列表里多张卡长得一样，用户认不出哪条是自己的档案 -->
+          <text v-if="isSelf" class="self-badge">我</text>
+        </view>
         <view class="rating">
           <template v-if="hasRating">
             <text class="star">★</text>
@@ -48,6 +52,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Photographer } from '@/types'
+import { useUserStore } from '@/stores/user'
 import { describePrice } from '@/utils/price'
 import MPriceTag from '@/components/MPriceTag.vue'
 import MTag from '@/components/MTag.vue'
@@ -72,6 +77,16 @@ const hasRating = computed(() => (props.photographer.reviewCount ?? 0) > 0)
 
 // 价格取最低可成交价；接口没返回汇总时 describePrice 给空串，这里不渲染。
 const price = computed(() => describePrice(props.photographer))
+
+// 列表里的「这是你自己」标记。必须双重判定：userId 可能是 0 / undefined，
+// 单看 `a === b` 会让两个 undefined 撞成 true，变成所有卡都挂「我」。
+const userStore = useUserStore()
+const isSelf = computed(() => {
+  // User.id 是 string（登录接口回来先转成字符串），photographer.userId 是 number
+  const uid = Number(userStore.user?.id)
+  const pid = props.photographer.userId
+  return Number.isFinite(uid) && uid > 0 && !!pid && pid === uid
+})
 
 function goDetail() {
   uni.navigateTo({
@@ -134,6 +149,15 @@ function goDetail() {
   gap: $s-xs;
 }
 
+/* 名字与「我」标同排：min-width:0 是长名字省略号生效的前提 */
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex: 1;
+  min-width: 0;
+}
+
 .name {
   font-size: $t-xl;
   font-weight: 600;
@@ -142,6 +166,18 @@ function goDetail() {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
+}
+
+/* flex-shrink:0 不能省：否则名字一长就把徽章压成一条线 */
+.self-badge {
+  flex-shrink: 0;
+  padding: 0 8rpx;
+  font-size: 20rpx;
+  line-height: 1.6;
+  color: $brand;
+  border: 1rpx solid $brand;
+  border-radius: 4rpx;
 }
 
 .rating {

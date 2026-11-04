@@ -164,7 +164,7 @@ func main() {
 		router.GET("/api/v1/home", homeH.GetHome)
 
 		// Photographers
-		photographerSvc := service.NewPhotographerService(queries)
+		photographerSvc := service.NewPhotographerService(queries).WithUserNames(userRepo)
 		photographerH := handler.NewPhotographerHandler(photographerSvc, redisCache, bookingSvc)
 		svcH := handler.NewPhotographerServiceHandler(photographerSvc, redisCache)
 		router.GET("/api/v1/photographers/services/mine", middleware.AuthRequired(userRepo), svcH.MyServices)
@@ -254,8 +254,13 @@ func main() {
 				return
 			}
 			resp := gin.H{"id": u.ID, "name": u.Name, "phone": u.Phone, "avatar": u.Avatar, "bio": derefStrPtr(u.Bio)}
+			// photographerName 是「对外展示的摄影师名」，与账号昵称分开展示：
+			// 前端需要它来判断「我已经有摄影师档案了，档案里叫这个名字」，
+			// 否则只能显示账号昵称，用户会以为自己的档案名叫「微信用户」。
+			resp["photographerName"] = ""
 			if profile, err := queries.GetPhotographerByUserID(c.Request.Context(), u.ID); err == nil {
 				resp["photographerId"] = profile.ID
+				resp["photographerName"] = profile.Name
 			}
 			c.JSON(http.StatusOK, resp)
 		})

@@ -64,10 +64,11 @@ type PhotographerItem struct {
 	Tags        []string `json:"tags"`
 
 	// 价格汇总（与摄影师列表一致）；无上架套餐时保持零值 → 前端显示「暂未设置」
-	MinPrice      *int32 `json:"minPrice"`
-	HasFree       bool   `json:"hasFree"`
-	HasNegotiable bool   `json:"hasNegotiable"`
-	ServiceCount  int32  `json:"serviceCount"`
+	MinPrice         *int32 `json:"minPrice"`         // 最低整套价
+	MinPricePerPhoto *int32 `json:"minPricePerPhoto"` // 按张最低单价（量纲不同于 minPrice，必须分开显示）
+	HasFree          bool   `json:"hasFree"`
+	HasNegotiable    bool   `json:"hasNegotiable"`
+	ServiceCount     int32  `json:"serviceCount"`
 
 	// 信用分（可选）：无 credit_scores 行时保持 nil/空，前端据此隐藏标签。
 	CreditScore *int32 `json:"creditScore,omitempty"`
@@ -122,6 +123,7 @@ func (s *HomeService) GetHomeData(ctx context.Context) (*HomeResponse, error) {
 		for i := range photographers {
 			if s, ok := byID[photographers[i].ID]; ok {
 				photographers[i].MinPrice = s.MinPrice
+				photographers[i].MinPricePerPhoto = s.MinPricePerPhoto
 				photographers[i].HasFree = s.HasFree
 				photographers[i].HasNegotiable = s.HasNegotiable
 				photographers[i].ServiceCount = s.ActiveCount

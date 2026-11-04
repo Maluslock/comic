@@ -79,7 +79,7 @@ import { ref, onMounted } from 'vue'
 import { apiGet, apiPost, apiPut, ApiError } from '@/api/client'
 import ListSkeleton from '@/components/ListSkeleton.vue'
 import { useUserStore } from '@/stores/user'
-import type { OrderPriceFields, BookingSubStatus, EscrowBookingFields } from '@/types'
+import type { OrderPriceFields, BookingSubStatus, EscrowBookingFields, PriceUnit } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } from '@/utils/quote'
 import { escrowState, escrowTodoWeight } from '@/utils/escrow'
 import { resolveImage } from '@/utils/mappers'
@@ -168,6 +168,9 @@ async function loadBookings() {
       time: b.time,
       totalPrice: b.totalPrice || 0,
       priceMode: toPriceMode(b.priceMode),
+      // 按张订单要显示「单价 × 张数」，这两个字段漏掉就只剩一个说不清来源的总额。
+      priceUnit: (b.priceUnit || 'fixed') as PriceUnit,
+      photoCount: typeof b.photoCount === 'number' ? b.photoCount : null,
       quotePrice: b.quotePrice ?? null,
       priceStatus: toPriceStatus(b.priceStatus),
       status: b.status || 'pending',
@@ -581,6 +584,9 @@ function goHome() {
   font-size: $font-size-lg;
   font-weight: 600;
   color: $neon-purple;
+  // 按张订单会显示「¥10 × 3张 = ¥30」，比原来的裸总额长；不许被 .order-info 挤成两行。
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .order-footer {

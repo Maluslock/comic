@@ -10,11 +10,11 @@ import (
 // bookingColumns is the canonical SELECT/RETURNING column list for the bookings
 // table. Every query that materializes a Booking must keep this exact order in
 // sync with the Booking struct in models.go.
-const bookingColumns = `id, photographer_id, coser_id, service_id, date, time, status, sub_status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration, checkin_code, checkin_at, delivered_at, accept_deadline, delivery_evidence, cancel_policy, cancelled_by, noshow_party`
+const bookingColumns = `id, photographer_id, coser_id, service_id, date, time, status, sub_status, total_price, remarks, created_at, updated_at, price_mode, quote_price, price_status, service_name, service_duration, checkin_code, checkin_at, delivered_at, accept_deadline, delivery_evidence, cancel_policy, cancelled_by, noshow_party, photo_count, price_unit`
 
 const createBooking = `-- name: CreateBooking :one
-INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks, price_mode, price_status, service_name, service_duration)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO bookings (photographer_id, coser_id, service_id, date, time, status, total_price, remarks, price_mode, price_status, service_name, service_duration, photo_count, price_unit)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING ` + bookingColumns
 
 func scanBooking(row pgxRow) (Booking, error) {
@@ -45,6 +45,8 @@ func scanBooking(row pgxRow) (Booking, error) {
 		&i.CancelPolicy,
 		&i.CancelledBy,
 		&i.NoShowParty,
+		&i.PhotoCount,
+		&i.PriceUnit,
 	)
 	return i, err
 }
@@ -62,6 +64,8 @@ type CreateBookingParams struct {
 	PriceStatus     string    `json:"price_status"`
 	ServiceName     *string   `json:"service_name"`
 	ServiceDuration *int32    `json:"service_duration"`
+	PhotoCount      *int32    `json:"photo_count"`
+	PriceUnit       string    `json:"price_unit"`
 }
 
 func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error) {
@@ -78,6 +82,8 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		arg.PriceStatus,
 		arg.ServiceName,
 		arg.ServiceDuration,
+		arg.PhotoCount,
+		arg.PriceUnit,
 	)
 	return scanBooking(row)
 }
@@ -170,8 +176,8 @@ SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.stat
        b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price,
        b.price_status, b.service_name, b.service_duration, b.checkin_code, b.checkin_at,
        b.delivered_at, b.accept_deadline, b.delivery_evidence, b.cancel_policy,
-       b.cancelled_by, b.noshow_party,
-       p.name AS photographer_name, p.avatar AS photographer_avatar, p.user_id AS photographer_user_id,
+       b.cancelled_by, b.noshow_party, b.photo_count, b.price_unit,
+       p.name AS photographer_name, COALESCE(p.avatar, '') AS photographer_avatar, p.user_id AS photographer_user_id,
        COALESCE(s.name, '') AS service_name_join, COALESCE(s.price, 0) AS service_price
 FROM bookings b
 LEFT JOIN photographers p ON p.id = b.photographer_id
@@ -215,6 +221,8 @@ func (q *Queries) GetBookingsByUserWithDetails(ctx context.Context, coserID int3
 			&i.CancelPolicy,
 			&i.CancelledBy,
 			&i.NoShowParty,
+			&i.PhotoCount,
+			&i.PriceUnit,
 			&i.PhotographerName,
 			&i.PhotographerAvatar,
 			&i.PhotographerUserID,
@@ -241,7 +249,7 @@ SELECT b.id, b.photographer_id, b.coser_id, b.service_id, b.date, b.time, b.stat
        b.total_price, b.remarks, b.created_at, b.updated_at, b.price_mode, b.quote_price,
        b.price_status, b.service_name, b.service_duration, b.checkin_code, b.checkin_at,
        b.delivered_at, b.accept_deadline, b.delivery_evidence, b.cancel_policy,
-       b.cancelled_by, b.noshow_party,
+       b.cancelled_by, b.noshow_party, b.photo_count, b.price_unit,
        COALESCE(u.name, '') AS coser_name, COALESCE(u.avatar, '') AS coser_avatar,
        CASE WHEN b.status IN ('confirmed', 'completed') THEN COALESCE(u.phone, '') ELSE '' END AS coser_phone
 FROM bookings b
@@ -285,6 +293,8 @@ func (q *Queries) GetBookingsByPhotographer(ctx context.Context, photographerID 
 			&i.CancelPolicy,
 			&i.CancelledBy,
 			&i.NoShowParty,
+			&i.PhotoCount,
+			&i.PriceUnit,
 			&i.CoserName,
 			&i.CoserAvatar,
 			&i.CoserPhone,

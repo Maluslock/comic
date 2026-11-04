@@ -139,10 +139,10 @@ func TestPhotographerHandler_List_Success(t *testing.T) {
 			if strings.Contains(sql, "bool_or") {
 				return &valueRows{
 					rows: [][]interface{}{
-						// 摄影师 10：有固定价 399 + 面议 → 「¥399 起」
-						{int64(10), int32Ptr(399), false, true, int32(2)},
+						// 摄影师 10：整套价 399 起 + 按张 10/张 + 面议 → 两个价格维度都要落库
+						{int64(10), int32Ptr(399), int32Ptr(10), false, true, int32(2)},
 						// 摄影师 20：只有 0 元套餐 → 「互勉」
-						{int64(20), (*int32)(nil), true, false, int32(1)},
+						{int64(20), (*int32)(nil), (*int32)(nil), true, false, int32(1)},
 					},
 				}, nil
 			}
@@ -193,10 +193,14 @@ func TestPhotographerHandler_List_Success(t *testing.T) {
 	if resp.List[0].MinPrice == nil || *resp.List[0].MinPrice != 399 {
 		t.Errorf("expected photographer A minPrice 399, got %v", resp.List[0].MinPrice)
 	}
+	// 按张单价必须单独透出：它不能被并进 minPrice，也不能在装配时丢掉
+	if resp.List[0].MinPricePerPhoto == nil || *resp.List[0].MinPricePerPhoto != 10 {
+		t.Errorf("expected photographer A minPricePerPhoto 10, got %v", resp.List[0].MinPricePerPhoto)
+	}
 	if !resp.List[0].HasNegotiable || resp.List[0].HasFree || resp.List[0].ServiceCount != 2 {
 		t.Errorf("unexpected A roll-up: %+v", resp.List[0])
 	}
-	if resp.List[1].MinPrice != nil || !resp.List[1].HasFree || resp.List[1].ServiceCount != 1 {
+	if resp.List[1].MinPrice != nil || resp.List[1].MinPricePerPhoto != nil || !resp.List[1].HasFree || resp.List[1].ServiceCount != 1 {
 		t.Errorf("unexpected B roll-up: %+v", resp.List[1])
 	}
 }

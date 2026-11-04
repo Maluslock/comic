@@ -46,6 +46,27 @@
       </view>
     </view>
 
+    <!-- 按张计价：张数决定总价，必须让用户在下单前就选，否则后端只按 1 张占位、价格待议 -->
+    <view v-if="isPerPhoto" class="section">
+      <view class="section-title">拍摄张数</view>
+      <view class="photo-count-row">
+        <view class="stepper">
+          <text
+            class="stepper-btn"
+            :class="{ disabled: photoCount <= 1 }"
+            @click="stepPhotoCount(-1)"
+          >−</text>
+          <text class="stepper-value">{{ photoCount }}</text>
+          <text
+            class="stepper-btn"
+            :class="{ disabled: photoCount >= 99 }"
+            @click="stepPhotoCount(1)"
+          >+</text>
+        </view>
+        <text class="photo-count-hint">¥{{ selectedService?.price }} / 张</text>
+      </view>
+    </view>
+
     <view class="section">
       <view class="section-title">备注信息</view>
       <textarea 
@@ -63,9 +84,13 @@
       <view class="total">
         <view class="total-row">
           <text class="total-label">合计</text>
-          <text class="total-price">{{ selectedService?.price === null ? '面议' : formatPrice(selectedService?.price) }}</text>
+          <text class="total-price">{{ totalPriceText }}</text>
         </view>
-        <text v-if="selectedService?.price === null" class="quote-hint">面议套餐：提交后等待摄影师报价</text>
+        <!-- 按张套餐把算式摊开：只给一个 ¥30 用户不知道是 3 张算出来的 -->
+        <text v-if="isPerPhoto && selectedService?.price" class="quote-hint">
+          ¥{{ selectedService?.price }} × {{ photoCount }} 张
+        </text>
+        <text v-else-if="selectedService?.price === null" class="quote-hint">面议套餐：提交后等待摄影师报价</text>
       </view>
       <view 
         class="btn-primary" 
@@ -107,6 +132,25 @@ const selectedTime = ref('')
 const timeSlots = ref<string[]>([])
 const disabledTimes = ref<string[]>([])
 const remark = ref('')
+// 按张计价的张数：默认 1 张。后端 photoCount 是 *int32，非按张套餐绝不下发这个字段。
+const photoCount = ref(1)
+
+const isPerPhoto = computed(() => selectedService.value?.priceUnit === 'per_photo')
+
+// 面议（price === null）不能乘；按张只在单价有效时相乘；其它计价方式原样显示。
+const totalPriceText = computed(() => {
+  const svc = selectedService.value
+  if (!svc) return ''
+  if (svc.price === null) return '面议'
+  if (isPerPhoto.value) return formatPrice((svc.price || 0) * photoCount.value)
+  return formatPrice(svc.price)
+})
+
+function stepPhotoCount(delta: number) {
+  const next = photoCount.value + delta
+  if (next < 1 || next > 99) return
+  photoCount.value = next
+}
 
 const canSubmit = computed(() => {
   return selectedService.value && selectedDate.value && selectedTime.value
@@ -142,12 +186,27 @@ async function loadServices() {
     services.value = (res.services || []).map((s: any) => ({
       id: String(s.id), name: s.name, price: s.price,
       description: s.description, duration: s.duration,
+      // priceUnit / photoCount 必须带上：丢了它们 isPerPhoto 恒 false，
+      // 按张套餐会被当成「整套 ¥10」直接下单。
+      priceUnit: s.priceUnit || 'fixed',
+      photoCount: typeof s.photoCount === 'number' ? s.photoCount : null,
     }))
     photographerName.value = res.name || '摄影师'
     // 后端 avatar 是 /static/remote/** 或 /static/uploads/** 相对路径，小程序端会被当包内资源读（404 →
     // 只剩 ph-avatar 的深色底）。补成绝对地址后再进 <image :src>。
     photographerAvatar.value = resolveImage(res.avatar || '')
     photographerLocation.value = res.location || '北京'
+    // storage 里存的可能是旧版本页面写入的残缺对象（没有 priceUnit / photoCount）。
+    // 只信任 id，其余字段一律以刚拉到的完整列表为准，否则 isPerPhoto 恒 false。
+    if (selectedService.value) {
+      const fresh = services.value.find((s) => String(s.id) === String(selectedService.value!.id))
+      if (fresh) {
+        selectedService.value = { ...selectedService.value, ...fresh }
+      } else {
+        // 套餐已被摄影师下线：清掉失效选择，让下面的兜底重新挑第一个。
+        selectedService.value = null
+      }
+    }
     if (!selectedService.value && services.value.length) {
       selectedService.value = services.value[0]
     }
@@ -229,6 +288,9 @@ async function submitBooking() {
       date: selectedDate.value,
       time: selectedTime.value,
       remarks: remark.value,
+      // 只有按张套餐才下发张数。后端字段是 *int32，传 0 / 空串都会 400；
+      // 非按张套餐带上它会污染快照（fixed 套餐不该有 photo_count）。
+      ...(isPerPhoto.value ? { photoCount: photoCount.value } : {}),
     })
     // 成功后清掉跨页面的临时选择，否则下一次给别人预约会预填这次的套餐
     uni.removeStorageSync('selectedService')
@@ -421,6 +483,51 @@ async function submitBooking() {
 
 .bottom-space {
   height: $spacing-xl;
+}
+
+/* 按张计价的张数行：步进器左右各 44px 热区，中间是可读的大数字 */
+.photo-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-md;
+  overflow: hidden;
+}
+
+.stepper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  min-height: 88rpx;
+  font-size: 40rpx;
+  line-height: 1;
+  color: $dark-text-primary;
+
+  &.disabled {
+    color: $dark-text-tertiary;
+  }
+}
+
+.stepper-value {
+  min-width: 96rpx;
+  text-align: center;
+  font-size: $font-size-lg;
+  font-weight: 600;
+  color: $dark-text-primary;
+}
+
+.photo-count-hint {
+  font-size: $font-size-sm;
+  color: $dark-text-secondary;
 }
 
 .footer {

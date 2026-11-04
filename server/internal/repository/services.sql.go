@@ -8,7 +8,7 @@ import (
 
 // getServices returns platform templates (photographer_id IS NULL) only, not per-photographer services.
 const getServices = `-- name: GetServices :many
-SELECT id, name, price, description, duration
+SELECT id, name, price, description, duration, price_unit, photo_count
 FROM services
 WHERE photographer_id IS NULL
 ORDER BY sort_order ASC, id ASC
@@ -29,6 +29,8 @@ func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {
 			&i.Price,
 			&i.Description,
 			&i.Duration,
+			&i.PriceUnit,
+			&i.PhotoCount,
 		); err != nil {
 			return nil, err
 		}
@@ -41,7 +43,7 @@ func (q *Queries) GetServices(ctx context.Context) ([]Service, error) {
 }
 
 const getServiceById = `-- name: GetServiceById :one
-SELECT id, name, price, description, duration
+SELECT id, name, price, description, duration, price_unit, photo_count
 FROM services
 WHERE id = $1
 `
@@ -55,12 +57,14 @@ func (q *Queries) GetServiceById(ctx context.Context, id int64) (Service, error)
 		&i.Price,
 		&i.Description,
 		&i.Duration,
+		&i.PriceUnit,
+		&i.PhotoCount,
 	)
 	return i, err
 }
 
 const getServicesByPhotographer = `-- name: GetServicesByPhotographer :many
-SELECT id, name, price, description, duration
+SELECT id, name, price, description, duration, price_unit, photo_count
 FROM services
 WHERE photographer_id = $1 AND is_active = true
 ORDER BY sort_order ASC, id ASC
@@ -75,7 +79,7 @@ func (q *Queries) GetActiveServicesByPhotographer(ctx context.Context, photograp
 	items := make([]Service, 0)
 	for rows.Next() {
 		var i Service
-		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration, &i.PriceUnit, &i.PhotoCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -84,7 +88,7 @@ func (q *Queries) GetActiveServicesByPhotographer(ctx context.Context, photograp
 }
 
 const getAllServicesByPhotographer = `-- name: GetAllServicesByPhotographer :many
-SELECT id, name, price, description, duration, is_active, sort_order
+SELECT id, name, price, description, duration, is_active, sort_order, price_unit, photo_count
 FROM services
 WHERE photographer_id = $1
 ORDER BY sort_order ASC, id ASC
@@ -99,7 +103,7 @@ func (q *Queries) GetAllServicesByPhotographer(ctx context.Context, photographer
 	items := make([]Service, 0)
 	for rows.Next() {
 		var i Service
-		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration, &i.IsActive, &i.SortOrder); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Price, &i.Description, &i.Duration, &i.IsActive, &i.SortOrder, &i.PriceUnit, &i.PhotoCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -132,9 +136,11 @@ func (q *Queries) GetBookableServicePhotographerID(ctx context.Context, id int64
 	return pid, err
 }
 
+// insertService 的 price_unit 只接受迁移 000041 里 CHECK 约束的四个值；per_photo
+// 行还要求 price > 0（0 元不能按张），这条也在数据库层兜底。
 const insertService = `-- name: InsertService :one
-INSERT INTO services (name, price, description, duration, photographer_id, is_active, sort_order)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO services (name, price, description, duration, photographer_id, is_active, sort_order, price_unit, photo_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id
 `
 
@@ -146,6 +152,8 @@ type InsertServiceParams struct {
 	PhotographerID int64
 	IsActive       bool
 	SortOrder      int32
+	PriceUnit      string
+	PhotoCount     *int32
 }
 
 func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (int64, error) {
@@ -153,15 +161,21 @@ func (q *Queries) InsertService(ctx context.Context, arg InsertServiceParams) (i
 	err := q.db.QueryRow(ctx, insertService,
 		arg.Name, arg.Price, arg.Description, arg.Duration,
 		arg.PhotographerID, arg.IsActive, arg.SortOrder,
+		arg.PriceUnit, arg.PhotoCount,
 	).Scan(&id)
 	return id, err
 }
 
+// updateService keeps price_unit / photo_count optional too: an older client that
+// never heard of priceUnit must not silently turn a 按张计价 package back into a
+// 整套价 one (or wipe its 起拍张数) just by editing the name.
 const updateService = `-- name: UpdateService :execrows
 UPDATE services
 SET name = $3, price = $4, description = $5, duration = $6,
     is_active = COALESCE($7, is_active),
-    sort_order = COALESCE($8, sort_order)
+    sort_order = COALESCE($8, sort_order),
+    price_unit = COALESCE($9, price_unit),
+    photo_count = COALESCE($10, photo_count)
 WHERE id = $1 AND photographer_id = $2
 `
 
@@ -178,12 +192,15 @@ type UpdateServiceParams struct {
 	Duration       int32
 	IsActive       *bool
 	SortOrder      *int32
+	PriceUnit      *string
+	PhotoCount     *int32
 }
 
 func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (int64, error) {
 	tag, err := q.db.Exec(ctx, updateService,
 		arg.ID, arg.PhotographerID, arg.Name, arg.Price,
 		arg.Description, arg.Duration, arg.IsActive, arg.SortOrder,
+		arg.PriceUnit, arg.PhotoCount,
 	)
 	if err != nil {
 		return 0, err
@@ -212,18 +229,27 @@ func (q *Queries) DeleteService(ctx context.Context, id, photographerID int64) (
 // stays a single round trip.
 type ServicePriceSummary struct {
 	PhotographerID int64  `json:"photographer_id"` // services.photographer_id 是 BIGINT，别窄化
-	MinPrice       *int32 `json:"min_price"`       // 最低固定价（>0）；无固定价时为 NULL
-	HasFree        bool   `json:"has_free"`        // 存在 0 元（互勉）套餐
-	HasNegotiable  bool   `json:"has_negotiable"`  // 存在面议（price IS NULL）套餐
-	ActiveCount    int32  `json:"active_count"`
+	MinPrice       *int32 `json:"min_price"`       // 最低整套价（>0 且 price_unit='fixed'）；否则 NULL
+	// MinPricePerPhoto 是按张计价的单价（>0 且 price_unit='per_photo'）。它与整套价
+	// 量纲不同，必须单列：把 ¥10/张 并进 min_price 会让列表显示「¥10 起」，用户点进去
+	// 发现 399 元起（甚至一单 10 张 = 100 元），是最典型的误导性低价。
+	MinPricePerPhoto *int32 `json:"min_price_per_photo"`
+	HasFree          bool   `json:"has_free"`       // 存在 0 元（互勉）套餐
+	HasNegotiable    bool   `json:"has_negotiable"` // 存在面议（price IS NULL）套餐
+	ActiveCount      int32  `json:"active_count"`
 }
 
 // bool_or 会忽略 NULL 输入：当一位摄影师的在架套餐全是面议（price IS NULL）时，
 // "price = 0" 对每行都是 NULL，bool_or 便整体返回 NULL —— 扫进 Go 的 bool 会报
 // "cannot scan NULL into *bool"，让整个列表接口 500。故必须 COALESCE 兜底。
+// 最低价必须按计价单位分组聚合：整套价、按张价、时价、日价的量纲互不可比。
+// min_price 只收 price_unit='fixed' 的行，按张价单独走 min_price_per_photo；
+// per_hour / per_day 暂不参与任何「起价」展示（前端没有对应文案之前，宁可
+// 不显示也不要拿时价冒充满套价）。
 const getServicePriceSummaries = `-- name: GetServicePriceSummaries :many
 SELECT photographer_id,
-       MIN(price) FILTER (WHERE price > 0)     AS min_price,
+       MIN(price) FILTER (WHERE price > 0 AND price_unit = 'fixed')     AS min_price,
+       MIN(price) FILTER (WHERE price > 0 AND price_unit = 'per_photo') AS min_price_per_photo,
        COALESCE(bool_or(price = 0), false)     AS has_free,
        COALESCE(bool_or(price IS NULL), false) AS has_negotiable,
        count(*)                                AS active_count
@@ -241,7 +267,7 @@ func (q *Queries) GetServicePriceSummaries(ctx context.Context, photographerIDs 
 	items := make([]ServicePriceSummary, 0)
 	for rows.Next() {
 		var i ServicePriceSummary
-		if err := rows.Scan(&i.PhotographerID, &i.MinPrice, &i.HasFree, &i.HasNegotiable, &i.ActiveCount); err != nil {
+		if err := rows.Scan(&i.PhotographerID, &i.MinPrice, &i.MinPricePerPhoto, &i.HasFree, &i.HasNegotiable, &i.ActiveCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

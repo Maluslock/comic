@@ -59,6 +59,15 @@ type Work struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+// Service is a package row. PriceUnit decides what Price means:
+//
+//	fixed     — 整套价（历史行为，也是所有旧数据的默认值）
+//	per_photo — 单价 × 张数；PhotoCount 是该套餐的起拍/包含张数（NULL = 按需议定）
+//	per_hour  — 每小时单价
+//	per_day   — 每天单价
+//
+// 不同计价单位下 Price 的量纲不同，任何「最低价」聚合都必须按单位分组，否则
+// ¥10/张 会冒充 ¥399 起的整套价。
 type Service struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
@@ -67,19 +76,21 @@ type Service struct {
 	Duration    int32   `json:"duration"`
 	IsActive    bool    `json:"is_active"`
 	SortOrder   int32   `json:"sort_order"`
+	PriceUnit   string  `json:"price_unit"`
+	PhotoCount  *int32  `json:"photo_count"`
 }
 
 type Review struct {
-	ID             int64     `json:"id"`
-	PhotographerID int32     `json:"photographer_id"`
-	UserID         int32     `json:"user_id"`
-	UserName       *string   `json:"user_name"`
-	UserAvatar     *string   `json:"user_avatar"`
-	Rating         int32     `json:"rating"`
-	Content        *string   `json:"content"`
-	Images         []string  `json:"images"`
-	CreatedAt      time.Time `json:"created_at"`
-	PhotographerName string  `json:"photographer_name,omitempty"`
+	ID               int64     `json:"id"`
+	PhotographerID   int32     `json:"photographer_id"`
+	UserID           int32     `json:"user_id"`
+	UserName         *string   `json:"user_name"`
+	UserAvatar       *string   `json:"user_avatar"`
+	Rating           int32     `json:"rating"`
+	Content          *string   `json:"content"`
+	Images           []string  `json:"images"`
+	CreatedAt        time.Time `json:"created_at"`
+	PhotographerName string    `json:"photographer_name,omitempty"`
 }
 
 // PhotographerWithTags is the result of GetRecommendedPhotographers / GetPhotographerById.
@@ -138,6 +149,12 @@ type Booking struct {
 	CancelPolicy     string     `json:"cancel_policy"`
 	CancelledBy      *string    `json:"cancelled_by"`
 	NoShowParty      *string    `json:"noshow_party"`
+	// PhotoCount / PriceUnit are the booking-time snapshot of the package's pricing
+	// unit. Snapshotting them (like total_price and service_name) keeps an old order
+	// readable after the photographer changes the package — the amount charged must
+	// never be re-derived from today's catalogue.
+	PhotoCount *int32 `json:"photo_count"`
+	PriceUnit  string `json:"price_unit"`
 }
 
 // BookingWithDetails embeds Booking and adds joined photographer/service fields.

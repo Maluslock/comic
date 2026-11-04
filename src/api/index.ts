@@ -1,4 +1,5 @@
 import { mockPhotographers, mockWorks, mockEvents, tags } from '@/data/mock'
+import type { PriceUnit } from '@/types'
 import { apiGet, apiPost, apiPut, apiDelete } from '@/api/client'
 import type {
   HomeResponse,
@@ -13,7 +14,7 @@ import { resolveImage } from '@/utils/mappers'
 import { getApiBase } from '@/utils/apiBase'
 import { mockCreditSummary, mockCreditEvents } from '@/data/creditMock'
 
-async function uploadFile(filePath: string): Promise<string> {
+export async function uploadFile(filePath: string): Promise<string> {
   const token = uni.getStorageSync('token') as string
 
   return new Promise<string>((resolve, reject) => {
@@ -185,10 +186,14 @@ export function deleteWork(id: number) {
 export interface MyService {
   id: number
   name: string
-  /** null = 面议, 0 = 互勉, >0 = 固定价 */
+  /** null = 面议, 0 = 互勉, >0 = 计价数字 */
   price: number | null
   description: string
   duration: number
+  /** 计价方式：fixed / per_photo / per_hour / per_day */
+  priceUnit: PriceUnit
+  /** 按张时的包含张数；null = 按需议定 */
+  photoCount: number | null
   /** 是否上架到公开页面（下架后仍在自己列表可见，但不可被下单） */
   isActive: boolean
   sortOrder: number
@@ -200,6 +205,9 @@ export interface ServiceUpsertPayload {
   price: number | null
   description: string
   duration: number
+  priceUnit: PriceUnit
+  /** 按张的包含张数；传数字或省略，绝不传空串（后端 *int32 空串会 400） */
+  photoCount: number | null
   isActive?: boolean
   sortOrder?: number
 }

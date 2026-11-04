@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"strings"
 
 	"github.com/Maluslock/comic/server/internal/repository"
 	"github.com/jackc/pgx/v5"
@@ -15,10 +16,15 @@ import (
 // values into the home and detail responses, which never fetch them.
 type PhotographerListItem struct {
 	PhotographerItem
-	MinPrice      *int32 `json:"minPrice"`      // 最低固定价；无固定价时 null
-	HasFree       bool   `json:"hasFree"`       // 有 0 元（互勉）套餐
-	HasNegotiable bool   `json:"hasNegotiable"` // 有面议套餐
-	ServiceCount  int32  `json:"serviceCount"`  // 上架套餐数；0 = 暂未设置
+	MinPrice         *int32 `json:"minPrice"`         // 最低整套价；无整套价时 null
+	MinPricePerPhoto *int32 `json:"minPricePerPhoto"` // 按张最低单价；无按张套餐时 null
+	HasFree          bool   `json:"hasFree"`          // 有 0 元（互勉）套餐
+	HasNegotiable    bool   `json:"hasNegotiable"`    // 有面议套餐
+	ServiceCount     int32  `json:"serviceCount"`     // 上架套餐数；0 = 暂未设置
+	// IsSelf 标记「这条就是我自己的档案」，列表页据此渲染「这是你」角标。
+	// 刻意不在 List()/SQL 里算：那会让缓存按访问者分裂（每个登录用户一份），
+	// 也会把匿名与登录切成两套 key。改由 handler 在 c.JSON 之前按当前 token 现算。
+	IsSelf bool `json:"isSelf"`
 }
 
 type PhotographerListResponse struct {
@@ -46,6 +52,11 @@ type ServiceItem struct {
 	Price       *int32 `json:"price"`
 	Description string `json:"description"`
 	Duration    int32  `json:"duration"`
+	// PriceUnit 决定 Price 的含义：fixed=整套价、per_photo=按张、per_hour=按小时、
+	// per_day=按天。前端必须按它给价格加单位后缀，否则 ¥10/张 会被读成 ¥10 一整套。
+	PriceUnit string `json:"priceUnit"`
+	// PhotoCount 仅 per_photo 有意义：该套餐起拍/包含的张数；null = 按需议定。
+	PhotoCount *int32 `json:"photoCount"`
 }
 
 // MyServiceItem is what the owner sees in 我的套餐: the public fields plus shelf
@@ -72,6 +83,15 @@ type ReviewItem struct {
 type PhotographerService struct {
 	queries *repository.Queries
 	works   worksStore
+	users   userNameSync
+}
+
+// userNameSync 是「账号昵称」侧的最小写入口，*repository.UserRepo 满足它。
+// 单独留一个缝而不是塞进 worksStore：Activate/UpdateProfile 的测试只关心
+// 「有没有把名字同步过去」，不该为了它拉起 pgxpool。为 nil 时同步动作静默跳过
+// （例如只装配了 Queries 的单元测试）。
+type userNameSync interface {
+	UpdateNickname(ctx context.Context, userID int64, name string) error
 }
 
 // worksStore is the works-relevant subset of *repository.Queries; the
@@ -100,15 +120,27 @@ func NewPhotographerService(queries *repository.Queries) *PhotographerService {
 	return &PhotographerService{queries: queries}
 }
 
+// WithUserNames 注入账号昵称的同步器（*repository.UserRepo）。main 里装配一次；
+// 不注入时摄影师名照常写入 photographers，只是不会再同步 users.name。
+func (s *PhotographerService) WithUserNames(users userNameSync) *PhotographerService {
+	s.users = users
+	return s
+}
+
 var (
-	ErrAlreadyActivated = errors.New("photographer already activated")
-	ErrWorkNotFound     = errors.New("work not found")
-	ErrWorkForbidden    = errors.New("work belongs to another photographer")
-	ErrInvalidMode      = errors.New("invalid mode")
-	ErrProfileNotFound  = errors.New("photographer profile not found")
-	ErrServiceNotFound  = errors.New("service not found")
-	ErrServiceForbidden = errors.New("cannot modify another photographer's service")
-	ErrInvalidPrice     = errors.New("invalid price")
+	ErrAlreadyActivated  = errors.New("photographer already activated")
+	ErrWorkNotFound      = errors.New("work not found")
+	ErrWorkForbidden     = errors.New("work belongs to another photographer")
+	ErrInvalidMode       = errors.New("invalid mode")
+	ErrProfileNotFound   = errors.New("photographer profile not found")
+	ErrServiceNotFound   = errors.New("service not found")
+	ErrServiceForbidden  = errors.New("cannot modify another photographer's service")
+	ErrInvalidPrice      = errors.New("invalid price")
+	ErrInvalidPriceUnit  = errors.New("invalid price unit")
+	ErrInvalidPhotoCount = errors.New("invalid photo count")
+	// ErrPerPhotoPriceRequired 与 ErrInvalidPrice 分开：按张 0 元 与 负价 的修法不同
+	// （前者是「必须填一个正单价」，后者是「价格不能是负数」），复用一条文案会把用户带偏。
+	ErrPerPhotoPriceRequired = errors.New("per_photo price must be > 0")
 )
 
 // ProfileUpdate is the self-service profile edit payload.
@@ -130,12 +162,71 @@ type ServiceUpsertRequest struct {
 	// value (the statement COALESCEs nil); on create it falls back to published / 0.
 	IsActive  *bool  `json:"isActive"`
 	SortOrder *int32 `json:"sortOrder"`
+	// PriceUnit 空字符串 = 未指定：创建时默认 fixed，更新时保持库里原值。
+	PriceUnit string `json:"priceUnit"`
+	// PhotoCount 仅 per_photo 有意义，可选（nil = 按需议定）。填了必须 > 0。
+	PhotoCount *int32 `json:"photoCount"`
 }
 
+// priceUnits 是 services.price_unit 的合法取值，与迁移 000041 的 CHECK 约束一一对应。
+// 数据库层也挡，但这里先挡能给出 400 + 明确文案，而不是把 23514 变成 500。
+var priceUnits = map[string]bool{
+	"fixed":     true,
+	"per_photo": true,
+	"per_hour":  true,
+	"per_day":   true,
+}
+
+// normalizePriceUnit 校验并归一化计价单位。空字符串代表「未指定」：创建时按 fixed
+// 处理，更新时返回 nil 让 SQL 的 COALESCE 保留库里原值 —— 老客户端（不知道
+// priceUnit 存在）编辑套餐名时，不能把一个按张计价的套餐悄悄退回整套价。
+func normalizePriceUnit(unit string, forUpdate bool) (*string, error) {
+	if unit == "" {
+		if forUpdate {
+			return nil, nil
+		}
+		v := "fixed"
+		return &v, nil
+	}
+	if !priceUnits[unit] {
+		return nil, ErrInvalidPriceUnit
+	}
+	return &unit, nil
+}
+
+// validatePricing 是定价语义的唯一入口，create 与 update 共用：
+//
+//   - price 为负 → ErrInvalidPrice（历史规则，保留）
+//   - 按张计价必须 price > 0 —— 0 元/张 等于免费且张数无限，是录入错误而不是营销；
+//     真要免费请用 fixed + 0 元（互勉）
+//   - photoCount 若填必须 > 0（0 张的套餐不可下单）
+func validatePricing(price *int32, unit *string, photoCount *int32) error {
+	if price != nil && *price < 0 {
+		return ErrInvalidPrice
+	}
+	if photoCount != nil && *photoCount <= 0 {
+		return ErrInvalidPhotoCount
+	}
+	if unit != nil && *unit == "per_photo" {
+		if price == nil || *price <= 0 {
+			return ErrPerPhotoPriceRequired
+		}
+	}
+	return nil
+}
+
+// Activate 幂等：重复调用不会重复建档案，返回的永远是同一个 id。
+//
+// 「幂等」不等于「丢弃入参」：老用户改了昵称再点一次「成为摄影师」，旧实现把
+// 新名字整条扔掉，档案永远停在第一次激活时的值（线上症状：列表里一直是 '11'）。
+// 所以命中已有档案时按入参增量覆盖，但**只覆盖占位符名字**，见 refreshActivatedProfile。
 func (s *PhotographerService) Activate(ctx context.Context, userID int64, name string, mode string, intro string) (int64, error) {
 	existing, err := s.queries.GetPhotographerByUserID(ctx, userID)
 	if err == nil {
-		return int64(existing.ID), nil // idempotent
+		if err := s.refreshActivatedProfile(ctx, existing, name, mode, intro); err != nil {
+			return 0, err
+		}
+		return int64(existing.ID), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
@@ -154,7 +245,102 @@ func (s *PhotographerService) Activate(ctx context.Context, userID int64, name s
 	if err != nil {
 		return 0, err
 	}
+	// 首次激活是「本人主动填的对外展示名」，同步给账号昵称，避免「我的」页还叫
+	// 「微信用户」而列表里已是新名字。方向恒为 photographers → users。
+	s.syncAccountName(ctx, userID, name)
 	return int64(p.ID), nil
+}
+
+// refreshActivatedProfile 处理「已有档案的重复激活」。逐字段规则：
+//
+//   - name：**只有当前展示名是占位符**（空白 / 纯数字 / 「微信用户」）时才用入参覆盖。
+//     摄影师自己起的艺名是核心品牌资产，不能被一次重复提交换掉。
+//   - mode / intro：非空且不同才覆盖（空串 = 本次没填，保持原值）。
+func (s *PhotographerService) refreshActivatedProfile(ctx context.Context, existing repository.PhotographerWithTags, name, mode, intro string) error {
+	newName := existing.Name
+	nameOverridden := false
+	if name != "" && name != existing.Name && isPlaceholderName(existing.Name) {
+		newName = name
+		nameOverridden = true
+	}
+	newMode := existing.Mode
+	if mode != "" && mode != existing.Mode {
+		if mode != "free" && mode != "pay" && mode != "both" {
+			return ErrInvalidMode
+		}
+		newMode = mode
+	}
+	newIntro := existing.MutualIntro
+	if intro != "" && (existing.MutualIntro == nil || intro != *existing.MutualIntro) {
+		newIntro = &intro
+	}
+	if newName == existing.Name && newMode == existing.Mode && introSame(newIntro, existing.MutualIntro) {
+		return nil // 一个字都没变，不必白跑一次 UPDATE
+	}
+
+	avatar := derefString(existing.Avatar)
+	if err := s.workStore().UpdatePhotographerProfile(ctx, int64(existing.ID), newName,
+		derefString(existing.Description), derefString(existing.Location), newMode, newIntro, avatar); err != nil {
+		if errors.Is(err, repository.ErrProfileNotFound) {
+			return ErrProfileNotFound
+		}
+		return err
+	}
+	if nameOverridden {
+		// 这里 photographers.name 已在上面单独写过，只需把 users.name 补齐。
+		s.syncAccountName(ctx, derefInt64(existing.UserID), newName)
+	}
+	return nil
+}
+
+// isPlaceholderName 判断展示名是不是「明显误填 / 占位」而不是真人艺名：
+//   - 空白
+//   - 纯数字（线上那条 '11'）
+//   - 微信授权默认昵称「微信用户」
+//   - '摄影师' + 纯数字（如「摄影师15」，迁移 000042 给两边都是占位值的档案
+//     落的系统兜底名；它必须可被覆盖，否则用户填了真名也改不掉）
+//
+// 只有这种名字才允许被账号昵称或重复激活覆盖。
+func isPlaceholderName(name string) bool {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" || trimmed == "微信用户" {
+		return true
+	}
+	if rest, ok := strings.CutPrefix(trimmed, "摄影师"); ok {
+		return isDigits(rest)
+	}
+	return isDigits(trimmed)
+}
+
+// isDigits 判断 s 非空且全部是 ASCII 数字（"" 返回 false）。
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// syncAccountName 只写 users.name（账号昵称），永远不写 photographers.name。
+// 方向是单向的：摄影师主动改艺名 / 首次激活 → 账号昵称跟随。
+// 反向（普通用户改账号昵称 → 覆盖摄影师艺名）被刻意禁止，否则任何人改自己
+// 昵称就等于「改名」别人的摄影师档案。
+func (s *PhotographerService) syncAccountName(ctx context.Context, userID int64, name string) {
+	if s.users == nil || userID == 0 || name == "" {
+		return
+	}
+	_ = s.users.UpdateNickname(ctx, userID, name)
+}
+
+func introSame(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func photographerItemFromRow(p repository.PhotographerWithTags) *PhotographerItem {
@@ -226,6 +412,9 @@ func (s *PhotographerService) UpdateProfile(ctx context.Context, userID int64, r
 		}
 		return err
 	}
+	// 摄影师名是「对外展示名」，改完让账号昵称跟上（方向：photographers → users），
+	// 否则用户在「我的」页还叫「微信用户」、在列表里叫新名字，看起来像两个人。
+	s.syncAccountName(ctx, userID, req.Name)
 	return nil
 }
 
@@ -315,6 +504,24 @@ func (s *PhotographerService) List(ctx context.Context, keyword, location, tag s
 	}, nil
 }
 
+// MarkSelf 给列表打「这是你」标记。刻意做成纯函数、由 handler 在 c.JSON 之前
+// 调用，而不是在 List() 里按 viewer 计算：
+//   - List() 的结果要进 Redis 缓存，缓存键里没有 viewer → 一旦把 IsSelf 算进
+//     缓存内容，A 用户会看到 B 用户的「这是你」；
+//   - 反过来把 viewer 塞进缓存键，缓存会被切成「每个登录用户一份」，
+//     匿名与登录还会分裂成两套 key，等于把原来的缓存全废掉。
+//
+// viewerUserID <= 0（未登录）时保持字段原样（全 false）。
+func MarkSelf(items []PhotographerListItem, viewerUserID int64) []PhotographerListItem {
+	if viewerUserID <= 0 {
+		return items
+	}
+	for i := range items {
+		items[i].IsSelf = items[i].UserID != 0 && items[i].UserID == viewerUserID
+	}
+	return items
+}
+
 // mergePriceSummaries attaches the price roll-up to a page of list rows. Pure, so it
 // is unit-testable without a database.
 func mergePriceSummaries(items []PhotographerListItem, sums []repository.ServicePriceSummary) []PhotographerListItem {
@@ -328,6 +535,7 @@ func mergePriceSummaries(items []PhotographerListItem, sums []repository.Service
 			continue
 		}
 		items[i].MinPrice = s.MinPrice
+		items[i].MinPricePerPhoto = s.MinPricePerPhoto
 		items[i].HasFree = s.HasFree
 		items[i].HasNegotiable = s.HasNegotiable
 		items[i].ServiceCount = s.ActiveCount
@@ -396,6 +604,8 @@ func mapServiceItems(services []repository.Service) []ServiceItem {
 			Price:       s.Price,
 			Description: derefString(s.Description),
 			Duration:    s.Duration,
+			PriceUnit:   s.PriceUnit,
+			PhotoCount:  s.PhotoCount,
 		})
 	}
 	return items
@@ -414,6 +624,8 @@ func mapMyServiceItems(services []repository.Service) []MyServiceItem {
 				Price:       s.Price,
 				Description: derefString(s.Description),
 				Duration:    s.Duration,
+				PriceUnit:   s.PriceUnit,
+				PhotoCount:  s.PhotoCount,
 			},
 			IsActive:  s.IsActive,
 			SortOrder: s.SortOrder,
@@ -562,8 +774,12 @@ func (s *PhotographerService) MyServices(ctx context.Context, userID int64) ([]M
 }
 
 func (s *PhotographerService) CreateService(ctx context.Context, userID int64, req ServiceUpsertRequest) (int64, error) {
-	if req.Price != nil && *req.Price < 0 {
-		return 0, ErrInvalidPrice
+	unit, err := normalizePriceUnit(req.PriceUnit, false)
+	if err != nil {
+		return 0, err
+	}
+	if err := validatePricing(req.Price, unit, req.PhotoCount); err != nil {
+		return 0, err
 	}
 	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
 	if err != nil {
@@ -585,12 +801,18 @@ func (s *PhotographerService) CreateService(ctx context.Context, userID int64, r
 		PhotographerID: int64(p.ID),
 		IsActive:       active,
 		SortOrder:      order,
+		PriceUnit:      *unit,
+		PhotoCount:     req.PhotoCount,
 	})
 }
 
 func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, serviceID int64, req ServiceUpsertRequest) error {
-	if req.Price != nil && *req.Price < 0 {
-		return ErrInvalidPrice
+	unit, err := normalizePriceUnit(req.PriceUnit, true)
+	if err != nil {
+		return err
+	}
+	if err := validatePricing(req.Price, unit, req.PhotoCount); err != nil {
+		return err
 	}
 	p, err := s.workStore().GetPhotographerByUserID(ctx, userID)
 	if err != nil {
@@ -608,6 +830,8 @@ func (s *PhotographerService) UpdateService(ctx context.Context, userID int64, s
 		Duration:       req.Duration,
 		IsActive:       req.IsActive,
 		SortOrder:      req.SortOrder,
+		PriceUnit:      unit,
+		PhotoCount:     req.PhotoCount,
 	})
 	if err != nil {
 		return err
@@ -658,28 +882,31 @@ func servicePricePtr(v int32) *int32 { return &v }
 // 三档覆盖「三天去三场漫展」的实际卖法：按场次（半天/全天）零售，或按天打包。
 var platformServiceTemplates = []ServiceItem{
 	{
-		ID:   9001,
-		Name: "漫展单场跟拍（半天）",
+		ID:    9001,
+		Name:  "漫展单场跟拍（半天）",
 		Price: servicePricePtr(299),
 		Description: "单场漫展半天跟拍（约 4 小时），含 15 张精修。" +
 			"一天只打算逛半天、或只拍一两套衣服时选它。",
-		Duration: 240,
+		Duration:  240,
+		PriceUnit: "fixed",
 	},
 	{
-		ID:   9002,
-		Name: "漫展单日跟拍（全天）",
+		ID:    9002,
+		Name:  "漫展单日跟拍（全天）",
 		Price: servicePricePtr(599),
 		Description: "单日漫展全天跟拍（约 8 小时），含 30 张精修，含场馆内外多处取景。" +
 			"客户想从入场拍到闭馆时选它。",
-		Duration: 480,
+		Duration:  480,
+		PriceUnit: "fixed",
 	},
 	{
-		ID:   9003,
-		Name: "漫展多日通拍（3 天打包）",
+		ID:    9003,
+		Name:  "漫展多日通拍（3 天打包）",
 		Price: servicePricePtr(1499),
 		Description: "同一场漫展连续 3 天打包价，每天按全天跟拍算（3 天共约 24 小时），含 100 张精修。" +
 			"比单日单订三天便宜，适合连拍三天、换多套装的客户。",
-		Duration: 1440,
+		Duration:  1440,
+		PriceUnit: "fixed",
 	},
 }
 

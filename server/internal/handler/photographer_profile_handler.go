@@ -34,6 +34,9 @@ func (h *PhotographerHandler) UpdateProfile(c *gin.Context) {
 		}
 		return
 	}
+	// 展示名 / 城市 / 简介 / mode 都渲染在列表与首页卡片上：改完必须立刻失效缓存，
+	// 否则摄影师自己刷新列表仍看到旧信息，会以为没保存成功而重复提交。
+	h.invalidatePricingCaches(c.Request.Context())
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

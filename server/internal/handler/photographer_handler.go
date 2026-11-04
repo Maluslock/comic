@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,10 +18,25 @@ type PhotographerHandler struct {
 	svc        *service.PhotographerService
 	cache      *cache.RedisCache
 	bookingSvc *service.BookingService
+	// invalidator 与 cache 指向同一个 Redis 缓存，只是收窄成「按前缀清理」这一个
+	// 能力：缓存置灰（NewRedisCache 在 Redis 不可用时返回 nil）时保持为 nil，
+	// 清理调用随之空转，而不是在 handler 里散落 nil 判断。
+	invalidator listCacheInvalidator
 }
 
 func NewPhotographerHandler(svc *service.PhotographerService, c *cache.RedisCache, bookingSvc *service.BookingService) *PhotographerHandler {
-	return &PhotographerHandler{svc: svc, cache: c, bookingSvc: bookingSvc}
+	h := &PhotographerHandler{svc: svc, cache: c, bookingSvc: bookingSvc}
+	if c != nil {
+		h.invalidator = c
+	}
+	return h
+}
+
+// invalidatePricingCaches 清掉所有渲染套餐价格的缓存（列表 / 首页 / 活动）。
+// 摄影师改名、开通、改套餐都会改变卡片上展示的东西，不清就会出现「列表已是新名字、
+// 首页还是旧名字」这种更难排查的半新半旧状态。best-effort：清理失败不影响写结果。
+func (h *PhotographerHandler) invalidatePricingCaches(ctx context.Context) {
+	invalidatePricingCaches(ctx, h.invalidator)
 }
 
 func (h *PhotographerHandler) List(c *gin.Context) {
@@ -34,8 +51,9 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 	cacheKey := "photographers:" + keyword + ":" + location + ":" + tag + ":" + sort + ":" + strconv.Itoa(page) + ":" + strconv.Itoa(size)
 
 	var excludeUserIDs []int64
-	if uid := middleware.UserID(c); uid > 0 {
-		if ids, err := h.svc.HiddenUserIDs(c.Request.Context(), uid); err == nil {
+	viewerUserID := middleware.UserID(c)
+	if viewerUserID > 0 {
+		if ids, err := h.svc.HiddenUserIDs(c.Request.Context(), viewerUserID); err == nil {
 			excludeUserIDs = ids
 		}
 	}
@@ -46,12 +64,16 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
+		data.List = service.MarkSelf(data.List, viewerUserID)
 		c.JSON(http.StatusOK, data)
 		return
 	}
 
 	var resp service.PhotographerListResponse
 	if h.cache.Get(c.Request.Context(), cacheKey, &resp) {
+		// 缓存里存的是 IsSelf 全 false 的原始页（缓存键不含 viewer，否则会按登录
+		// 用户切成 N 份、还会让匿名与登录分裂成两套 key），命中后按当前 token 现算。
+		resp.List = service.MarkSelf(resp.List, viewerUserID)
 		c.JSON(http.StatusOK, resp)
 		return
 	}
@@ -63,6 +85,7 @@ func (h *PhotographerHandler) List(c *gin.Context) {
 	}
 
 	h.cache.Set(c.Request.Context(), cacheKey, data, 5*time.Minute)
+	data.List = service.MarkSelf(data.List, viewerUserID)
 	c.JSON(http.StatusOK, data)
 }
 
@@ -123,9 +146,26 @@ func (h *PhotographerHandler) Activate(c *gin.Context) {
 	}
 	pid, err := h.svc.Activate(c.Request.Context(), userID, req.Name, req.Mode, req.Intro)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		return
+		// 此前这里一律 500，把「mode 填错」这种纯客户端错误也报成服务端故障，
+		// 前端既拿不到可用提示，日志里也失去区分度。按错误语义分流：
+		//   - ErrInvalidMode：请求体里的 mode 不在 free/pay/both 之内 → 400。
+		//   - ErrProfileNotFound：档案在写入过程中消失（并发删号）→ 404。
+		//   - 其余（DB / 网络）才是 500。
+		switch {
+		case errors.Is(err, service.ErrInvalidMode):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "mode must be one of free/pay/both"})
+			return
+		case errors.Is(err, service.ErrProfileNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "photographer profile not found"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
 	}
+	// 开通 / 二次 activate 可能改写展示名与 mode，而两者都渲染在列表、首页、活动
+	// 卡片上：不清缓存就会出现「刚开通完，列表里还是旧名字」。
+	h.invalidatePricingCaches(c.Request.Context())
 	c.JSON(http.StatusCreated, gin.H{"photographerId": pid})
 }
 

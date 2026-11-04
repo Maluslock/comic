@@ -120,6 +120,7 @@ func (s *EventService) GetDetail(ctx context.Context, id int64) (*EventDetail, e
 			for i := range items {
 				if sum, ok := byID[items[i].ID]; ok {
 					items[i].MinPrice = sum.MinPrice
+					items[i].MinPricePerPhoto = sum.MinPricePerPhoto
 					items[i].HasFree = sum.HasFree
 					items[i].HasNegotiable = sum.HasNegotiable
 					items[i].ServiceCount = sum.ActiveCount

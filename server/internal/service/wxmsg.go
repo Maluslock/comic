@@ -239,6 +239,23 @@ func priceText(total int32, mode string) string {
 	return strconv.Itoa(int(total))
 }
 
+// orderPriceText 是下单/报价通知里的「价格规格」。它在 priceText 之上补上计价单位
+// 语境，让摄影师一眼看出「这是按张单价 × 张数」还是「整套价」：
+//
+//	按张 + 张数已定   → "10×3=30"
+//	按张 + 张数待议定 → "10/张 待议张数"
+//	整套价            → 与 priceText 一致（纯数字 / 互勉 / 面议）
+func orderPriceText(total int32, mode string, priceUnit string, photoCount *int32) string {
+	if mode == "fixed" && priceUnit == priceUnitPerPhoto && total > 0 {
+		if photoCount != nil && *photoCount > 0 {
+			unitPrice := total / *photoCount
+			return fmt.Sprintf("%d×%d=%d", unitPrice, *photoCount, total)
+		}
+		return fmt.Sprintf("%d/张 待议张数", total)
+	}
+	return priceText(total, mode)
+}
+
 // dateTimeText 微信 time 类字段吃 "2006-01-02 15:04"，date 只有日期。
 func dateTimeText(date, clock string) string {
 	if date == "" {

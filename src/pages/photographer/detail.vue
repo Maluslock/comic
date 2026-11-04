@@ -70,7 +70,7 @@
               <text class="service-desc">{{ service.description }}{{ showServiceDuration(service) ? ' · ' + formatDuration(service.duration) : '' }}</text>
             </view>
             <view class="service-price">
-              <text class="price">{{ formatPrice(service.price) }}</text>
+              <text class="price">{{ describeServicePrice(service) }}</text>
               <text class="btn-ghost">选择</text>
             </view>
           </view>
@@ -143,11 +143,12 @@ import ReviewCard from '@/components/ReviewCard.vue'
 import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser, getPhotographerReviews } from '@/api/index'
-import { mapPhotographerItem, mapWorkItem, mapReviewItem, formatPrice, encodeRedirect } from '@/utils/mappers'
+import { mapPhotographerItem, mapWorkItem, mapReviewItem, encodeRedirect } from '@/utils/mappers'
+import { describeServicePrice } from '@/utils/price'
 import { previewImages } from '@/utils/preview'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
-import type { Photographer, Review, Service, Work } from '@/types'
+import type { Photographer, PriceUnit, Review, Service, Work } from '@/types'
 
 interface PhotographerDetailResponse {
   id: number
@@ -166,7 +167,18 @@ interface PhotographerDetailResponse {
   creditLevel?: string
   tags: string[]
   description: string
-  services: Array<{ id: number; name: string; price: number | null; description: string; duration: number }>
+  // priceUnit / photoCount 必须留在这里：selectService() 会把整个 service 对象
+  // 序列化进 storage 传给预约页，缺这两个字段会让预约页的 isPerPhoto 恒 false，
+  // 按张套餐就会被当成「整套 ¥10」直接成交。
+  services: Array<{
+    id: number
+    name: string
+    price: number | null
+    description: string
+    duration: number
+    priceUnit?: PriceUnit
+    photoCount?: number | null
+  }>
   works: Array<{ id: number; title: string; images: string[]; photographerName?: string }>
   reviews: Array<{ id: number; rating: number; content: string; userName: string; userAvatar?: string; images?: string[]; createdAt: string }>
 }
@@ -262,6 +274,10 @@ async function loadData(pageId: string) {
         price: s.price,
         description: s.description,
         duration: s.duration,
+        // 计价方式与起拍张数必须带下去（B1）：预约页靠 priceUnit 判断是否显示张数步进器，
+        // 靠 photoCount 展示「N张起」。这里丢掉 → 按张套餐按整套价成交。
+        priceUnit: (s.priceUnit || 'fixed') as PriceUnit,
+        photoCount: typeof s.photoCount === 'number' ? s.photoCount : null,
       })),
       works: (res.works || []).map(mapWorkItem),
       reviews: (res.reviews || []).map(mapReviewItem),

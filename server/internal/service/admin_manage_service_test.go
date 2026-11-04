@@ -244,6 +244,7 @@ func bookingScanValues(id int64, status string) []any {
 		"fixed", (*int32)(nil), "agreed", (*string)(nil), (*int32)(nil),
 		(*string)(nil), (*time.Time)(nil), (*time.Time)(nil), (*time.Time)(nil),
 		[]string(nil), "standard", (*string)(nil), (*string)(nil),
+		(*int32)(nil), "fixed", // photo_count, price_unit（000041 快照列）
 	}
 }
 

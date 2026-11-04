@@ -263,7 +263,8 @@ import type {
   OrderEventItem,
   DisputeItem,
   DisputeStatus,
-  DisputeType
+  DisputeType,
+  PriceUnit
 } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote, confirmRespondQuote } from '@/utils/quote'
 import { formatDuration } from '@/utils/duration'
@@ -378,6 +379,9 @@ async function loadOrder() {
           time: serverOrder.time,
           totalPrice: serverOrder.totalPrice || 0,
           priceMode: toPriceMode(serverOrder.priceMode),
+          // 与订单列表同一口径：按张订单必须带出计价单位与张数，否则详情页只显示一个裸总额。
+          priceUnit: (serverOrder.priceUnit || 'fixed') as PriceUnit,
+          photoCount: typeof serverOrder.photoCount === 'number' ? serverOrder.photoCount : null,
           quotePrice: serverOrder.quotePrice ?? null,
           priceStatus: toPriceStatus(serverOrder.priceStatus),
           status: serverOrder.status || 'pending',

@@ -36,11 +36,13 @@ func isNilArg(v any) bool {
 // The update statement's parameters are, in order:
 //
 //	$1 id, $2 photographer_id, $3 name, $4 price, $5 description, $6 duration,
-//	$7 is_active, $8 sort_order
+//	$7 is_active, $8 sort_order, $9 price_unit, $10 photo_count
 const (
 	updateArgIsActive   = 6
 	updateArgSortOrder  = 7
-	updateArgWantLength = 8
+	updateArgPriceUnit  = 8
+	updateArgPhotoCount = 9
+	updateArgWantLength = 10
 )
 
 func newPricingTestSvc(db *fakeDBTX) *PhotographerService {
@@ -123,7 +125,7 @@ func TestUpdateService_ForwardsExplicitSortOrder(t *testing.T) {
 // package looked published.
 func TestMyServices_MapsIsActiveAndSortOrder(t *testing.T) {
 	db := &fakeDBTX{queryRows: []pgx.Rows{&fakeRows{rows: []pgx.Row{
-		fakeRow{values: []any{int64(1), "A", int32Ptr(399), (*string)(nil), int32(60), false, int32(7)}},
+		fakeRow{values: []any{int64(1), "A", int32Ptr(399), (*string)(nil), int32(60), false, int32(7), "fixed", (*int32)(nil)}},
 	}}}}
 	svc := newPricingTestSvc(db)
 

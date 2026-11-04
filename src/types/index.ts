@@ -22,6 +22,8 @@ export interface Photographer extends User {
   userId?: number
   /** 价格汇总：仅列表接口（/v1/photographers）返回；其余接口为 undefined → 卡片不显示价格 */
   minPrice?: number | null
+  /** 上架套餐里的最低按张单价（> 0）；无按张套餐时为 null */
+  minPricePerPhoto?: number | null
   hasFree?: boolean
   hasNegotiable?: boolean
   serviceCount?: number
@@ -41,11 +43,18 @@ export interface Work {
 export interface Service {
   id: string
   name: string
-  /** null = 面议/negotiable, 0 = 互勉/mutual, >0 = 固定价/fixed */
+  /** null = 面议/negotiable, 0 = 互勉/mutual, >0 = 计价数字 */
   price: number | null
   description: string
   duration: number
+  /** 计价方式；缺省视为 fixed（整套价） */
+  priceUnit?: PriceUnit
+  /** 按张计价时的包含张数；null/undefined = 按需议定 */
+  photoCount?: number | null
 }
+
+/** 套餐计价方式（与后端 price_unit 常量一致）：整套价 / 按张 / 按小时 / 按天。 */
+export type PriceUnit = 'fixed' | 'per_photo' | 'per_hour' | 'per_day'
 
 /** Pricing mode derived from the booked package: fixed price / mutual (free) / negotiable. */
 export type PriceMode = 'fixed' | 'mutual' | 'negotiable'
@@ -59,6 +68,10 @@ export interface OrderPriceFields {
   priceStatus: PriceStatus
   quotePrice: number | null
   totalPrice: number
+  /** 下单时的计价单位快照。per_photo 时金额必须按「单价 × 张数」呈现，不能只给一个裸总额。 */
+  priceUnit?: PriceUnit
+  /** 按张订单的张数快照；2026-11 起后端必定写入，null 只可能是历史数据。 */
+  photoCount?: number | null
 }
 
 export interface Booking extends OrderPriceFields {
@@ -71,6 +84,10 @@ export interface Booking extends OrderPriceFields {
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   remarks?: string
   createdAt: number
+  /** 按张拍摄张数快照；null = 按需议定（pricePending） */
+  photoCount?: number | null
+  /** 下单时套餐计价方式快照 */
+  priceUnit?: PriceUnit
 }
 
 /* ───────────────────────── 担保交易（P0 履约节点） ───────────────────────── */

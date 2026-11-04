@@ -11,7 +11,13 @@ export function toPriceStatus(value: unknown): PriceStatus {
   return 'agreed'
 }
 
-/** Render an order amount from its pricing mode and single-round quote state. */
+/**
+ * Render an order amount from its pricing mode and single-round quote state.
+ *
+ * 按张订单必须写成「单价 × 张数」，不能只给一个裸总额 —— 用户看到「¥10」会以为
+ * 是整套价，看到「¥30」也说不清是怎么算出来的。per_photo 且张数缺失只可能是
+ * 2026-11 之前的历史数据，此时退回 formatPrice 保证不显示 NaN。
+ */
 export function renderOrderPrice(order: OrderPriceFields): string {
   if (order.priceMode === 'negotiable') {
     if (order.priceStatus === 'awaiting_quote') return '待报价'
@@ -21,7 +27,12 @@ export function renderOrderPrice(order: OrderPriceFields): string {
     if (order.priceStatus === 'agreed') return `¥${order.totalPrice}`
     return '已拒绝'
   }
-  return formatPrice(order.priceMode === 'mutual' ? 0 : order.totalPrice)
+  if (order.priceMode === 'mutual') return formatPrice(0)
+  if (order.priceUnit === 'per_photo' && order.photoCount != null && order.photoCount > 0) {
+    const unit = Math.round(order.totalPrice / order.photoCount)
+    return `¥${unit} × ${order.photoCount}张 = ¥${order.totalPrice}`
+  }
+  return formatPrice(order.totalPrice)
 }
 
 /**

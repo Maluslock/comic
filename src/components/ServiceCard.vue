@@ -6,7 +6,7 @@
     <view class="info">
       <view class="header">
         <text class="name">{{ service.name }}</text>
-        <text class="price">{{ formatPrice(service.price) }}</text>
+        <text class="price">{{ priceText }}</text>
       </view>
       <text class="desc">{{ service.description }}{{ showDuration ? ' · ' + formatDuration(service.duration) : '' }}</text>
     </view>
@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import type { Service } from '@/types'
-import { formatPrice } from '@/utils/mappers'
+import { describeServicePrice } from '@/utils/price'
 import { formatDuration } from '@/utils/duration'
 import { computed } from 'vue'
 
@@ -37,6 +37,17 @@ const showDuration = computed(() => {
 defineEmits<{
   select: [service: Service]
 }>()
+
+// 价格必须带单位：¥10 在按张套餐里是「一张 10 块」，写成裸 ¥10 会被读成一整套 10 块。
+// 复用 utils/price 的 describeServicePrice，和摄影师详情页/套餐管理页保持同一套文案：
+// per_photo 有张数时还会补「· N张起」，自己拼字符串必然漂移。
+const priceText = computed(() =>
+  describeServicePrice({
+    price: props.service.price ?? null,
+    priceUnit: props.service.priceUnit ?? null,
+    photoCount: props.service.photoCount ?? null,
+  })
+)
 </script>
 
 <style lang="scss" scoped>

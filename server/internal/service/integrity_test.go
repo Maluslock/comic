@@ -89,7 +89,7 @@ func TestCreateBooking_UniqueViolationBecomesConflict(t *testing.T) {
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}}, // 冲突检查通过（TOCTOU 的另一半）
 		fakeRow{values: []any{owner}},
-		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120)}},
+		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120), "fixed", (*int32)(nil)}},
 		fakeRow{err: dup}, // INSERT 被唯一索引挡下
 	}}
 	svc := NewBookingService(repository.New(db))

@@ -9,6 +9,24 @@
       <text class="avatar-hint">也可直接填外链图片地址</text>
     </view>
 
+    <!-- 一键填入微信昵称与头像（仅小程序端；H5 走「从相册上传 + 手填」） -->
+    <!-- #ifdef MP-WEIXIN -->
+    <view class="wx-fill-card">
+      <text class="wx-fill-title">一键填入微信昵称与头像</text>
+      <button class="wx-avatar-btn" open-type="chooseAvatar" @chooseavatar="onPickWxAvatar">
+        <text class="wx-avatar-btn-text">填入微信头像</text>
+      </button>
+      <input
+        v-model="wxNickName"
+        class="field-input wx-nick-input"
+        type="nickname"
+        placeholder="点输入框一键填入微信昵称"
+        placeholder-style="color: #64748b"
+        maxlength="20"
+      />
+    </view>
+    <!-- #endif -->
+
     <view class="form-card">
       <view class="field">
         <text class="field-label">昵称</text>
@@ -49,10 +67,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ApiError } from '@/api/client'
-import { updateUserProfile, pickAndUploadImages } from '@/api/index'
+import { updateUserProfile, pickAndUploadImages, uploadFile } from '@/api/index'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -83,6 +101,33 @@ async function pickAvatar() {
     if (urls[0]) form.avatar = urls[0]
   } catch {
     uni.showToast({ title: '上传失败', icon: 'none' })
+  }
+}
+
+// ===== 一键填入微信昵称与头像（仅小程序端能力；H5 走「从相册上传 + 手填」） =====
+const wxNickName = ref('')
+
+// 微信昵称一键填入 → 同步到昵称输入框
+watch(wxNickName, (v) => {
+  form.name = v
+})
+
+interface AvatarPickEvent {
+  detail: { avatarUrl: string }
+}
+
+async function onPickWxAvatar(e: AvatarPickEvent) {
+  const tempPath = e?.detail?.avatarUrl
+  if (!tempPath) return
+  try {
+    // 复用 /api/v1/upload（与 pickAvatar 同链路）：临时路径先换正式 URL 再进表单
+    const url = await uploadFile(tempPath)
+    if (url) {
+      form.avatar = url
+      uni.showToast({ title: '头像已填入', icon: 'none' })
+    }
+  } catch {
+    uni.showToast({ title: '头像上传失败，可稍后重试', icon: 'none' })
   }
 }
 
@@ -154,6 +199,52 @@ async function save() {
   font-size: $font-size-xs;
   color: $dark-text-tertiary;
   margin-top: $spacing-md;
+}
+
+// ===== 一键填入微信昵称与头像（仅小程序端） =====
+.wx-fill-card {
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin-bottom: $spacing-md;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wx-fill-title {
+  font-size: 26rpx;
+  color: $dark-text-secondary;
+  margin-bottom: 24rpx;
+  align-self: flex-start;
+}
+
+.wx-avatar-btn {
+  width: 320rpx;
+  height: 80rpx;
+  background: $dark-bg-secondary;
+  border: 1rpx solid $neon-purple;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  &::after {
+    border: none;
+  }
+}
+
+.wx-avatar-btn-text {
+  font-size: 26rpx;
+  color: $neon-purple;
+}
+
+.wx-nick-input {
+  width: 100%;
+  margin-top: 24rpx;
 }
 
 .avatar-upload {

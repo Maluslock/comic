@@ -104,6 +104,7 @@ export interface PhotographerDTO {
   tags?: string[]
   userId?: number | string
   minPrice?: number | null
+  minPricePerPhoto?: number | null
   hasFree?: boolean
   hasNegotiable?: boolean
   serviceCount?: number
@@ -196,6 +197,7 @@ export function mapPhotographerItem(p: PhotographerDTO): Photographer {
     createdAt: Date.now(),
     // 价格汇总：只有列表接口给；缺失时保持 undefined（而不是 0），卡片据此决定不显示价格
     minPrice: typeof p.minPrice === 'number' ? p.minPrice : null,
+    minPricePerPhoto: typeof p.minPricePerPhoto === 'number' ? p.minPricePerPhoto : null,
     hasFree: p.hasFree === true,
     hasNegotiable: p.hasNegotiable === true,
     serviceCount: typeof p.serviceCount === 'number' ? p.serviceCount : undefined,

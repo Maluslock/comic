@@ -69,7 +69,7 @@ func (f *bookingRecorder) Exec(context.Context, string, ...any) (pgconn.CommandT
 func createBookingArg(t *testing.T, db *bookingRecorder, idx int) any {
 	t.Helper()
 	for _, a := range db.args {
-		if len(a) == 12 {
+		if len(a) == 14 {
 			if idx < 0 || idx >= len(a) {
 				t.Fatalf("createBookingArg: idx %d out of range for %d args", idx, len(a))
 			}
@@ -95,7 +95,7 @@ func TestCreateBooking_WritesServicePrice(t *testing.T) {
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
 		fakeRow{values: []any{owner}}, // GetBookableServicePhotographerID -> 摄影师 2（本人，且已上架）
-		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120)}},
+		fakeRow{values: []any{int64(1), "基础套餐", int32Ptr(399), (*string)(nil), int32(120), "fixed", (*int32)(nil)}},
 		fakeRow{values: bookingScanValues(9, "pending")},
 		fakeRow{err: errors.New("no photographer profile")},
 	}}
@@ -188,11 +188,11 @@ func TestCreateBooking_TemplateServiceRejected(t *testing.T) {
 
 func TestCreateBooking_NegotiableService(t *testing.T) {
 	db := &bookingRecorder{rows: []pgx.Row{
-		fakeRow{err: errors.New("no photographer profile")},                                // 拉黑检查
-		fakeRow{values: []any{int64(0)}},                                                   // 冲突
-		fakeRow{values: []any{int64(2)}},                                                   // GetBookableServicePhotographerID -> 摄影师 2（本人，且已上架）
-		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60)}}, // GetServiceById -> price NULL
-		fakeRow{values: bookingScanValues(11, "pending")},                                  // CreateBooking
+		fakeRow{err: errors.New("no photographer profile")}, // 拉黑检查
+		fakeRow{values: []any{int64(0)}},                    // 冲突
+		fakeRow{values: []any{int64(2)}},                    // GetBookableServicePhotographerID -> 摄影师 2（本人，且已上架）
+		fakeRow{values: []any{int64(1), "面议套餐", (*int32)(nil), (*string)(nil), int32(60), "fixed", (*int32)(nil)}}, // GetServiceById -> price NULL
+		fakeRow{values: bookingScanValues(11, "pending")},                                                          // CreateBooking
 		fakeRow{err: errors.New("no photographer profile")},
 	}}
 	svc := NewBookingService(repository.New(db))
@@ -218,7 +218,7 @@ func TestCreateBooking_MutualService(t *testing.T) {
 		fakeRow{err: errors.New("no photographer profile")},
 		fakeRow{values: []any{int64(0)}},
 		fakeRow{values: []any{int64(2)}}, // 套餐属于摄影师 2（本人）
-		fakeRow{values: []any{int64(7), "互勉套餐", &zero, (*string)(nil), int32(45)}},
+		fakeRow{values: []any{int64(7), "互勉套餐", &zero, (*string)(nil), int32(45), "fixed", (*int32)(nil)}},
 		fakeRow{values: bookingScanValues(12, "pending")},
 		fakeRow{err: errors.New("no photographer profile")},
 	}}

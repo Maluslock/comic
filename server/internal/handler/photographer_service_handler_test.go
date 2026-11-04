@@ -139,12 +139,17 @@ func TestServiceHandler_FailedWriteDoesNotInvalidate(t *testing.T) {
 	}
 }
 
+// assertInvalidated 断言「所有渲染价格的缓存」都被清过：列表、首页、活动。
+// 只清列表会留下更难发现的半新半旧状态——列表已是新价、首页还是旧价。
 func assertInvalidated(t *testing.T, inv *fakeInvalidator) {
 	t.Helper()
-	if len(inv.prefixes) != 1 {
-		t.Fatalf("expected exactly 1 invalidation, got %v", inv.prefixes)
+	want := []string{"photographers:", "home", "events:"}
+	if len(inv.prefixes) != len(want) {
+		t.Fatalf("expected %d invalidations %v, got %v", len(want), want, inv.prefixes)
 	}
-	if inv.prefixes[0] != "photographers:" {
-		t.Errorf("expected prefix 'photographers:', got %q", inv.prefixes[0])
+	for i, w := range want {
+		if inv.prefixes[i] != w {
+			t.Errorf("invalidation[%d] = %q, want %q", i, inv.prefixes[i], w)
+		}
 	}
 }

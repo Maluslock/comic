@@ -1,0 +1,1 @@
+"use strict";function t(t){if(""===t)return!1;for(let r=0;r<t.length;r+=1){const e=t.charCodeAt(r);if(e<48||e>57)return!1}return!0}exports.isPlaceholderName=function(r){const e=(r??"").trim();return""===e||"微信用户"===e||(e.startsWith("摄影师")?t(e.slice(3)):t(e))};

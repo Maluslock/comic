@@ -498,6 +498,9 @@ func main() {
 
 		uploadH := handler.NewUploadHandler(os.Getenv("UPLOAD_DIR"))
 		router.POST("/api/v1/upload", middleware.AuthRequired(userRepo), uploadH.Upload)
+		// /upload/base64 走普通 uni.request（request 白名单，已验证可用），
+		// 用来绕过小程序 uploadFile 独立白名单没配时「上传永远失败且服务端零日志」的死局。
+		router.POST("/api/v1/upload/base64", middleware.AuthRequired(userRepo), uploadH.UploadBase64)
 
 		adminExportH := handler.NewAdminExportHandler(adminManageSvc, adminUserSvc)
 		adminGroup.GET("/export/orders", adminExportH.Orders)

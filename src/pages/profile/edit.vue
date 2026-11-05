@@ -99,8 +99,11 @@ async function pickAvatar() {
   try {
     const urls = await pickAndUploadImages(1)
     if (urls[0]) form.avatar = urls[0]
-  } catch {
-    uni.showToast({ title: '上传失败', icon: 'none' })
+  } catch (e) {
+    // 不再统一写「上传失败」：uploadFile 已经把成因翻译成人话
+    // （未登录 / 域名未配置 / 图片格式不支持 / 超时），原样透给用户才有解决方向。
+    const msg = e instanceof Error && e.message ? e.message : '上传失败'
+    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
   }
 }
 
@@ -126,8 +129,9 @@ async function onPickWxAvatar(e: AvatarPickEvent) {
       form.avatar = url
       uni.showToast({ title: '头像已填入', icon: 'none' })
     }
-  } catch {
-    uni.showToast({ title: '头像上传失败，可稍后重试', icon: 'none' })
+  } catch (e) {
+    const msg = e instanceof Error && e.message ? e.message : '头像上传失败，可稍后重试'
+    uni.showToast({ title: msg, icon: 'none', duration: 3000 })
   }
 }
 

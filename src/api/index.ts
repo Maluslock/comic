@@ -14,28 +14,127 @@ import { resolveImage } from '@/utils/mappers'
 import { getApiBase } from '@/utils/apiBase'
 import { mockCreditSummary, mockCreditEvents } from '@/data/creditMock'
 
+/**
+ * 上传图片，返回可直接入库的绝对 URL。
+ *
+ * 这里刻意把**每一种失败原因**都翻译成人话再抛出，因为小程序端 uploadFile
+ * 的失败不会进 Network 面板，也不会打到服务端 —— 服务端日志一片空白，
+ * 用户只看到「上传失败」。三种真实成因完全不同，必须区分：
+ *
+ * 1) 未登录（无 token）→ 服务端 401，请求确实发出去了；
+ * 2) 合法域名（uploadFile 白名单）没配 → **请求根本没发出去**，
+ *    errMsg 形如 `uploadFile:fail url not in domain list`。
+ *    注意 request 与 uploadFile 是**两套独立白名单**：登录能通不代表上传能通；
+ * 3) 服务端 4xx（如魔数不是图片）→ 会带回 error 字段，不能吞掉。
+ */
+/**
+ * 把本地临时文件读成 base64（去掉 DataURL 前缀）。
+ * 用于 `/v1/upload/base64` 通道：它走普通 request，不经过 uploadFile 白名单。
+ */
+function readFileAsBase64(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // H5 的 uni 对象**没有** getFileSystemManager（实测 uni-h5.es.js 里零命中），
+    // 硬调会抛 "is not a function"。这里提前判掉，让 H5 直接走 multipart 通道，
+    // 不要靠 try/catch 兜底掩盖真实原因。
+    const fsm = typeof uni.getFileSystemManager === 'function' ? uni.getFileSystemManager() : null
+    if (!fsm) {
+      reject(new Error('当前平台不支持读取本地文件'))
+      return
+    }
+    fsm.readFile({
+      filePath,
+      encoding: 'base64',
+      success: (res) => {
+        const data = typeof res.data === 'string' ? res.data : ''
+        if (!data) {
+          reject(new Error('读取图片失败'))
+          return
+        }
+        resolve(data)
+      },
+      fail: (err) => {
+        const raw = String((err && (err as AnyObject).errMsg) || '')
+        reject(new Error(raw || '读取图片失败'))
+      }
+    })
+  })
+}
+
+/**
+ * 上传图片，返回可直接入库的绝对 URL。
+ *
+ * 两条通道，按顺序尝试：
+ *   ① `POST /v1/upload/base64`（走 uni.request）—— 主路径。
+ *      小程序里 uni.uploadFile 用的是**独立于 uni.request 的「uploadFile 合法域名」白名单**。
+ *      现场症状：登录（request）一切正常，头像（uploadFile）永远失败、**服务端零日志**——
+ *      请求在客户端就被拦了，根本发不出去。base64 通道复用 request 白名单，绕开这个坑。
+ *   ② `POST /v1/upload`（multipart）—— 兜底。base64 失败时再试，两种情况互补：
+ *      若白名单正常而 base64 因体积大失败，走这条能成；反之亦然。
+ *
+ * 两条都失败时抛出**最有信息量**的那条错误，让用户/开发者看到真实成因
+ * （未登录 / 域名未配置 / 格式不支持 / 超时），而不是笼统的「上传失败」。
+ */
 export async function uploadFile(filePath: string): Promise<string> {
   const token = uni.getStorageSync('token') as string
+  if (!token) {
+    // 提前失败，避免发一个注定 401 的请求再被上层 catch 静默吞掉
+    throw new Error('未登录，请先登录再上传')
+  }
 
+  const errors: string[] = []
+
+  // ① base64 通道（request 白名单）
+  try {
+    const b64 = await readFileAsBase64(filePath)
+    const res = await apiPost<{ url: string }>('/v1/upload/base64', { data: b64 })
+    if (res?.url) return resolveImage(res.url)
+    errors.push('base64 通道返回空 url')
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : 'base64 通道失败')
+  }
+
+  // ② multipart 通道（uploadFile 白名单）
+  try {
+    return await uploadViaMultipart(filePath, token)
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : 'multipart 通道失败')
+  }
+
+  throw new Error(errors.filter(Boolean).join('；') || '上传失败，请重试')
+}
+
+/** multipart 上传（uni.uploadFile）。保留给「uploadFile 白名单已配好」的环境。 */
+function uploadViaMultipart(filePath: string, token: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     uni.uploadFile({
       url: `${getApiBase()}/v1/upload`,
       filePath,
       name: 'file',
-      header: token ? { Authorization: `Bearer ${token}` } : {},
+      header: { Authorization: `Bearer ${token}` },
       success: (res) => {
         if (res.statusCode !== 200 && res.statusCode !== 201) {
-          reject(new Error('upload failed'))
+          // 后端把原因放在 error 字段，透出去否则用户永远只看到「上传失败」
+          let detail = ''
+          try {
+            detail = (JSON.parse(res.data) as { error?: string }).error || ''
+          } catch { /* 非 JSON 响应，保持空 */ }
+          reject(new Error(detail || `HTTP ${res.statusCode}`))
           return
         }
         try {
-          // 后端返回 /static/uploads/xxx 相对路径，小程序端必须补 origin，否则入库即裂图
           resolve(resolveImage((JSON.parse(res.data) as { url: string }).url))
-        } catch (e) {
-          reject(e)
+        } catch {
+          reject(new Error('响应解析失败'))
         }
       },
-      fail: reject
+      fail: (err) => {
+        const raw = String((err && (err as AnyObject).errMsg) || '')
+        if (raw.includes('domain list')) {
+          reject(new Error('uploadFile 合法域名未配置'))
+          return
+        }
+        reject(new Error(raw || 'uploadFile 失败'))
+      }
     })
   })
 }

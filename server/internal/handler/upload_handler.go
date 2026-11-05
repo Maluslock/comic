@@ -3,13 +3,14 @@ package handler
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,15 +70,92 @@ func sniffImageExt(head []byte) (string, bool) {
 	return "", false
 }
 
-// readHead 读取文件前 sniffLen 字节，并把读走的部分拼回去，保证后续 SaveUploadedFile 写出完整内容。
-func readHead(f multipart.File) ([]byte, io.Reader, error) {
-	head := make([]byte, sniffLen)
-	n, err := io.ReadFull(f, head)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
-		return nil, nil, err
+// saveImage 把已解出的图片字节按魔数定扩展名落盘，返回可对外访问的相对路径。
+// multipart 与 base64 两条上传通道共用，保证两种入口的校验规则完全一致。
+func (h *UploadHandler) saveImage(data []byte) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("file is empty")
 	}
-	head = head[:n]
-	return head, io.MultiReader(bytes.NewReader(head), f), nil
+	if len(data) > maxUploadBytes {
+		return "", fmt.Errorf("file too large (max 5MB)")
+	}
+
+	head := data
+	if len(head) > sniffLen {
+		head = head[:sniffLen]
+	}
+	ext, ok := sniffImageExt(head)
+	if !ok || !allowedImageExt[ext] {
+		return "", fmt.Errorf("unsupported image type (支持 jpg/png/gif/webp)")
+	}
+
+	if err := os.MkdirAll(h.dir, 0o755); err != nil {
+		return "", fmt.Errorf("cannot create upload dir")
+	}
+
+	suffix := make([]byte, 8)
+	rand.Read(suffix)
+	name := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), hex.EncodeToString(suffix), ext)
+	dstPath := filepath.Join(h.dir, name)
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot save file")
+	}
+	if _, err := dst.Write(data); err != nil {
+		dst.Close()
+		os.Remove(dstPath)
+		return "", fmt.Errorf("cannot save file")
+	}
+	if err := dst.Close(); err != nil {
+		os.Remove(dstPath)
+		return "", fmt.Errorf("cannot save file")
+	}
+	return "/static/uploads/" + name, nil
+}
+
+// UploadBase64 是**绕过 uploadFile 白名单**的上传通道。
+//
+// 为什么需要它：小程序的 uni.uploadFile 走独立的「uploadFile 合法域名」白名单，
+// 与 uni.request 的 request 白名单是两套配置。现场症状是登录（request）一直正常、
+// 头像（uploadFile）永远失败，且**服务端零日志**——请求在客户端就被拦了。
+// 这条路走普通 request（已验证可用），把图片 base64 塞进 JSON body 发上来。
+//
+// body: {"data":"data:image/jpeg;base64,...."} 或 {"data":"<裸 base64>"}
+func (h *UploadHandler) UploadBase64(c *gin.Context) {
+	var req struct {
+		Data string `json:"data" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "data is required"})
+		return
+	}
+
+	payload := req.Data
+	// 允许标准 DataURL 前缀，剥掉后再解码
+	if idx := strings.Index(payload, "base64,"); idx >= 0 {
+		payload = payload[idx+len("base64,"):]
+	}
+	// base64 里允许换行（部分端会按行折行），统一去掉
+	payload = strings.ReplaceAll(payload, "\n", "")
+	payload = strings.ReplaceAll(payload, "\r", "")
+
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid base64 payload"})
+		return
+	}
+
+	url, err := h.saveImage(data)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err.Error() == "cannot save file" || err.Error() == "cannot create upload dir" {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"url": url})
 }
 
 func (h *UploadHandler) Upload(c *gin.Context) {
@@ -107,46 +185,22 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 
-	head, full, err := readHead(src)
+	// 整体读进内存后交给 saveImage：与 base64 通道共用同一套校验与落盘逻辑，
+	// 上限 5MB，不存在把内存吃爆的风险。
+	data, err := io.ReadAll(io.LimitReader(src, maxUploadBytes+1))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read file"})
 		return
 	}
 
-	ext, ok := sniffImageExt(head)
-	if !ok || !allowedImageExt[ext] {
-		// 文案保留原来的机器可读前缀（前端按 error 字段直接展示），
-		// 但补一句人话，避免用户只知道"失败"却不知道要换张图。
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported image type (支持 jpg/png/gif/webp)"})
-		return
-	}
-
-	if err := os.MkdirAll(h.dir, 0o755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create upload dir"})
-		return
-	}
-
-	suffix := make([]byte, 8)
-	rand.Read(suffix)
-	name := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), hex.EncodeToString(suffix), ext)
-	dstPath := filepath.Join(h.dir, name)
-
-	dst, err := os.Create(dstPath)
+	url, err := h.saveImage(data)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save file"})
+		status := http.StatusBadRequest
+		if err.Error() == "cannot save file" || err.Error() == "cannot create upload dir" {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	if _, err := io.Copy(dst, full); err != nil {
-		dst.Close()
-		os.Remove(dstPath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save file"})
-		return
-	}
-	if err := dst.Close(); err != nil {
-		os.Remove(dstPath)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save file"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{"url": "/static/uploads/" + name})
+	c.JSON(http.StatusCreated, gin.H{"url": url})
 }

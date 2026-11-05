@@ -61,11 +61,14 @@ func TestActivate_Idempotent_ReplacesPlaceholderName(t *testing.T) {
 	if id != 15 {
 		t.Fatalf("Activate must return the existing photographer id 15, got %d", id)
 	}
-	if store.updateProfileID != 15 {
-		t.Fatalf("placeholder name must be repaired, UpdatePhotographerProfile id=%d", store.updateProfileID)
+	if store.updateActivationID != 15 {
+		t.Fatalf("placeholder name must be repaired, UpdatePhotographerActivationFields id=%d", store.updateActivationID)
 	}
-	if store.updateProfileName != "光影行者" {
-		t.Fatalf("want name 光影行者, got %q", store.updateProfileName)
+	if store.updateActivationName != "光影行者" {
+		t.Fatalf("want name 光影行者, got %q", store.updateActivationName)
+	}
+	if !store.updateActivationNameOverridden {
+		t.Fatal("repairing a placeholder is a real name override, name_is_custom must be set")
 	}
 	// users.name 也要跟上（但只写 users，不写 photographers——后者上面已单独写）
 	if len(names.calls) != 1 || names.calls[0].userID != userID || names.calls[0].name != "光影行者" {
@@ -92,9 +95,9 @@ func TestActivate_Idempotent_KeepsRealStageName(t *testing.T) {
 	if id != 7 {
 		t.Fatalf("want existing id 7, got %d", id)
 	}
-	if store.updateProfileID != 0 {
-		t.Fatalf("a real stage name must not be overwritten by re-activation, UpdatePhotographerProfile ran with id=%d name=%q",
-			store.updateProfileID, store.updateProfileName)
+	if store.updateActivationID != 0 {
+		t.Fatalf("a real stage name must not be overwritten by re-activation, UpdatePhotographerActivationFields ran with id=%d name=%q",
+			store.updateActivationID, store.updateActivationName)
 	}
 	if len(names.calls) != 0 {
 		t.Fatalf("account nickname must not be touched when nothing changed, got %+v", names.calls)
@@ -115,8 +118,8 @@ func TestActivate_Idempotent_PlaceholderWithoutNameIsNoop(t *testing.T) {
 	if _, err := svc.Activate(context.Background(), userID, "", "both", ""); err != nil {
 		t.Fatalf("Activate unexpected error: %v", err)
 	}
-	if store.updateProfileID != 0 {
-		t.Fatalf("empty name must not trigger a profile UPDATE, ran with id=%d", store.updateProfileID)
+	if store.updateActivationID != 0 {
+		t.Fatalf("empty name must not trigger a profile UPDATE, ran with id=%d", store.updateActivationID)
 	}
 }
 
@@ -140,9 +143,12 @@ func TestActivate_Idempotent_ReplacesMigrationFallbackName(t *testing.T) {
 	if id != 15 {
 		t.Fatalf("want existing id 15, got %d", id)
 	}
-	if store.updateProfileID != 15 || store.updateProfileName != "阿伟" {
+	if store.updateActivationID != 15 || store.updateActivationName != "阿伟" {
 		t.Fatalf("fallback name 摄影师15 must be replaceable, got id=%d name=%q",
-			store.updateProfileID, store.updateProfileName)
+			store.updateActivationID, store.updateActivationName)
+	}
+	if !store.updateActivationNameOverridden {
+		t.Fatal("replacing the fallback name is a real override, name_is_custom must be set")
 	}
 	if len(names.calls) != 1 || names.calls[0].name != "阿伟" {
 		t.Fatalf("account nickname must follow, got %+v", names.calls)
@@ -163,11 +169,14 @@ func TestActivate_Idempotent_UpdatesModeWhenProvided(t *testing.T) {
 	if _, err := svc.Activate(context.Background(), userID, "光影行者", "pay", ""); err != nil {
 		t.Fatalf("Activate unexpected error: %v", err)
 	}
-	if store.updateProfileMode != "pay" {
-		t.Fatalf("want mode pay, got %q", store.updateProfileMode)
+	if store.updateActivationMode != "pay" {
+		t.Fatalf("want mode pay, got %q", store.updateActivationMode)
 	}
-	if store.updateProfileName != "光影行者" {
-		t.Fatalf("name must stay untouched, got %q", store.updateProfileName)
+	if store.updateActivationName != "光影行者" {
+		t.Fatalf("name must stay untouched, got %q", store.updateActivationName)
+	}
+	if store.updateActivationNameOverridden {
+		t.Fatal("mode-only update must not claim the name, name_is_custom must stay as-is")
 	}
 }
 
@@ -185,8 +194,8 @@ func TestActivate_Idempotent_RejectsInvalidMode(t *testing.T) {
 	if err == nil {
 		t.Fatal("want ErrInvalidMode, got nil")
 	}
-	if store.updateProfileID != 0 {
-		t.Fatalf("invalid mode must not write, ran with id=%d", store.updateProfileID)
+	if store.updateActivationID != 0 {
+		t.Fatalf("invalid mode must not write, ran with id=%d", store.updateActivationID)
 	}
 }
 

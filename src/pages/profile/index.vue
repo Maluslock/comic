@@ -98,6 +98,14 @@
           <text class="menu-text">接单管理</text>
           <text class="menu-arrow">›</text>
         </view>
+        <!-- 艺名是摄影师的对外身份名，与账号昵称相互独立（改昵称不会改艺名）。
+             已开通摄影师以前只能从 activate.vue 进 profile-edit，这里补「我的」页常驻入口。
+             身份先于商品，所以排在「我的套餐 · 定价」之前。 -->
+        <view v-if="isPhotographer" class="menu-item" @click="goPhotographerProfile">
+          <image class="menu-icon" src="/static/icons/menu-camera.svg" mode="aspectFit" />
+          <text class="menu-text">摄影师资料 · 艺名</text>
+          <text class="menu-arrow">›</text>
+        </view>
         <!--
           定价入口以前只藏在「开通摄影师」页里，摄影师自己也找不到（用户原话：
           「三天去三场漫展，我自己怎么定价？看半天没看到入口」）。这里把它提到
@@ -253,11 +261,17 @@ onMounted(() => {
   userStore.init()
   loadStats()
   loadCredit()
+  // 补齐服务端字段（photographerId 等）：升级前登录的用户 storage 里没有它，
+  // 不刷新的话「我是摄影师」的分组与编辑页的艺名提示都不会出现。
+  userStore.refreshMe()
 })
 
 onShow(() => {
   loadStats()
   loadCredit()
+  // 从「开通摄影师」/「摄影师资料」返回时档案可能刚建好，这里再补一次，
+  // 让分组与提示立刻跟着变，不用等下次冷启动。
+  userStore.refreshMe()
 })
 
 function goLogin() {
@@ -282,6 +296,13 @@ function goActivate() {
 function goPhotographerOrders() {
   if (needLogin('/pages/photographer/orders')) return
   uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
+}
+
+// 艺名入口：带登录守卫（与 goEdit/goPhotographerOrders 同口径），游客先进登录页再原地回来。
+function goPhotographerProfile() {
+  const redirect = '/pages/photographer/profile-edit'
+  if (needLogin(redirect)) return
+  uni.navigateTo({ url: redirect, animationType: 'none' })
 }
 
 // 定价入口：从「我的套餐」页直接改价/建套餐（此前只有 activate.vue 一个入口）。

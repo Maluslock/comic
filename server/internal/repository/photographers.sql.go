@@ -198,12 +198,61 @@ func (q *Queries) GetPhotographerByUserID(ctx context.Context, userID int64) (Ph
 // ErrProfileNotFound is returned by UpdatePhotographerProfile when the UPDATE affects no rows.
 var ErrProfileNotFound = errors.New("photographer profile not found")
 
+// updatePhotographerProfile 是「用户显式改摄影师档案」的唯一 SQL 入口
+// （PUT /api/v1/photographers/profile，以及 Activate 命中已有档案时的增量覆盖）。
+//
+// name_is_custom 用 `name_is_custom OR (name IS DISTINCT FROM $2)` 表达，而不是无条件置 true：
+// 这条 SQL 是「保存整个摄影师档案」的全量写入，用户可能只是改个城市 / 简介 / 接单模式，
+// 名字一个字没动。无条件置 true 会把这种「没改名」也当成「设过艺名」，账号昵称从此
+// 再也同步不过来（见 UserRepo.SyncPhotographerName 的 WHERE name_is_custom = false）——
+// 那正是本次要修的那个不一致，只是换了个触发入口。
+// PostgreSQL 的 SET 表达式一律按旧行求值，所以这里的 name 是写入前的名字，
+// IS DISTINCT FROM 对 NULL 也安全：只有「真的改了名」才把标记点上去。
+// 第二处 $2 必须显式 ::varchar：同一参数在 SET 里既当赋值源又当比较操作数，
+// PostgreSQL 会把两处推导出的类型判为冲突并报 42P08 inconsistent types。
+// 仍然写在 SQL 里（而不是 service 层补一条 UPDATE），标记与名字永远同一次写入，
+// 未来新增调用方也不会漏。
 const updatePhotographerProfile = `-- name: UpdatePhotographerProfile :exec
-UPDATE photographers SET name = $2, description = $3, location = $4, mode = $5, mutual_intro = $6, avatar = $7, updated_at = NOW() WHERE id = $1
+UPDATE photographers SET name = $2, description = $3, location = $4, mode = $5, mutual_intro = $6, avatar = $7,
+       name_is_custom = name_is_custom OR (name IS DISTINCT FROM $2::varchar), updated_at = NOW() WHERE id = $1
 `
 
 func (q *Queries) UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error {
 	tag, err := q.db.Exec(ctx, updatePhotographerProfile, id, name, description, location, mode, mutualIntro, avatar)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrProfileNotFound
+	}
+	return nil
+}
+
+// updatePhotographerActivationFields 是 Activate 幂等分支（refreshActivatedProfile）的专用窄语句。
+//
+// 为什么不用上面那条 updatePhotographerProfile：
+//   - 那条会把 description / location / avatar 按调用方读到的旧值再写一遍，凭空多出一个
+//     「读旧值 → 写回旧值」的竞态窗口，覆盖掉期间别处对这些列的修改；
+//   - 那条虽然也只在「真的改了名」时才置 name_is_custom（见其注释），但它会把
+//     description / location / avatar 一起重写；Activate 分支**大多数时候并没有改名**
+//     （用户只是又点了下「开通摄影师」换了接单模式），没必要碰那几个列。
+//     所以这里用更窄的语句，只写 name / mode / mutual_intro 三列。
+//
+// 所以标记用 `name_is_custom OR $5` 表达：$5 = 本次是否真的覆盖了名字。
+// 覆盖了 → true（永久保护这个艺名）；没覆盖 → 原值不变（该跟随的还是跟随）。
+// 一条语句、一次原子写，不用为「改名」和「改 mode」拆成两次 UPDATE。
+const updatePhotographerActivationFields = `-- name: UpdatePhotographerActivationFields :exec
+UPDATE photographers
+SET name = $2,
+    mode = $3,
+    mutual_intro = $4,
+    name_is_custom = name_is_custom OR $5,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdatePhotographerActivationFields(ctx context.Context, id int64, name, mode string, mutualIntro *string, nameOverridden bool) error {
+	tag, err := q.db.Exec(ctx, updatePhotographerActivationFields, id, name, mode, mutualIntro, nameOverridden)
 	if err != nil {
 		return err
 	}

@@ -43,6 +43,7 @@ type Querier interface {
 	InsertPhotographer(ctx context.Context, arg InsertPhotographerParams) (PhotographerWithTags, error)
 	GetPhotographerByUserID(ctx context.Context, userID int64) (PhotographerWithTags, error)
 	UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error
+	UpdatePhotographerActivationFields(ctx context.Context, id int64, name, mode string, mutualIntro *string, nameOverridden bool) error
 	GetBookingsByPhotographer(ctx context.Context, photographerID int32) ([]BookingWithCoser, error)
 
 	// Works

@@ -30,6 +30,12 @@ type fakeWorksStore struct {
 	updateWorkErr       error
 	updatedWorkID       int64
 	updatedWorkTitle    string
+
+	// activation* 记录 Activate 幂等分支的窄写入（只写 name/mode/intro + nameOverridden）。
+	updateActivationID             int64
+	updateActivationName           string
+	updateActivationMode           string
+	updateActivationNameOverridden bool
 }
 
 func (f *fakeWorksStore) GetPhotographerByUserID(_ context.Context, _ int64) (repository.PhotographerWithTags, error) {
@@ -40,6 +46,14 @@ func (f *fakeWorksStore) UpdatePhotographerProfile(_ context.Context, id int64, 
 	f.updateProfileID = id
 	f.updateProfileName = name
 	f.updateProfileMode = mode
+	return f.updateProfileErr
+}
+
+func (f *fakeWorksStore) UpdatePhotographerActivationFields(_ context.Context, id int64, name, mode string, _ *string, nameOverridden bool) error {
+	f.updateActivationID = id
+	f.updateActivationName = name
+	f.updateActivationMode = mode
+	f.updateActivationNameOverridden = nameOverridden
 	return f.updateProfileErr
 }
 
@@ -364,7 +378,7 @@ func TestUpdateService_NotOwner(t *testing.T) {
 	svc := newServiceTestSvc(
 		&fakeWorksStore{profile: repository.PhotographerWithTags{ID: 7}},
 		&fakeDBTX{
-			execRows: 0, // UPDATE 命中 0 行（归属不符）
+			execRows: 0,                                        // UPDATE 命中 0 行（归属不符）
 			rows:     []pgx.Row{fakeRow{values: []any{owner}}}, // GetServicePhotographerID -> 42
 		},
 	)

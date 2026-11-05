@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -281,6 +282,15 @@ func main() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 				return
 			}
+			// binding:"required" 只保证字段非空串，全空格能过；而下游 SyncPhotographerName
+			// 的空值守卫判的是 name == ""，" " 会原样同步进 photographers.name，
+			// 表现为「列表里名字是一片空白」。这里统一收口，和 WeChatLogin 的
+			// strings.TrimSpace(req.NickName) 保持同一口径。
+			name := strings.TrimSpace(req.Name)
+			if name == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+				return
+			}
 			avatar := req.Avatar
 			bio := req.Bio
 			prevAvatar := ""
@@ -300,7 +310,7 @@ func main() {
 			} else if u, err := userRepo.GetByID(c.Request.Context(), middleware.UserID(c)); err == nil {
 				prevAvatar = u.Avatar
 			}
-			err := userRepo.UpdateProfile(c.Request.Context(), middleware.UserID(c), req.Name, avatar, bio)
+			err := userRepo.UpdateProfile(c.Request.Context(), middleware.UserID(c), name, avatar, bio)
 			if errors.Is(err, pgx.ErrNoRows) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 				return
@@ -316,6 +326,21 @@ func main() {
 					// 同步失败不回滚主流程：账号头像已存成功，只是展示层暂时旧图。
 					log.Printf("sync photographer avatar failed (user=%d): %v", middleware.UserID(c), err)
 				}
+			}
+			// 昵称同理，而且更容易出事：摄影师列表/搜索（searchPhotographers）只匹配
+			// photographers.name 与 description，从不 join users；用户在「编辑资料」里
+			// 改的却是 users.name —— 不同步就是「我注册了摄影师叫 MalusLock，搜摄影师
+			// 没结果」。方向是单向的 users.nickname → photographers.name，且只在
+			// name_is_custom = false（用户没显式设过艺名）时跟随，艺名不会被冲掉。
+			//
+			// best-effort：账号昵称已经存成功，同步失败只记日志不回滚；synced 为 true
+			// 才说明 photographers.name 真的变了，这时才需要清缓存。
+			if synced, err := userRepo.SyncPhotographerName(c.Request.Context(), middleware.UserID(c), name); err != nil {
+				log.Printf("sync photographer name failed (user=%d): %v", middleware.UserID(c), err)
+			} else if synced {
+				// 名字会渲染进摄影师列表卡片、首页与活动卡片；不清缓存就是「库里新名、
+				// 列表旧名」，最长糊 5 分钟（TTL），用户会以为改名没生效。
+				handler.InvalidatePhotographerNameCaches(c.Request.Context(), redisCache)
 			}
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})

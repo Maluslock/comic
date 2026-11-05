@@ -147,6 +147,42 @@ func (r *UserRepo) UpdateAvatar(ctx context.Context, userID int64, avatar string
 	return err
 }
 
+// SyncPhotographerName 把账号昵称同步到该用户自己的摄影师档案（users → photographers）。
+//
+// 根因记录：名字在库里有两列 —— users.name（账号昵称，「我的」页与聊天里显示）
+// 与 photographers.name（对外展示的摄影师名，列表 / 搜索 / 详情 / 预约卡片读的全是这列）。
+// 摄影师列表与搜索的 SQL（searchPhotographers）只匹配 p.name / p.description，
+// 而 `PUT /api/v1/me/profile`（「编辑资料」页）此前只写 users.name。
+// 结果：用户把昵称改成 MalusLock，「我的」页变了，摄影师列表里还是注册时那个名字，
+// 搜自己的新昵称 total=0 —— 用户原话「我注册了摄影师，叫 MalusLock，搜索摄影师没结果」。
+//
+// 语义边界（与 SyncPhotographerAvatar 同款：只碰自己的行、只碰该跟随的列）：
+//   - 只更新该 user_id 自己的档案，绝不跨账号。
+//   - name_is_custom = false 才跟随：摄影师一旦在「摄影师资料」页显式设过艺名
+//     （写路径 UpdatePhotographerProfile 会把标记置 true），那个名字是品牌资产，
+//     账号昵称没有资格覆盖它。
+//   - COALESCE(name, 空串) <> $2 才写：名字没变就不产生无意义的 UPDATE，
+//     updated_at 不该因为「提交了一份没改名的表单」而跳动。
+//
+// 返回值 bool = 真的改到了行。调用方据此决定要不要清缓存：
+// 只清「确实变了」的情况，避免每次保存资料都白扫一遍 Redis。
+func (r *UserRepo) SyncPhotographerName(ctx context.Context, userID int64, name string) (bool, error) {
+	if userID == 0 || name == "" {
+		return false, nil
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE photographers
+		SET name = $2, updated_at = NOW()
+		WHERE user_id = $1
+		  AND name_is_custom = false
+		  AND COALESCE(name, '') <> $2`,
+		userID, name)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // SyncPhotographerAvatar 把账号头像同步到该用户自己的摄影师档案。
 //
 // 根因记录：头像在库里有两列 —— users.avatar（账号头像）与 photographers.avatar

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@/types'
-import { apiPost } from '@/api/client'
+import { apiGet, apiPost } from '@/api/client'
 import { mapLoginUser, type LoginUserDTO } from '@/utils/mappers'
 
 interface LoginResponse {
@@ -47,6 +47,31 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // refreshMe 从 /v1/me 补齐本地 user 里可能缺失的服务端字段（photographerId /
+  // photographerName / bio / phone）。必要性：photographerId 只在登录响应里下发，
+  // 且登录时写进 storage；升级前就登录、之后没重新登录的用户，storage 里的 user
+  // 没有这个字段 —— 于是「编辑资料页对摄影师显示艺名提示」永远不显示，
+  // 「已有档案」的判断也会漏。失败静默（离线/401 都不该阻塞页面）。
+  async function refreshMe(): Promise<void> {
+    if (!token.value) return
+    try {
+      const me = await apiGet<{ id: number; name: string; phone?: string; avatar?: string; bio?: string; photographerId?: number; photographerName?: string }>('/v1/me')
+      if (!user.value) return
+      // 只补/更新服务端权威字段，不覆盖前端在本地算出来的 tags / createdAt 等。
+      user.value = {
+        ...user.value,
+        name: me.name || user.value.name,
+        avatar: me.avatar || user.value.avatar,
+        phone: me.phone ?? user.value.phone,
+        bio: me.bio ?? user.value.bio,
+        photographerId: me.photographerId,
+      }
+      uni.setStorageSync('user', JSON.stringify(user.value))
+    } catch {
+      // best-effort：拿不到就沿用本地缓存，提示晚一步出现而已。
+    }
+  }
+
   function logout() {
     user.value = null
     token.value = ''
@@ -67,5 +92,5 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  return { user, token, isLoggedIn, login, loginWeChat, logout, init }
+  return { user, token, isLoggedIn, login, loginWeChat, logout, init, refreshMe }
 })

@@ -36,6 +36,12 @@
           placeholder-style="color: #64748b"
           maxlength="20"
         />
+        <!-- 摄影师账号：账号昵称不对外展示，摄影师列表里显示的是独立的艺名。
+             不给这句提示，用户改完账号昵称会以为「搜不到自己」是 bug。 -->
+        <view v-if="isPhotographerAccount" class="name-hint">
+          <text class="name-hint-text">这里是账号昵称，不对外展示。摄影师列表里显示的是你的艺名。</text>
+          <text class="name-hint-link" @click="goPhotographerProfileEdit">去改艺名 ›</text>
+        </view>
       </view>
 
       <view class="field">
@@ -55,13 +61,20 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ApiError } from '@/api/client'
 import { updateUserProfile, pickAndUploadImages, uploadFile } from '@/api/index'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
+
+// 摄影师账号才有「对外艺名」这个独立概念：账号昵称不进摄影师列表。
+const isPhotographerAccount = computed(() => !!userStore.user?.photographerId)
+
+function goPhotographerProfileEdit() {
+  uni.navigateTo({ url: '/pages/photographer/profile-edit', animationType: 'none' })
+}
 
 const form = reactive({
   name: '',
@@ -296,6 +309,37 @@ async function save() {
   font-size: 22rpx;
   color: $dark-text-tertiary;
   margin-top: 12rpx;
+}
+
+// 摄影师账号昵称 ≠ 对外艺名。用低饱和橙底提示块把两者关系说清，
+// 右侧「去改艺名」是跳 profile-edit 的行动点，flex-shrink:0 防长句把它挤没。
+.name-hint {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 107, 0, 0.08);
+  border: 2rpx solid rgba(255, 107, 0, 0.24);
+}
+
+.name-hint-text {
+  flex: 1;
+  min-width: 0;
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+  line-height: 30rpx;
+}
+
+.name-hint-link {
+  flex-shrink: 0;
+  margin-left: 12rpx;
+  font-size: $font-size-xs;
+  color: #ff8a3d;
+
+  &:active {
+    opacity: 0.7;
+  }
 }
 
 .btn-submit {

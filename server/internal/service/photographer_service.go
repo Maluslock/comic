@@ -100,6 +100,11 @@ type userNameSync interface {
 type worksStore interface {
 	GetPhotographerByUserID(ctx context.Context, userID int64) (repository.PhotographerWithTags, error)
 	UpdatePhotographerProfile(ctx context.Context, id int64, name, description, location, mode string, mutualIntro *string, avatar string) error
+	// UpdatePhotographerActivationFields 是 Activate 幂等分支的窄写入：只写
+	// name / mode / mutual_intro，name_is_custom 由 nameOverridden 决定置 true 还是保持原值。
+	// 刻意不复用 UpdatePhotographerProfile：那条永远把 name_is_custom 置 true，
+	// 用户只是改个接单模式就把艺名锁死、账号昵称再也同步不过来，正是本次要修的不一致。
+	UpdatePhotographerActivationFields(ctx context.Context, id int64, name, mode string, mutualIntro *string, nameOverridden bool) error
 	InsertWork(ctx context.Context, photographerID int64, title string, images []string, description string) (int64, error)
 	GetWorksByPhotographer(ctx context.Context, photographerID int32) ([]repository.Work, error)
 	GetAllWorksByPhotographer(ctx context.Context, photographerID int32) ([]repository.Work, error)
@@ -256,6 +261,10 @@ func (s *PhotographerService) Activate(ctx context.Context, userID int64, name s
 //   - name：**只有当前展示名是占位符**（空白 / 纯数字 / 「微信用户」）时才用入参覆盖。
 //     摄影师自己起的艺名是核心品牌资产，不能被一次重复提交换掉。
 //   - mode / intro：非空且不同才覆盖（空串 = 本次没填，保持原值）。
+//   - name_is_custom：**只在真的覆盖了名字时**才置 true。用户只是重复点「成为摄影师」
+//     换个接单模式，不该顺手把他的展示名锁死——那样账号昵称就再也同步不过来了。
+//     所以写入走 UpdatePhotographerActivationFields（name_is_custom = name_is_custom OR $5），
+//     而不是无条件置 true 的 UpdatePhotographerProfile。
 func (s *PhotographerService) refreshActivatedProfile(ctx context.Context, existing repository.PhotographerWithTags, name, mode, intro string) error {
 	newName := existing.Name
 	nameOverridden := false
@@ -278,9 +287,8 @@ func (s *PhotographerService) refreshActivatedProfile(ctx context.Context, exist
 		return nil // 一个字都没变，不必白跑一次 UPDATE
 	}
 
-	avatar := derefString(existing.Avatar)
-	if err := s.workStore().UpdatePhotographerProfile(ctx, int64(existing.ID), newName,
-		derefString(existing.Description), derefString(existing.Location), newMode, newIntro, avatar); err != nil {
+	if err := s.workStore().UpdatePhotographerActivationFields(ctx, int64(existing.ID), newName,
+		newMode, newIntro, nameOverridden); err != nil {
 		if errors.Is(err, repository.ErrProfileNotFound) {
 			return ErrProfileNotFound
 		}
@@ -390,6 +398,12 @@ func (s *PhotographerService) MyProfile(ctx context.Context, userID int64) (*Pho
 	return photographerItemFromRow(p), nil
 }
 
+// UpdateProfile 是「用户显式编辑摄影师资料」（PUT /api/v1/photographers/profile）的写路径。
+//
+// 这条路径写入的名字是**艺名**：落库同时把 name_is_custom 置 true（在 SQL 里，
+// 见 repository.updatePhotographerProfile），从此账号昵称改不动它 —— 反过来，
+// 只要用户没走这条路，account 昵称就会单向同步下来（repository.UserRepo.SyncPhotographerName）。
+// 两个方向的边界就在这里划清：谁显式设了艺名，谁就拥有它。
 func (s *PhotographerService) UpdateProfile(ctx context.Context, userID int64, req ProfileUpdate) error {
 	store := s.workStore()
 	profile, err := store.GetPhotographerByUserID(ctx, userID)

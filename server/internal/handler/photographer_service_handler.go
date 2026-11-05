@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Maluslock/comic/server/internal/cache"
 	"github.com/Maluslock/comic/server/internal/middleware"
 	"github.com/Maluslock/comic/server/internal/service"
 )
@@ -46,6 +47,21 @@ func invalidatePricingCaches(ctx context.Context, cache listCacheInvalidator) {
 // *cache.RedisCache 为 nil 时方法本身是安全的空操作。
 type listCacheInvalidator interface {
 	DeletePrefix(ctx context.Context, prefix string) int
+}
+
+// InvalidatePhotographerNameCaches 供 cmd/api 的「账号昵称改完、摄影师档案名跟上了」
+// 这条路径调用（见 PUT /api/v1/me/profile）。名字会被渲染进列表卡片、首页与活动卡片，
+// 改完不清缓存就会出现「库里是新名、列表还是旧名」的半新半旧状态，最长持续 5 分钟
+// （TTL）——用户侧表现就是「我改了名，搜自己还是搜不到」。
+//
+// 单独导出而不直接暴露 invalidatePricingCaches，是因为后者收的是包内接口；
+// 这里收具体类型并对 nil（Redis 不可用时 NewRedisCache 返回 nil）空转。
+// best-effort：清理失败绝不能让已成功的资料更新变成 500。
+func InvalidatePhotographerNameCaches(ctx context.Context, c *cache.RedisCache) {
+	if c == nil {
+		return
+	}
+	invalidatePricingCaches(ctx, c)
 }
 
 type PhotographerServiceHandler struct {

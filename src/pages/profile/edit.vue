@@ -6,7 +6,6 @@
         <text class="avatar-empty-mark">◇</text>
       </view>
       <view class="avatar-upload" @click="pickAvatar">从相册上传</view>
-      <text class="avatar-hint">也可直接填外链图片地址</text>
     </view>
 
     <!-- 一键填入微信昵称与头像（仅小程序端；H5 走「从相册上传 + 手填」） -->
@@ -37,17 +36,6 @@
           placeholder-style="color: #64748b"
           maxlength="20"
         />
-      </view>
-
-      <view class="field">
-        <text class="field-label">头像链接</text>
-        <input
-          v-model="form.avatar"
-          class="field-input"
-          placeholder="https://api.dicebear.com/7.x/avataaars/svg?seed=你的昵称"
-          placeholder-style="color: #64748b"
-        />
-        <text class="field-hint">留空则保持当前头像</text>
       </view>
 
       <view class="field">

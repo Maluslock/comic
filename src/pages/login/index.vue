@@ -10,25 +10,45 @@
         <text class="hero-tagline">找到你的专属摄影师</text>
       </view>
 
-      <!-- 微信一键登录（仅小程序端） -->
+      <!-- 微信登录（仅小程序端）：头像 + 昵称都是必填，不再有「跳过」与「暂不设置」 -->
       <!-- #ifdef MP-WEIXIN -->
       <view class="wechat-card">
-        <!-- 「微信一键登录」按钮本身就是选头像按钮。
-             微信规定 open-type="chooseAvatar" 必须由用户点击触发，所以我们把这两个动作
-             合成一次点击：点一下 → 直接弹微信头像选择 → 选完即登录。
-             此前是「点登录 → 弹『完善资料』弹层 → 再点一次头像框」，用户要连点两次，
-             原话是「还要点一下触发头像上传」。 -->
+        <!-- 头像：微信规定 open-type="chooseAvatar" 必须由用户点击触发，所以这里是显式
+             的「点击选择头像」入口，选完立即上传并回显，用户能看见自己选的是哪张。 -->
+        <button class="avatar-picker" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+          <image v-if="avatarPreview" :src="avatarPreview" class="avatar-img" mode="aspectFill" />
+          <view v-else class="avatar-img avatar-empty">
+            <text class="avatar-empty-mark">+</text>
+          </view>
+          <text class="avatar-picker-text">{{ avatarPreview ? '点击更换头像' : '点击选择微信头像' }}</text>
+        </button>
+        <!-- 兜底入口：chooseAvatar 要求基础库 ≥ 2.21.2，老版本微信点上面的按钮没反应。
+             给一个同样能选图的相册通道，不让用户卡死在登录页。 -->
+        <view class="avatar-album" @click="pickFromAlbum">从相册选择</view>
+
+        <!-- 昵称：必须用 <input type="nickname">，微信只在原生键盘上方提供
+             「使用微信昵称」按钮。2022 年后 wx.getUserProfile 已废弃，只能拿到
+             「微信用户」占位名，没有别的合法途径读真实昵称。 -->
+        <view class="nickname-row">
+          <text class="nickname-label">昵称</text>
+          <input
+            v-model="nickName"
+            class="nickname-input"
+            type="nickname"
+            maxlength="20"
+            placeholder="点击输入，用键盘上方「使用微信昵称」"
+            placeholder-class="nickname-placeholder"
+          />
+        </view>
+
         <button
           class="wechat-btn"
-          :class="{ disabled: !agreed }"
-          open-type="chooseAvatar"
-          @chooseavatar="onChooseAvatar"
-          @click="onWeChatBtnClick"
+          :class="{ disabled: !canWechatLogin }"
+          @click="doWeChatLogin"
         >
           <text class="wechat-btn-text">微信一键登录</text>
         </button>
-        <view class="wechat-skip" @click="onWeChatLogin">暂不设置头像，直接登录</view>
-        <text class="wechat-tip">点一次即完成：读取微信头像 → 登录</text>
+        <text class="wechat-tip">头像与昵称都会带到账号资料，登录后可再修改</text>
       </view>
       <!-- #endif -->
 
@@ -119,7 +139,6 @@ import { ref, computed } from 'vue'
 import { useStatusBar } from '@/composables/useStatusBar'
 import { useUserStore } from '@/stores/user'
 import { decodeRedirect } from '@/utils/mappers'
-import { isPlaceholderName } from '@/utils/placeholder-name'
 import { uploadFile, updateMyAvatar } from '@/api/index'
 
 const userStore = useUserStore()
@@ -155,47 +174,72 @@ function sendCode() {
   }, 1000)
 }
 
-// ===== 微信头像 =====
-// 只保留一个 ref：选中的临时头像路径。是否弹「完善资料」弹层不再由 needProfile() 决定 ——
-// 那个弹层已被去掉，登录与选头像合并为同一次点击。
+// ===== 微信头像 + 昵称（两者都必填） =====
+// 头像走 open-type="chooseAvatar"，昵称走 <input type="nickname">。
+// 这是微信目前唯一合规的两条路：wx.getUserProfile 自 2022 年起只会返回
+// 「微信用户」占位名，拿不到真实昵称。
 const avatarTempPath = ref('')
+const avatarPreview = ref('')
+const nickName = ref('')
+
+/** 头像与昵称都齐了才允许登录 —— 用户明确要求「默认就是需要」，不给跳过入口。 */
+const canWechatLogin = computed(
+  () => !!avatarTempPath.value && !!nickName.value.trim() && agreed.value
+)
 
 interface AvatarPickEvent {
   detail: { avatarUrl: string }
 }
 
-/** 点击登录按钮（同时是 chooseAvatar 触发器）。协议未勾选时只提示，不发起登录。 */
-function onWeChatBtnClick() {
-  if (!agreed.value) {
-    uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
-  }
+/** 相册兜底：老基础库没有 chooseAvatar 时也能选头像。 */
+function pickFromAlbum() {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album'],
+    success: (res) => {
+      const path = (res.tempFilePaths && res.tempFilePaths[0]) || ''
+      if (!path) return
+      avatarTempPath.value = path
+      avatarPreview.value = path
+    },
+    fail: (err) => {
+      const raw = String((err && (err as AnyObject).errMsg) || '')
+      // 用户主动取消不算失败，不弹提示
+      if (raw.indexOf('cancel') >= 0 || raw.indexOf('取消') >= 0) return
+      uni.showToast({ title: '选择图片失败', icon: 'none' })
+    }
+  })
 }
 
-/**
- * 微信头像选择回调。用户选完头像 → 立即用这个头像登录。
- * 注意：@chooseavatar 之后才走到这里，此时用户已经完成了「点头像 → 选图」，
- * 不再需要额外的确认按钮。
- */
+/** 选完头像只做回显，不直接登录：此时昵称可能还没填。 */
 function onChooseAvatar(e: AvatarPickEvent) {
   const url = e?.detail?.avatarUrl
-  if (url) avatarTempPath.value = url
+  if (!url) return
+  avatarTempPath.value = url
+  avatarPreview.value = url
+}
+
+async function doWeChatLogin() {
+  const fallbackNick = nickName.value.trim()
+  const fallbackAvatar = avatarTempPath.value
+
+  if (!fallbackNick) {
+    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    return
+  }
+  if (!fallbackAvatar) {
+    uni.showToast({ title: '请选择头像', icon: 'none' })
+    return
+  }
   if (!agreed.value) {
     uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
     return
   }
-  doWeChatLogin(url ? { avatarTempPath: url } : undefined)
+  await doWeChatLoginInternal({ nickName: fallbackNick, avatarTempPath: fallbackAvatar })
 }
 
-/** 「暂不设置头像，直接登录」 */
-async function onWeChatLogin() {
-  if (!agreed.value) {
-    uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
-    return
-  }
-  await doWeChatLogin()
-}
-
-async function doWeChatLogin(profile?: { nickName?: string; avatarTempPath?: string }) {
+async function doWeChatLoginInternal(profile: { nickName: string; avatarTempPath: string }) {
   uni.showLoading({ title: '登录中...' })
   try {
     const loginRes = await new Promise<UniApp.LoginRes>((resolve, reject) => {
@@ -243,7 +287,7 @@ async function doWeChatLogin(profile?: { nickName?: string; avatarTempPath?: str
     }
 
     uni.showToast({ title: '登录成功', icon: 'success' })
-    setTimeout(() => uni.switchTab({ url: '/pages/profile/index' }), 600)
+    setTimeout(() => goAfterLogin(), 600)
   } catch (e) {
     uni.hideLoading()
     console.error('[Login] wechat login error:', e)
@@ -279,7 +323,15 @@ async function onLogin() {
   }
 
   uni.showToast({ title: '登录成功', icon: 'success' })
+  setTimeout(() => goAfterLogin(), 800)
+}
 
+/**
+ * 登录成功后的去向：有 redirect 就回跳原页面，否则回「我的」。
+ * 手机号登录与微信登录共用同一套逻辑 —— 此前微信登录硬写 switchTab，
+ * 从「我的订单」跳来登录的用户登录完落不到订单页。
+ */
+function goAfterLogin() {
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
   const rawRedirect = currentPage?.options?.redirect as string | undefined
@@ -287,13 +339,11 @@ async function onLogin() {
   // 老跳转方未编码时 decode 会原样返回（无 % 序列），向后兼容。
   const redirect = rawRedirect ? decodeRedirect(rawRedirect) : undefined
 
-  setTimeout(() => {
-    if (redirect) {
-      uni.redirectTo({ url: redirect })
-    } else {
-      uni.switchTab({ url: '/pages/profile/index' })
-    }
-  }, 800)
+  if (redirect) {
+    uni.redirectTo({ url: redirect })
+  } else {
+    uni.switchTab({ url: '/pages/profile/index' })
+  }
 }
 </script>
 
@@ -376,6 +426,88 @@ async function onLogin() {
   font-size: $font-size-md;
   font-weight: 600;
   color: #ffffff;
+}
+
+/* 头像选择：整块是一个 button（open-type 只能挂在 button 上），
+   点哪里都触发微信头像选择，热区远大于一个 96rpx 的小圆圈。 */
+.avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: $spacing-lg 0;
+  margin-bottom: $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-lg;
+
+  &::after {
+    border: none;
+  }
+}
+
+.avatar-img {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: $dark-bg-secondary;
+}
+
+.avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx dashed rgba(255, 107, 0, 0.5);
+}
+
+.avatar-empty-mark {
+  font-size: 56rpx;
+  line-height: 1;
+  color: #ff8a3d;
+}
+
+.avatar-picker-text {
+  margin-top: $spacing-md;
+  font-size: $font-size-sm;
+  color: $dark-text-secondary;
+}
+
+.avatar-album {
+  margin-top: $spacing-sm;
+  padding: 12rpx 24rpx;
+  font-size: $font-size-xs;
+  color: $dark-text-tertiary;
+}
+
+/* 昵称：必须用 <input type="nickname">，微信只在键盘上方给「使用微信昵称」 */
+.nickname-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0 $spacing-md;
+  margin-bottom: $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-lg;
+}
+
+.nickname-label {
+  flex-shrink: 0;
+  width: 88rpx;
+  font-size: $font-size-sm;
+  color: $dark-text-tertiary;
+}
+
+.nickname-input {
+  flex: 1;
+  height: 88rpx;
+  font-size: $font-size-md;
+  color: $dark-text-primary;
+}
+
+.nickname-placeholder {
+  color: $dark-text-tertiary;
+  font-size: $font-size-sm;
 }
 
 .wechat-tip {

@@ -283,18 +283,22 @@ func main() {
 			}
 			avatar := req.Avatar
 			bio := req.Bio
+			prevAvatar := ""
 			if avatar == "" || bio == "" {
 				u, err := userRepo.GetByID(c.Request.Context(), middleware.UserID(c))
 				if err != nil {
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 					return
 				}
+				prevAvatar = u.Avatar
 				if avatar == "" {
 					avatar = u.Avatar
 				}
 				if bio == "" {
 					bio = derefStrPtr(u.Bio)
 				}
+			} else if u, err := userRepo.GetByID(c.Request.Context(), middleware.UserID(c)); err == nil {
+				prevAvatar = u.Avatar
 			}
 			err := userRepo.UpdateProfile(c.Request.Context(), middleware.UserID(c), req.Name, avatar, bio)
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -305,7 +309,40 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update profile"})
 				return
 			}
+			// 头像换了就同步到自己的摄影师档案：列表/详情/预约卡片读的是
+			// photographers.avatar，不同步会表现为「头像改了但列表还是默认图」。
+			if req.Avatar != "" && req.Avatar != prevAvatar {
+				if err := userRepo.SyncPhotographerAvatar(c.Request.Context(), middleware.UserID(c), req.Avatar, prevAvatar); err != nil {
+					// 同步失败不回滚主流程：账号头像已存成功，只是展示层暂时旧图。
+					log.Printf("sync photographer avatar failed (user=%d): %v", middleware.UserID(c), err)
+				}
+			}
 			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+
+		// PUT /api/v1/me/avatar 只换头像，不需要 name。
+		// 单独开一个端点是因为「登录后补传头像」这条链路本来就没有昵称要改，
+		// 硬塞进 /me/profile 会被 name binding:"required" 直接 400。
+		router.PUT("/api/v1/me/avatar", middleware.AuthRequired(userRepo), func(c *gin.Context) {
+			var req struct {
+				Avatar string `json:"avatar" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "avatar is required"})
+				return
+			}
+			prevAvatar := ""
+			if u, err := userRepo.GetByID(c.Request.Context(), middleware.UserID(c)); err == nil {
+				prevAvatar = u.Avatar
+			}
+			if err := userRepo.UpdateAvatar(c.Request.Context(), middleware.UserID(c), req.Avatar); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update avatar"})
+				return
+			}
+			if err := userRepo.SyncPhotographerAvatar(c.Request.Context(), middleware.UserID(c), req.Avatar, prevAvatar); err != nil {
+				log.Printf("sync photographer avatar failed (user=%d): %v", middleware.UserID(c), err)
+			}
+			c.JSON(http.StatusOK, gin.H{"ok": true, "avatar": req.Avatar})
 		})
 
 		// Favorites

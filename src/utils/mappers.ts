@@ -66,13 +66,31 @@ export function encodeRedirect(path: string): string {
 }
 
 /** 解码 redirect= 的值（与 encodeRedirect 配对使用；小程序 options 无内置解码）。
- * 带非法 % 序列的值（如未编码的老跳转方传入了含 % 的串）会抛 URIError，兜底原样返回。 */
+ *
+ * 为什么要循环解码：同一条 URL 在不同运行环境里被解码的次数不一样 ——
+ *   · 小程序端 `options.query` 是原始串，需要 1 次 decode；
+ *   · H5（uni-h5，hash 路由）框架已经对 hash 做过一次 URL 解码，
+ *     我们再 decode 一次就得到 %2F...（看起来像解码失败，其实是少解了一层）；
+ *   · 某些内核/浏览器版本会连续解两层。
+ * 实测截图：`#/pages/login/index?redirect=%252Fpages%252Forder%252Flist`，
+ * 单次 decode 后是 `%2Fpages%2Forder%2Flist`，仍不是合法路径，登录后回跳会失败。
+ * 所以这里反复 decode，直到结果不再变化（且最多 3 轮，防病态输入）——
+ * 对已编码的路径这是幂等操作，不会破坏本来就正常的单层场景。
+ * 带非法 % 序列（未编码的老跳转方传入含 % 的串）时 decodeURIComponent 抛
+ * URIError，兜底停在本轮，原样返回。 */
 export function decodeRedirect(raw: string): string {
-  try {
-    return decodeURIComponent(raw)
-  } catch {
-    return raw
+  let cur = raw
+  for (let i = 0; i < 3; i++) {
+    let next: string
+    try {
+      next = decodeURIComponent(cur)
+    } catch {
+      return cur
+    }
+    if (next === cur) return cur
+    cur = next
   }
+  return cur
 }
 
 export interface EventDTO {

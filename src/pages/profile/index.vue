@@ -4,7 +4,13 @@
       <view class="user-card" :class="{ guest: !isLoggedIn }" @click="goLogin">
         <image :src="displayAvatar" class="avatar" mode="aspectFill" @error="avatarBroken = true" />
         <view class="user-info">
-          <text class="user-name" :class="{ placeholder: isPlaceholderName }" @click.stop="onNameClick">{{ displayName }}</text>
+          <view class="user-name-row">
+            <text class="user-name">{{ displayName }}</text>
+            <!-- 占位名提示从「下划线蓝字」改成小圆角胶囊：下划线是网页链接的样子，
+                 深色卡片里既不像可点、又显得廉价（用户原话「丑的要死」）。
+                 参考奶茶/外卖 App 的通行做法：名字正常展示，旁边挂一个低饱和度的行动胶囊。 -->
+            <text v-if="isLoggedIn && isPlaceholderName" class="name-fix-pill" @click.stop="goEdit">去完善昵称</text>
+          </view>
           <view v-if="isLoggedIn" class="user-role">
             <text class="role-tag" :class="isPhotographer ? 'photographer' : 'coser'">
               {{ isPhotographer ? '摄影师' : 'Coser' }}
@@ -164,7 +170,9 @@ const isPlaceholderName = computed(() => {
 })
 const displayName = computed(() => {
   if (!isLoggedIn.value) return '点击登录'
-  return isPlaceholderName.value ? '点击完善昵称' : user.value?.name || '点击完善昵称'
+  // 占位名不再在名字位置显示「点击完善昵称」——那是把提示当名字，读起来像报错。
+  // 名字位显示账号真昵称（哪怕是「微信用户」），行动统一交给右边的胶囊。
+  return user.value?.name || '微信用户'
 })
 const avatarBroken = ref(false)
 const DEFAULT_AVATAR = '/static/img/avatar-user.svg'
@@ -258,31 +266,21 @@ function goLogin() {
 }
 
 function goEdit() {
-  if (!isLoggedIn.value) {
-    uni.navigateTo({ url: '/pages/login/index' })
-    return
-  }
+  if (needLogin('/pages/profile/edit')) return
   uni.navigateTo({ url: '/pages/profile/edit', animationType: 'none' })
 }
 
-function onNameClick() {
-  if (!isLoggedIn.value) {
-    goLogin()
-    return
-  }
-  // 占位名（空/「微信用户」）点击直达资料编辑补昵称
-  if (isPlaceholderName.value) goEdit()
-}
+// 名字行原本整体可点（占位名时直达资料编辑）。改版后占位引导交给旁边的
+// 「去完善昵称」胶囊，名字本身不再绑定点击 —— 普通用户点自己名字没有任何动作
+// 才是符合直觉的（奶茶 App 也是这么做的）。旧的 onNameClick 因此删除。
 
 function goActivate() {
-  if (!isLoggedIn.value) {
-    uni.navigateTo({ url: '/pages/login/index' })
-    return
-  }
+  if (needLogin('/pages/photographer/activate')) return
   uni.navigateTo({ url: '/pages/photographer/activate', animationType: 'none' })
 }
 
 function goPhotographerOrders() {
+  if (needLogin('/pages/photographer/orders')) return
   uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
 }
 
@@ -296,40 +294,59 @@ function goPhotographerEventApply() {
   uni.navigateTo({ url: '/pages/photographer/event-apply?tab=mine', animationType: 'none' })
 }
 
+// ── 登录守卫 ───────────────────────────────────────────────────────────────
+// 用户原话：「我还没登录为什么会有我的作品」「在我的页面，点击几个东西应该都会跳转
+// 微信登录页面才对」。此前 goOrders/goFavorites/goFollows/goWorks/goSettings 五个入口
+// 完全没有守卫：游客点进去，下游页面要么只弹一句「请先登录」的 toast 然后留在空白页，
+// 要么（作品页）直接拿首页推荐位的数据冒充「我的作品」。
+//
+// 统一收敛到 needLogin()：未登录 → 带上 redirect 去登录页，登录成功后原地回来。
+// 五个入口各自写一份判断的写法本身就是缺陷来源，这里一次性收口。
+function needLogin(redirect?: string): boolean {
+  if (isLoggedIn.value) return false
+  const target = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
+  uni.navigateTo({ url: `/pages/login/index${target}` })
+  return true
+}
+
 function goOrders() {
+  if (needLogin('/pages/order/list')) return
   uni.navigateTo({ url: '/pages/order/list', animationType: 'none' })
 }
 
 function goCredit() {
-  if (!isLoggedIn.value) {
-    uni.navigateTo({ url: '/pages/login/index' })
-    return
-  }
+  if (needLogin('/pages/credit/index')) return
   uni.navigateTo({ url: '/pages/credit/index', animationType: 'none' })
 }
 
 function goFavorites() {
+  if (needLogin('/pages/favorite/list')) return
   uni.navigateTo({ url: '/pages/favorite/list', animationType: 'none' })
 }
 
 function goFollows() {
+  if (needLogin('/pages/follow/list')) return
   uni.navigateTo({ url: '/pages/follow/list', animationType: 'none' })
 }
 
 function goWorks() {
+  // 摄影师看自己的作品列表，Coser 看「我的作品」（自己收藏/投稿的展示）。
+  // 无论哪种：没登录就不该有内容 —— 之前游客进 portfolio 会拉到首页 featuredWorks，
+  // 屏幕上出现别人的作品但标题写着「我的作品」，这是数据串台的硬伤。
   const url = isPhotographer.value ? '/pages/photographer/works' : '/pages/portfolio/index'
+  if (needLogin(url)) return
   uni.navigateTo({ url, animationType: 'none' })
 }
 
 function goReviews() {
-  if (!isLoggedIn.value) {
-    uni.navigateTo({ url: '/pages/login/index' })
-    return
-  }
+  if (needLogin('/pages/comment/index')) return
   uni.navigateTo({ url: '/pages/comment/index', animationType: 'none' })
 }
 
 function goSettings() {
+  // 设置页里有退出登录、账号安全、拉黑名单等，游客进来只有一堆空洞的开关，
+  // 且退出登录按钮会直接再跳一次登录页 —— 统一改成先登录。
+  if (needLogin('/pages/settings/index')) return
   uni.navigateTo({ url: '/pages/settings/index', animationType: 'none' })
 }
 
@@ -433,15 +450,41 @@ function onVersionLongPress() {
   margin-left: $spacing-md;
 }
 
+.user-name-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .user-name {
   font-size: $font-size-xl;
   font-weight: 600;
   color: $dark-text-primary;
+  // 占位名不再变色+下划线：名字本身按正常用户展示，
+  // 「去补昵称」的引导交给旁边的 .name-fix-pill 胶囊。
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  // 占位名「点击完善昵称」：霓虹青提示可点击去补昵称
-  &.placeholder {
-    color: $neon-cyan;
-    text-decoration: underline;
+// 占位名行动胶囊：深色半透明底 + 白字。
+// 不能沿用品牌橙（#FF6B00 文字压 #FF6B00 页头 = 对比度约 1:1，实测截图上几乎隐形，
+// 用户原话就是嫌原来的蓝字下划线丑、又不能又造出一个看不见的元素）。
+// 深底 #0C0D14 以 55% 叠在橙头上约 #83360B，白字对比度 ≈8.5:1（AA/AAA 均过），
+// 与右侧「编辑」按钮同属浅色文字系，视觉上不抢名字。
+.name-fix-pill {
+  flex-shrink: 0;
+  margin-left: 12rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(255, 255, 255, 0.45);
+  background: rgba(12, 13, 20, 0.55);
+  font-size: $font-size-xs;
+  line-height: 32rpx;
+  color: #fff;
+
+  &:active {
+    background: rgba(12, 13, 20, 0.75);
   }
 }
 

@@ -13,10 +13,22 @@
       <!-- 微信一键登录（仅小程序端） -->
       <!-- #ifdef MP-WEIXIN -->
       <view class="wechat-card">
-        <view class="wechat-btn" :class="{ disabled: !agreed }" @click="onWeChatLogin">
+        <!-- 「微信一键登录」按钮本身就是选头像按钮。
+             微信规定 open-type="chooseAvatar" 必须由用户点击触发，所以我们把这两个动作
+             合成一次点击：点一下 → 直接弹微信头像选择 → 选完即登录。
+             此前是「点登录 → 弹『完善资料』弹层 → 再点一次头像框」，用户要连点两次，
+             原话是「还要点一下触发头像上传」。 -->
+        <button
+          class="wechat-btn"
+          :class="{ disabled: !agreed }"
+          open-type="chooseAvatar"
+          @chooseavatar="onChooseAvatar"
+          @click="onWeChatBtnClick"
+        >
           <text class="wechat-btn-text">微信一键登录</text>
-        </view>
-        <text class="wechat-tip">使用微信身份快速登录，无需注册</text>
+        </button>
+        <view class="wechat-skip" @click="onWeChatLogin">暂不设置头像，直接登录</view>
+        <text class="wechat-tip">点一次即完成：读取微信头像 → 登录</text>
       </view>
       <!-- #endif -->
 
@@ -99,39 +111,6 @@
       </view>
     </view>
 
-    <!-- 完善资料（仅小程序端）：本地昵称为空或占位「微信用户」时，登录前先取微信昵称与头像 -->
-    <!-- #ifdef MP-WEIXIN -->
-    <view v-if="profileStep" class="profile-mask">
-      <view class="profile-sheet">
-        <text class="profile-title">完善资料</text>
-        <text class="profile-hint">填入微信昵称和头像，让摄影师认出你</text>
-        <button class="avatar-btn" open-type="chooseAvatar" @chooseavatar="onPickWxAvatar">
-          <image v-if="avatarTempPath" :src="avatarTempPath" class="avatar-img" mode="aspectFill" />
-          <view v-else class="avatar-empty">
-            <text class="avatar-empty-mark">◇</text>
-            <text class="avatar-empty-text">选择微信头像</text>
-          </view>
-        </button>
-        <input
-          v-model="nickName"
-          class="nick-input"
-          type="nickname"
-          placeholder="点输入框填入微信昵称"
-          placeholder-style="color: #64748b"
-          maxlength="20"
-        />
-        <view class="profile-actions">
-          <view class="profile-btn ghost" @click="skipProfile">
-            <text class="profile-btn-text ghost">跳过</text>
-          </view>
-          <view class="profile-btn primary" @click="confirmProfile">
-            <text class="profile-btn-text">保存并登录</text>
-          </view>
-        </view>
-        <text class="profile-tip">可跳过，之后也能在资料页补填</text>
-      </view>
-    </view>
-    <!-- #endif -->
   </view>
 </template>
 
@@ -141,7 +120,7 @@ import { useStatusBar } from '@/composables/useStatusBar'
 import { useUserStore } from '@/stores/user'
 import { decodeRedirect } from '@/utils/mappers'
 import { isPlaceholderName } from '@/utils/placeholder-name'
-import { uploadFile, updateUserProfile } from '@/api/index'
+import { uploadFile, updateMyAvatar } from '@/api/index'
 
 const userStore = useUserStore()
 
@@ -176,54 +155,44 @@ function sendCode() {
   }, 1000)
 }
 
-// ===== 完善资料（微信昵称 + 头像，仅小程序端弹层用） =====
-const profileStep = ref(false)
-const nickName = ref('')
+// ===== 微信头像 =====
+// 只保留一个 ref：选中的临时头像路径。是否弹「完善资料」弹层不再由 needProfile() 决定 ——
+// 那个弹层已被去掉，登录与选头像合并为同一次点击。
 const avatarTempPath = ref('')
 
 interface AvatarPickEvent {
   detail: { avatarUrl: string }
 }
 
-function onPickWxAvatar(e: AvatarPickEvent) {
+/** 点击登录按钮（同时是 chooseAvatar 触发器）。协议未勾选时只提示，不发起登录。 */
+function onWeChatBtnClick() {
+  if (!agreed.value) {
+    uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
+  }
+}
+
+/**
+ * 微信头像选择回调。用户选完头像 → 立即用这个头像登录。
+ * 注意：@chooseavatar 之后才走到这里，此时用户已经完成了「点头像 → 选图」，
+ * 不再需要额外的确认按钮。
+ */
+function onChooseAvatar(e: AvatarPickEvent) {
   const url = e?.detail?.avatarUrl
   if (url) avatarTempPath.value = url
+  if (!agreed.value) {
+    uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
+    return
+  }
+  doWeChatLogin(url ? { avatarTempPath: url } : undefined)
 }
 
-/** 本地还没有真实昵称（未登录 / 为空 / 占位名）→ 登录前先弹完善资料 */
-function needProfile(): boolean {
-  const u = userStore.user
-  // 占位判定与后端 isPlaceholderName() 同源：'11'、'摄影师15' 这类系统值不算真名
-  return !u || isPlaceholderName(u.name)
-}
-
+/** 「暂不设置头像，直接登录」 */
 async function onWeChatLogin() {
   if (!agreed.value) {
     uni.showToast({ title: '请先阅读并同意《用户协议》和《隐私政策》', icon: 'none' })
     return
   }
-  if (needProfile()) {
-    profileStep.value = true
-    return
-  }
   await doWeChatLogin()
-}
-
-function skipProfile() {
-  // 跳过：清掉已填内容，维持原有登录行为
-  profileStep.value = false
-  nickName.value = ''
-  avatarTempPath.value = ''
-  doWeChatLogin()
-}
-
-function confirmProfile() {
-  profileStep.value = false
-  const profile =
-    nickName.value.trim() || avatarTempPath.value
-      ? { nickName: nickName.value.trim(), avatarTempPath: avatarTempPath.value }
-      : undefined
-  doWeChatLogin(profile)
 }
 
 async function doWeChatLogin(profile?: { nickName?: string; avatarTempPath?: string }) {
@@ -234,21 +203,22 @@ async function doWeChatLogin(profile?: { nickName?: string; avatarTempPath?: str
     })
     if (!loginRes.code) throw new Error('no code')
 
-    // 头像临时路径必须先经 /api/v1/upload 换正式 URL 再传后端（临时路径下次启动即失效）。
-    // 登录前可能拿不到 token 导致上传失败 —— 不阻塞昵称保存，登录成功后带着 token 重试补一次。
+    // 头像要换正式 URL 才能落库（临时路径下次启动即失效）。
+    //
+    // 关键时序：/api/v1/upload 需要 Bearer token，而登录前根本没有 token ——
+    // 之前先传头像再登录，上传必然 401，被 catch 吞掉后只在控制台留一行 warn，
+    // 用户看到的就是「接口调用正常，但头像没上去」。现在改成：
+    //   先 login 拿到 token → 再用 token 上传 → 再 PUT /me/avatar。
+    // 头像失败不影响登录成功，只补一条提示。
     let avatarUrl = ''
-    let avatarUploadFailed = false
     if (profile?.avatarTempPath) {
-      try {
-        avatarUrl = await uploadFile(profile.avatarTempPath)
-      } catch {
-        avatarUploadFailed = true
-      }
+      // 先登录，拿到 token
+      // （loginWeChat 内部会写 storage 里的 token，uploadFile 正是从那里取）
     }
 
     const ok = await userStore.loginWeChat(loginRes.code, {
       nickName: profile?.nickName || '',
-      avatar: avatarUrl
+      avatar: ''
     })
     uni.hideLoading()
     if (!ok) {
@@ -256,21 +226,19 @@ async function doWeChatLogin(profile?: { nickName?: string; avatarTempPath?: str
       return
     }
 
-    // 登录前上传失败（多为首次登录无 token）：登录成功后重试，失败仅记日志不阻塞
-    if (avatarUploadFailed && profile?.avatarTempPath) {
+    // 登录成功后（token 已就位）再上传头像并落库。
+    // 两个后端点都要打：/me/avatar 写 users.avatar 并同步 photographers.avatar。
+    if (profile?.avatarTempPath) {
       try {
-        const url = await uploadFile(profile.avatarTempPath)
-        await updateUserProfile({
-          name: userStore.user?.name || '微信用户',
-          avatar: url,
-          bio: userStore.user?.bio || ''
-        })
+        avatarUrl = await uploadFile(profile.avatarTempPath)
+        await updateMyAvatar(avatarUrl)
         if (userStore.user) {
-          userStore.user.avatar = url
+          userStore.user.avatar = avatarUrl
           uni.setStorageSync('user', JSON.stringify(userStore.user))
         }
       } catch (e) {
         console.warn('[Login] avatar upload failed after login:', e)
+        uni.showToast({ title: '头像暂未保存，可稍后在资料页重设', icon: 'none' })
       }
     }
 

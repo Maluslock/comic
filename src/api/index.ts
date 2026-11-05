@@ -81,6 +81,18 @@ export function updateUserProfile(payload: { name: string; avatar: string; bio?:
   return apiPut<{ ok: boolean }>('/v1/me/profile', payload)
 }
 
+/**
+ * 只更新头像，不需要 nickName。
+ *
+ * 单独开这个端点是因为「登录后补传头像」这条链路本来就没有昵称要改，
+ * 硬走 /v1/me/profile 会被后端 name 的 binding:"required" 直接 400——
+ * 这也是「头像上传成功但库里还是空」的成因之一。
+ * 后端会同时把头像同步到该用户的摄影师档案（photographers.avatar）。
+ */
+export function updateMyAvatar(avatar: string) {
+  return apiPut<{ ok: boolean; avatar: string }>('/v1/me/avatar', { avatar })
+}
+
 export function logoutAllDevices() {
   return apiPost<{ ok: boolean }>('/v1/me/logout-all', {})
 }

@@ -2,7 +2,11 @@
   <view class="page">
     <view class="gallery">
       <view class="gallery-header">
-        <text class="gallery-title">摄影作品</text>
+        <!-- 标题必须是动态的：从摄影师详情带 photographerId 进来时看的是「该摄影师的作品」，
+             从「我的 → 我的作品」进来才是「我的作品」。此前无条件写死「摄影作品」，
+             而数据在无 pid 时拉的是首页 featuredWorks（其他摄影师的作品），
+             用户看到的就是「我的作品里全是不认识的人拍的照片」。 -->
+        <text class="gallery-title">{{ pageTitle }}</text>
         <text class="gallery-count">{{ works.length }} 作品</text>
       </view>
       
@@ -31,19 +35,32 @@
 
       <view v-if="works.length === 0" class="empty">
         <text class="empty-icon">◆</text>
-        <text class="empty-text">暂无作品</text>
+        <text class="empty-text">{{ emptyHint }}</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { apiGet } from '@/api/client'
 import { mapWorkItem } from '@/utils/mappers'
+import { useUserStore } from '@/stores/user'
 import type { Work } from '@/types'
 
 const works = ref<Work[]>([])
+// 空态文案要说清楚「为什么空」，别只说「暂无作品」
+const emptyHint = ref('暂无作品')
+// 是不是「某个摄影师的作品集」视图（由 photographerId 参数决定）
+const scopedPhotographerId = ref<string>('')
+// 是否从「我的 → 我的作品」进来（无 pid 且已登录，展示自己的作品）
+const isMine = ref(false)
+
+const pageTitle = computed(() => {
+  if (scopedPhotographerId.value) return '摄影师作品'
+  if (isMine.value) return '我的作品'
+  return '摄影作品'
+})
 
 onMounted(() => {
   loadData()
@@ -52,19 +69,34 @@ onMounted(() => {
 async function loadData() {
   uni.showLoading({ title: '加载中...' })
   try {
-    // 作品来自摄影师详情（首页推荐摄影师作品聚合展示）
     const pages = getCurrentPages()
     const currentPage = pages[pages.length - 1] as any
     const pid = currentPage?.options?.photographerId as string | undefined
     if (pid) {
+      scopedPhotographerId.value = pid
       const res = await apiGet<any>(`/v1/photographers/${pid}`)
       works.value = (res.works || []).map(mapWorkItem)
-    } else {
-      // 无 pid：取首页推荐摄影师的作品聚合
-      const home = await apiGet<any>('/v1/home')
-      works.value = (home.featuredWorks || []).map(mapWorkItem)
+      return
     }
-  } catch (e) {
+
+    // 无 pid = 「我的作品」入口：必须拿到自己的摄影师档案 id，再拉自己的作品。
+    // 绝不回落到 /v1/home 的 featuredWorks —— 那是别人的作品，拿来当「我的作品」
+    // 就是数据串台（用户原话「我还没登录为什么会有我的作品」）。
+    isMine.value = true
+    const userStore = useUserStore()
+    const myId = userStore.user?.photographerId
+    if (!userStore.isLoggedIn || !myId) {
+      // 已登录但没有摄影师档案，或压根没登录：一句话说清楚，不给假数据。
+      works.value = []
+      emptyHint.value = userStore.isLoggedIn
+        ? '你还没有摄影师档案，也没有发布过作品'
+        : '登录后查看你的作品'
+      return
+    }
+    const res = await apiGet<any>(`/v1/photographers/${myId}`)
+    works.value = (res.works || []).map(mapWorkItem)
+    if (!works.value.length) emptyHint.value = '你还没有发布作品'
+  } catch {
     uni.showToast({ title: '加载失败，请稍后再试', icon: 'none' })
   } finally {
     uni.hideLoading()

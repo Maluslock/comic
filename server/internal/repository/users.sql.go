@@ -133,3 +133,47 @@ func (r *UserRepo) UpdateNickname(ctx context.Context, userID int64, name string
 	_, err := r.pool.Exec(ctx, "UPDATE users SET name = $2 WHERE id = $1", userID, name)
 	return err
 }
+
+// UpdateAvatar 只写 users.avatar（账号头像，用于「我的」页、聊天头像）。
+//
+// 为什么需要单独一个方法：`PUT /api/v1/me/profile` 走的 UpdateProfile 要求 name 必填，
+// 而「上传头像」只有一个头像 URL 要落库。此前头像只能靠整份资料一起提交，
+// 于是出现「我上传了头像但页面还是默认图」——见 SyncPhotographerAvatar 的注释。
+func (r *UserRepo) UpdateAvatar(ctx context.Context, userID int64, avatar string) error {
+	if userID == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, "UPDATE users SET avatar = $2 WHERE id = $1", userID, avatar)
+	return err
+}
+
+// SyncPhotographerAvatar 把账号头像同步到该用户自己的摄影师档案。
+//
+// 根因记录：头像在库里有两列 —— users.avatar（账号头像）与 photographers.avatar
+// （对外展示的摄影师头像）。摄影师列表、详情页、预约页卡片读的全是
+// photographers.avatar，而 `PUT /api/v1/me/profile` 与微信登录只写 users.avatar。
+// 结果：用户在「资料编辑」里成功换了头像，「我的」页也变了，但一进摄影师列表
+// 自己的卡片还是默认图 —— 用户原话「上传了头像，进去之后是阿伟摄影，然后头像
+// 还是默认的」。
+//
+// 语义边界（与 syncAccountName 方向相反，各自只负责自己的列）：
+//   - 账号头像是「这个人长什么样」，摄影师头像是「这个摄影师对外展示成什么样」，
+//     两者默认应一致，故账号头像变化时向下同步。
+//   - 但摄影师若已在「摄影师资料」页单独设过头像（photographers.avatar 非空且不等于
+//     旧账号头像），说明是刻意区分，此时不覆盖。
+//   - 只更新该 user_id 自己的档案，绝不跨账号。
+func (r *UserRepo) SyncPhotographerAvatar(ctx context.Context, userID int64, avatar, prevAvatar string) error {
+	if userID == 0 || avatar == "" {
+		return nil
+	}
+	// prevAvatar 为空说明之前没有账号头像，此时档案头像要么为空要么是系统默认图，
+	// 直接覆盖即可；prevAvatar 非空时只在档案头像「仍等于旧账号头像」的情况下跟随，
+	// 避免抹掉摄影师单独设置的头像。
+	_, err := r.pool.Exec(ctx, `
+		UPDATE photographers
+		SET avatar = $2, updated_at = NOW()
+		WHERE user_id = $1
+		  AND ($3 = '' OR COALESCE(avatar, '') = '' OR avatar = $3)`,
+		userID, avatar, prevAvatar)
+	return err
+}

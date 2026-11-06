@@ -200,7 +200,9 @@
     </scroll-view>
 
     <!-- City Selector Popup -->
-    <view v-if="showCityPicker" class="city-popup-mask" @click="closeCityPicker" @touchmove.stop.prevent>
+    <!-- BUG-3: mask 只 stop 冒泡防穿透，切勿再加 .prevent——它会 preventDefault 掉
+         city-list 宿主（overflow:hidden auto）的原生触摸滚动，导致整列滑不动。 -->
+    <view v-if="showCityPicker" class="city-popup-mask" @click="closeCityPicker" @touchmove.stop>
       <view class="city-popup" @click.stop>
         <view class="city-popup-header">
           <text class="city-popup-title">选择城市</text>
@@ -217,7 +219,9 @@
             placeholder-class="city-search-ph"
           />
         </view>
-        <scroll-view class="city-list" scroll-y>
+        <!-- mp-weixin 由 scroll-view 自身 catchtouchmove 独立承接，不依赖祖先 mask 的
+             catch；H5 端仅 stopPropagation，不碰 preventDefault，滚动照常。 -->
+        <scroll-view class="city-list" scroll-y @touchmove.stop>
           <!-- 热门城市：取场次最多的前 8 个（数据来自 /v1/cities 的 eventCount） -->
           <view v-if="!cityKeyword.trim() && hotCities.length" class="city-section">
             <text class="city-section-title">热门城市</text>
@@ -1360,6 +1364,10 @@ function onQuickNav(_url: string) {}
 }
 
 .city-list {
+  /* BUG-3: uni-scroll-view 宿主默认 content-box，左右 padding 会把 390 撑成 423；
+     改为 border-box 后宽度归位 390，弹层不出屏、无横向滚动。overflow 千万别动
+     ——H5 真正吃触摸滚动的就是这个宿主（overflow:hidden auto）。 */
+  box-sizing: border-box;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

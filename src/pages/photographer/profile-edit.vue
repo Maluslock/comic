@@ -27,18 +27,12 @@
             </view>
             <view class="avatar-actions">
               <view class="btn-avatar" @click="pickAvatar">从相册上传</view>
-              <input
-                v-model="form.avatar"
-                class="field-input avatar-input"
-                placeholder="或粘贴图片链接"
-                placeholder-style="color: #64748b"
-              />
             </view>
           </view>
         </view>
 
         <view class="field">
-          <text class="field-label">昵称</text>
+          <text class="field-label">艺名（对外展示）</text>
           <input
             v-model="form.name"
             class="field-input"
@@ -46,10 +40,11 @@
             placeholder-style="color: #64748b"
             maxlength="20"
           />
+          <text class="field-hint">显示在摄影师列表和详情页，与账号昵称独立</text>
         </view>
 
         <view class="field">
-          <text class="field-label">简介</text>
+          <text class="field-label">简介（对外展示）</text>
           <textarea
             v-model="form.description"
             class="field-textarea"
@@ -57,6 +52,7 @@
             placeholder-style="color: #64748b"
             maxlength="200"
           />
+          <text class="field-hint">显示在摄影师主页</text>
         </view>
 
         <view class="field">
@@ -195,7 +191,7 @@ async function loadProfile() {
 
 async function save() {
   if (!form.name.trim()) {
-    uni.showToast({ title: '请填写昵称', icon: 'none' })
+    uni.showToast({ title: '请填写艺名', icon: 'none' })
     return
   }
   uni.showLoading({ title: '保存中...' })
@@ -249,7 +245,6 @@ function goBack() {
 .avatar-empty-mark { font-size: 48rpx; color: $dark-text-tertiary; }
 .avatar-actions { flex: 1; display: flex; flex-direction: column; gap: 16rpx; min-width: 0; }
 .btn-avatar { align-self: flex-start; padding: 12rpx 32rpx; font-size: 24rpx; color: $neon-purple; border: 1rpx solid $neon-purple; border-radius: 999rpx; box-shadow: 0 0 12rpx $neon-purple-glow; }
-.avatar-input { width: 100%; }
 
 .mode-row { display: flex; gap: 16rpx; }
 .mode-item { flex: 1; text-align: center; padding: 20rpx 0; background: $dark-bg-secondary; border: 2rpx solid $dark-border; border-radius: 16rpx; font-size: 28rpx; color: $dark-text-secondary;

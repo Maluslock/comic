@@ -18,18 +18,22 @@
               <view class="stat-value-row">
                 <text v-if="photographer?.reviewCount" class="stat-star">★</text>
                 <text class="stat-value" :class="{ 'stat-value--warn': !!photographer?.reviewCount }">{{ ratingText }}</text>
-                <text v-if="creditLabel" class="credit-pill" :class="`tone-${creditTone}`">信用{{ creditLabel }}</text>
               </view>
               <text class="stat-label">综合评分</text>
+              <text v-if="creditLabel" class="credit-pill" :class="`tone-${creditTone}`">信用{{ creditLabel }}</text>
             </view>
             <view class="stat-divider"></view>
             <view class="stat-item">
-              <text class="stat-value">{{ photographer?.reviewCount }}</text>
+              <view class="stat-value-row">
+                <text class="stat-value">{{ photographer?.reviewCount }}</text>
+              </view>
               <text class="stat-label">评价</text>
             </view>
             <view class="stat-divider"></view>
             <view class="stat-item">
-              <text class="stat-value">{{ photographer?.orderCount }}</text>
+              <view class="stat-value-row">
+                <text class="stat-value">{{ photographer?.orderCount }}</text>
+              </view>
               <text class="stat-label">接单</text>
             </view>
           </view>
@@ -485,8 +489,10 @@ function onMore() {
 }
 
 .stats {
+  // 三列等高：首列多一条信用 pill，stretch 让三列顶部（数字重心）严格对齐，
+  // 底部留白由最高的首列决定，不会把数字挤到不同基线。
   display: flex;
-  align-items: center;
+  align-items: stretch;
   margin-top: $spacing-sm;
 }
 
@@ -495,12 +501,16 @@ function onMore() {
   flex-direction: column;
   align-items: center;
   flex: 1;
+  min-width: 0;
 }
 
 .stat-value-row {
   display: flex;
   align-items: baseline;
+  justify-content: center;
   gap: 6rpx;
+  // 主数字行只放评分/数字，绝不与 pill 抢同一行；禁止换行兜底窄屏。
+  white-space: nowrap;
 }
 .stat-star {
   font-size: 24rpx;
@@ -516,12 +526,17 @@ function onMore() {
 }
 
 .credit-pill {
+  // 独立成行：v-if 控制，creditLabel 为空时不渲染 → 无空 pill、无多余间距。
   font-size: 20rpx;
+  line-height: 1.4;
   padding: 2rpx 10rpx;
+  margin-top: 4rpx;
   border-radius: 999rpx;
   border: 1rpx solid $dark-border;
   background: rgba(255, 255, 255, 0.04);
   align-self: center;
+  white-space: nowrap;
+  flex-shrink: 0;
 
   &.tone-good {
     color: $success-color;

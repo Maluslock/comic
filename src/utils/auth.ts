@@ -1,3 +1,5 @@
+import { navTo } from '@/utils/nav'
+
 export interface AuthUser {
   id: string
   name: string
@@ -19,7 +21,7 @@ export function requireAuth(): boolean {
     const pages = getCurrentPages()
     const top = pages[pages.length - 1] as unknown as { route?: string } | undefined
     if ((top?.route || '').includes('pages/login')) return
-    uni.navigateTo({ url: '/pages/login/index' })
+    navTo('/pages/login/index')
   }, 800)
   return false
 }

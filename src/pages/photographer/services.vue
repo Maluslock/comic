@@ -237,6 +237,7 @@ import {
   type ServiceUpsertPayload
 } from '@/api/index'
 import { ApiError } from '@/api/client'
+import { navTo } from '@/utils/nav'
 import { formatDuration } from '@/utils/duration'
 import { describeServicePrice, type ServicePrice } from '@/utils/price'
 import type { PriceUnit } from '@/types'
@@ -349,7 +350,7 @@ onShow(() => {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/services' })
+      navTo('/pages/login/index?redirect=/pages/photographer/services')
     }, 800)
     return
   }

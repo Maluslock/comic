@@ -14,6 +14,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { navTo } from '@/utils/nav'
 
 export interface QuickAction {
   icon: string
@@ -44,7 +45,7 @@ function handleTap(item: QuickAction) {
   } else if (item.url.startsWith('/pages/index/')) {
     uni.switchTab({ url: '/pages/index/index' })
   } else {
-    uni.navigateTo({ url: item.url })
+    navTo(item.url)
   }
   emit('navigate', item.url)
 }

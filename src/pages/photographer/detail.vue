@@ -1,5 +1,27 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-card sk-detail-header">
+          <view class="sk-circle sk-detail-avatar" />
+          <view class="sk-detail-info">
+            <view class="sk-line sk-w-40" />
+            <view class="sk-line sk-w-25" />
+            <view class="sk-detail-stats">
+              <view class="sk-detail-stat"><view class="sk-line sk-w-60" /><view class="sk-line sk-w-40" /></view>
+              <view class="sk-detail-stat"><view class="sk-line sk-w-60" /><view class="sk-line sk-w-40" /></view>
+              <view class="sk-detail-stat"><view class="sk-line sk-w-60" /><view class="sk-line sk-w-40" /></view>
+            </view>
+          </view>
+        </view>
+        <view class="sk-detail-tags"><view class="sk-block sk-detail-tag" /><view class="sk-block sk-detail-tag" /><view class="sk-block sk-detail-tag" /></view>
+        <view class="sk-card sk-detail-section"><view class="sk-line sk-w-30" /><view class="sk-line sk-w-full" /><view class="sk-line sk-w-80" /></view>
+        <view class="sk-card sk-detail-section"><view class="sk-line sk-w-30" /><ListSkeleton :rows="2" variant="row" /></view>
+        <view class="sk-card sk-detail-section"><view class="sk-line sk-w-30" /><view class="sk-detail-works"><view class="sk-block sk-detail-work" /><view class="sk-block sk-detail-work" /><view class="sk-block sk-detail-work" /></view></view>
+        <view class="sk-card sk-detail-section"><view class="sk-line sk-w-30" /><ListSkeleton :rows="2" variant="row" /></view>
+      </view>
+    </template>
+    <template v-else>
     <scroll-view scroll-y class="content">
       <view class="header">
         <image v-if="!avatarFailed" :src="photographer?.avatar" class="avatar" mode="aspectFill" @error="onAvatarError" />
@@ -138,6 +160,7 @@
         <view class="btn-primary" @click="goBooking">立即预约</view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -152,7 +175,12 @@ import { describeServicePrice } from '@/utils/price'
 import { previewImages } from '@/utils/preview'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
+import { navTo } from '@/utils/nav'
 import type { Photographer, PriceUnit, Review, Service, Work } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 interface PhotographerDetailResponse {
   id: number
@@ -255,6 +283,7 @@ onMounted(() => {
   const currentPage = pages[pages.length - 1] as any
   id = currentPage?.options?.id
   if (!id) {
+    firstLoading.value = false
     uni.showToast({ title: '缺少摄影师ID', icon: 'none' })
     setTimeout(() => uni.navigateBack(), 1500)
     return
@@ -263,7 +292,6 @@ onMounted(() => {
 })
 
 async function loadData(pageId: string) {
-  uni.showLoading({ title: '加载中...' })
   try {
     const res = await apiGet<PhotographerDetailResponse>(`/v1/photographers/${pageId}`)
     photographer.value = {
@@ -291,7 +319,7 @@ async function loadData(pageId: string) {
   } catch (e) {
     uni.showToast({ title: '加载失败，请稍后再试', icon: 'none' })
   } finally {
-    uni.hideLoading()
+    firstLoading.value = false
   }
 }
 
@@ -306,7 +334,7 @@ async function initCollected() {
 async function collect() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id)), 800)
     return
   }
   const pid = Number(id)
@@ -328,7 +356,7 @@ async function collect() {
 async function blockPhotographer() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id)), 800)
     return
   }
   const targetUserId = photographer.value?.userId
@@ -355,7 +383,7 @@ async function blockPhotographer() {
 async function goChat() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id) }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=' + encodeRedirect('/pages/photographer/detail?id=' + id)), 800)
     return
   }
   try {
@@ -363,7 +391,7 @@ async function goChat() {
       userId: Number(userStore.user.id),
       otherUserId: Number(photographer.value?.userId || id)
     })
-    uni.navigateTo({ url: `/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(photographer.value?.name || '')}&peerAvatar=${encodeURIComponent(photographer.value?.avatar || '')}` })
+    navTo(`/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(photographer.value?.name || '')}&peerAvatar=${encodeURIComponent(photographer.value?.avatar || '')}`)
   } catch {
     uni.showToast({ title: '无法发起会话', icon: 'none' })
   }
@@ -373,18 +401,18 @@ function selectService(service: Service) {
   const pid = photographer.value?.id || ''
   uni.setStorageSync('selectedService', JSON.stringify(service))
   uni.setStorageSync('bookingPhotographerId', pid || '1')
-  uni.navigateTo({ url: `/pages/booking/index?photographerId=${pid}` })
+  navTo(`/pages/booking/index?photographerId=${pid}`)
 }
 
 function goBooking() {
   const pid = photographer.value?.id || ''
   uni.setStorageSync('bookingPhotographerId', pid || '1')
-  uni.navigateTo({ url: `/pages/booking/index?photographerId=${pid}` })
+  navTo(`/pages/booking/index?photographerId=${pid}`)
 }
 
 function goPortfolio() {
   const pid = photographer.value?.id ?? id
-  uni.navigateTo({ url: `/pages/portfolio/index?photographerId=${pid}` })
+  navTo(`/pages/portfolio/index?photographerId=${pid}`)
 }
 
 // 作品大图预览：work.images 可能是多图，点第几张就从第几张开始看
@@ -876,4 +904,32 @@ function onMore() {
   font-size: $font-size-base;
   font-weight: 500;
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
+
+/* 摄影师详情骨架：对齐真实六区块高度，加载完不跳 */
+.sk-detail-header { display: flex; gap: 24rpx; padding: 32rpx; }
+.sk-detail-avatar { width: 180rpx; height: 180rpx; }
+.sk-detail-info { flex: 1; display: flex; flex-direction: column; gap: 16rpx; padding-top: 10rpx; }
+.sk-detail-stats { display: flex; justify-content: space-between; margin-top: 20rpx; }
+.sk-detail-stat { flex: 1; display: flex; flex-direction: column; gap: 12rpx; align-items: center; }
+.sk-detail-stat .sk-line { height: 24rpx; }
+.sk-detail-tags { display: flex; gap: 16rpx; }
+.sk-detail-tag { width: 120rpx; height: 48rpx; border-radius: 24rpx; }
+.sk-detail-section { padding: 28rpx; display: flex; flex-direction: column; gap: 20rpx; }
+.sk-detail-works { display: flex; gap: 16rpx; }
+.sk-detail-work { width: 200rpx; height: 280rpx; border-radius: 12rpx; flex-shrink: 0; }
 </style>

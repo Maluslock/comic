@@ -179,6 +179,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { mapEventItem, resolveImage, type EventDTO } from '@/utils/mappers'
 import type { ComicEvent } from '@/types'
+import { navTo } from '@/utils/nav'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -343,25 +344,25 @@ function doWithdraw(id: string) {
 }
 
 function reapply(item: MyEventApplication) {
-  uni.navigateTo({ url: `/pages/photographer/event-apply?id=${item.eventId}`, animationType: 'none' })
+  navTo(`/pages/photographer/event-apply?id=${item.eventId}`)
 }
 
 function openEvent(item: MyEventApplication) {
   if (item.status !== 'approved') return
-  uni.navigateTo({ url: `/pages/event/detail?id=${item.eventId}`, animationType: 'none' })
+  navTo(`/pages/event/detail?id=${item.eventId}`)
 }
 
 function openCurrentEvent() {
   if (!eventId.value) return
-  uni.navigateTo({ url: `/pages/event/detail?id=${eventId.value}`, animationType: 'none' })
+  navTo(`/pages/event/detail?id=${eventId.value}`)
 }
 
 function gotoMine() {
-  uni.navigateTo({ url: '/pages/photographer/event-apply?tab=mine', animationType: 'none' })
+  navTo('/pages/photographer/event-apply?tab=mine')
 }
 
 function goActivate() {
-  uni.navigateTo({ url: '/pages/photographer/activate', animationType: 'none' })
+  navTo('/pages/photographer/activate')
 }
 
 function goEvents() {
@@ -369,7 +370,7 @@ function goEvents() {
 }
 
 function goLogin() {
-  uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeURIComponent('/pages/photographer/event-apply') })
+  navTo('/pages/login/index?redirect=' + encodeURIComponent('/pages/photographer/event-apply'))
 }
 
 function goBack() {

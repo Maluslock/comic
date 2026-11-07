@@ -66,6 +66,7 @@
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
+import { navTo } from '@/utils/nav'
 
 const keyword = ref('')
 const tags = ref<string[]>([])
@@ -125,7 +126,7 @@ onLoad((options: Record<string, string> | undefined) => {
     multiSelect.value = tagList.length > 1
     const url = buildResultUrl(kw, tagList)
     // redirectTo 失败时退回 navigateTo，保证带参入口不会停在空白入口页
-    uni.redirectTo({ url, fail: () => uni.navigateTo({ url }) })
+    uni.redirectTo({ url, fail: () => navTo(url) })
     return
   }
 
@@ -150,7 +151,7 @@ function goResult(params: { keyword?: string; tags?: string[] }) {
     uni.showToast({ title: '请输入关键词或选择标签', icon: 'none' })
     return
   }
-  uni.navigateTo({ url: buildResultUrl(kw, tagList) })
+  navTo(buildResultUrl(kw, tagList))
 }
 
 function submitSearch() {

@@ -220,6 +220,7 @@ import { getMyEventApplication } from '@/api/index'
 import { mapEventItem, mapPhotographerItem, mapWorkItem, encodeRedirect } from '@/utils/mappers'
 import { previewImages } from '@/utils/preview'
 import { loadFollowedIds, toggleFollow } from '@/utils/follow'
+import { navTo } from '@/utils/nav'
 import { useUserStore } from '@/stores/user'
 
 interface EventDetailResponse {
@@ -417,19 +418,17 @@ async function loadMyApplication() {
 
 function goEventApply() {
   if (!userStore.user) { goLoginForApply(); return }
-  uni.navigateTo({ url: `/pages/photographer/event-apply?id=${id}`, animationType: 'none' })
+  navTo(`/pages/photographer/event-apply?id=${id}`)
 }
 
 function goLoginForApply() {
-  uni.navigateTo({
-    url: '/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id)
-  })
+  navTo('/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id))
 }
 
 async function onToggleFollow() {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id) }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=' + encodeRedirect('/pages/event/detail?id=' + id)), 800)
     return
   }
   try {

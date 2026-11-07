@@ -93,6 +93,7 @@ import { apiGet } from '@/api/client'
 // 统一走 mapping 层：cover 由 resolveImage 补成绝对地址（小程序端没有 /static 代理，
 // 后端相对路径 /static/remote/** 会被当成包内资源读取失败，露出深色卡片底）。
 import { mapEventItem, type EventDTO } from '@/utils/mappers'
+import { navTo } from '@/utils/nav'
 
 interface EventListResponse {
   list: EventDTO[]
@@ -223,7 +224,7 @@ function formatDateRange(start: number, end: number): string {
 }
 
 function goDetail(id: string) {
-  uni.navigateTo({ url: `/pages/event/detail?id=${id}` })
+  navTo(`/pages/event/detail?id=${id}`)
 }
 </script>
 

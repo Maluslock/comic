@@ -174,6 +174,7 @@ import type { ComicEvent } from '@/types'
 // 统一走 mapping 层：cover 由 resolveImage 补成绝对地址（小程序端没有 /static 代理，
 // 后端相对路径会被当包内资源读取失败，背景色露出来就是一块深色「黑海报」）。
 import { mapEventItem, type EventDTO } from '@/utils/mappers'
+import { navTo } from '@/utils/nav'
 
 /**
  * 日历只用这几个字段；`cover` 来自 mapEventItem（已 resolveImage 成绝对地址），
@@ -341,7 +342,7 @@ function isFollowed(id: string): boolean {
 async function onToggleFollow(id: string) {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/calendar/index' }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=/pages/calendar/index'), 800)
     return
   }
   try {
@@ -368,7 +369,7 @@ function daysUntil(start: number): number {
 }
 
 function goDetail(id: string) {
-  uni.navigateTo({ url: `/pages/event/detail?id=${id}` })
+  navTo(`/pages/event/detail?id=${id}`)
 }
 
 async function loadEvents() {

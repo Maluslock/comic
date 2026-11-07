@@ -84,6 +84,7 @@ import { renderOrderPrice, toPriceMode, toPriceStatus, confirmRespondQuote } fro
 import { escrowState, escrowTodoWeight } from '@/utils/escrow'
 import { resolveImage } from '@/utils/mappers'
 import { acceptDelivery } from '@/api'
+import { navTo } from '@/utils/nav'
 
 interface DisplayOrder extends OrderPriceFields, EscrowBookingFields {
   id: string
@@ -324,17 +325,17 @@ function rejectQuote(id: string) {
 }
 
 function goDetail(id: string) {
-  uni.navigateTo({ url: `/pages/order/detail?id=${id}` })
+  navTo(`/pages/order/detail?id=${id}`)
 }
 
 function goReview(order: any) {
-  uni.navigateTo({ url: `/pages/comment/index?photographerId=${order.photographerId}` })
+  navTo(`/pages/comment/index?photographerId=${order.photographerId}`)
 }
 
 async function goChat(id: string) {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/order/list' }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=/pages/order/list'), 800)
     return
   }
   const order = fullOrders.value.find(o => o.id === id)
@@ -347,9 +348,7 @@ async function goChat(id: string) {
       userId: Number(userStore.user.id),
       otherUserId: Number(order.photographerUserId || order.photographerId)
     })
-    uni.navigateTo({
-      url: `/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(order.photographerName)}&peerAvatar=${encodeURIComponent(order.photographerAvatar || '')}`
-    })
+    navTo(`/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(order.photographerName)}&peerAvatar=${encodeURIComponent(order.photographerAvatar || '')}`)
   } catch {
     uni.showToast({ title: '无法发起会话', icon: 'none' })
   }

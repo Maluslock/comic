@@ -272,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow, onReady } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
@@ -280,6 +280,8 @@ import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
 import HomeSkeleton from '@/components/HomeSkeleton.vue'
 import { useHomeStore } from '@/stores/home'
+import { preloadPhotographerDetail } from '@/utils/preload'
+import { navTo } from '@/utils/nav'
 
 const store = useHomeStore()
 const { cityOptions } = storeToRefs(store)
@@ -427,9 +429,33 @@ function updateNavMetrics() {
   }
 }
 
+// --- 首屏摄影师卡预载（C 档）-----------------------------------------------
+// 模块级节流闸门：整个首页生命周期只放行一次；onShow 再次进入不重复预载。
+// <script setup> 顶层 let 编译进 setup()，tab 页实例常驻 → 跨多次 onShow 保持。
+let preloadedOnce = false
+let preloadArmed = false
+
+/** 摄影师列表数据到达后，对首屏前 2 张卡发起预载（仅一次，H5 端为空操作）。 */
+function preloadFirstTwoOnce() {
+  if (preloadedOnce || !preloadArmed) return
+  const firstTwo = store.photographers.slice(0, 2)
+  if (!firstTwo.length) return
+  preloadedOnce = true
+  firstTwo.forEach(p => preloadPhotographerDetail(p.id))
+}
+
 onShow(() => {
   updateNavMetrics()
+  // 节流：只在第一次 onShow 放行；从详情页返回再次 onShow 时不重复预载。
+  if (!preloadedOnce) {
+    preloadArmed = true
+    preloadFirstTwoOnce() // 数据已加载（暖启动/再次进入）时立即补一次
+  }
 })
+
+// 冷启动 onShow 早于 onMounted 的 fetchHomeData：列表异步到达后再补触发一次，
+// 避免「首次放行时列表为空、一次性闸门被空数据锁死」。
+watch(() => store.photographers, () => preloadFirstTwoOnce())
 
 onReady(() => {
   updateNavMetrics()
@@ -452,14 +478,14 @@ async function onRefresh() {
 }
 
 function goSearch() {
-  uni.navigateTo({ url: '/pages/search/search', animationType: 'none' })
+  navTo('/pages/search/search')
 }
 
 function goSearchByTag(tag: string) {
   // 这里必须走 tags 通道：后端 keyword 只对 p.name / p.description 做 ILIKE，不碰标签表，
   // 而「日系」「哥特」这类词几乎只作为标签存在 → 走 keyword 会命中 0（用户实测的「没有结果」）。
   // 直达结果页而不是先进入口页：入口页 onLoad 会立刻 redirectTo，用户会看到一次白帧/闪烁。
-  uni.navigateTo({ url: `/pages/search/result?tags=${encodeURIComponent(tag)}`, animationType: 'none' })
+  navTo(`/pages/search/result?tags=${encodeURIComponent(tag)}`)
 }
 
 function goPhotographerList() {
@@ -467,11 +493,11 @@ function goPhotographerList() {
 }
 
 function goEventMore() {
-  uni.navigateTo({ url: '/pages/event/list', animationType: 'none' })
+  navTo('/pages/event/list')
 }
 
 function goEventDetail(id: string) {
-  uni.navigateTo({ url: `/pages/event/detail?id=${id}`, animationType: 'none' })
+  navTo(`/pages/event/detail?id=${id}`)
 }
 
 function goCitySelect() {

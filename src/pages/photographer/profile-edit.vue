@@ -105,6 +105,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { ApiError } from '@/api/client'
 import { getMyPhotographerProfile, updatePhotographerProfile, pickAndUploadImages } from '@/api/index'
 import { useUserStore } from '@/stores/user'
+import { navTo } from '@/utils/nav'
 
 const { statusBarHeight } = useStatusBar()
 const loading = ref(true)
@@ -163,7 +164,7 @@ onShow(() => {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/profile-edit' })
+      navTo('/pages/login/index?redirect=/pages/photographer/profile-edit')
     }, 800)
     return
   }

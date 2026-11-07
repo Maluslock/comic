@@ -1,5 +1,12 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-line sk-w-40" />
+        <ListSkeleton :rows="4" variant="row" />
+      </view>
+    </template>
+    <template v-else>
     <view class="section">
       <view class="section-title">我的评价</view>
       <view v-if="myReviews.length === 0" class="empty">
@@ -66,6 +73,7 @@
         </view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -78,6 +86,10 @@ import { getMyReviews } from '@/api/index'
 import { useUserStore } from '@/stores/user'
 import { mapPhotographerItem, mapReviewItem } from '@/utils/mappers'
 import type { Photographer } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 const userStore = useUserStore()
 
@@ -92,7 +104,6 @@ onLoad((options) => {
 })
 
 async function loadData() {
-  uni.showLoading({ title: '加载中...' })
   try {
     const mine = await getMyReviews()
     myReviews.value = (mine || []).map(mapReviewItem)
@@ -107,7 +118,7 @@ async function loadData() {
     myReviews.value = []
     photographers.value = []
   } finally {
-    uni.hideLoading()
+    firstLoading.value = false
   }
 }
 
@@ -389,4 +400,19 @@ async function submitReview() {
     opacity: 0.85;
   }
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

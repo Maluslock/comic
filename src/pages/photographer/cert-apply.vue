@@ -92,6 +92,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { applyCertification, getMyCertApplication, getMyCertApplications, pickAndUploadImages, type CertApplication } from '@/api/index'
 import { ApiError } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { navTo } from '@/utils/nav'
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -116,7 +117,7 @@ onShow(() => {
   if (!userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/cert-apply' })
+      navTo('/pages/login/index?redirect=/pages/photographer/cert-apply')
     }, 800)
     return
   }

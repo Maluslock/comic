@@ -42,6 +42,7 @@ import { computed } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { logoutAllDevices } from '@/api/index'
 import { useStatusBar } from '@/composables/useStatusBar'
+import { navTo } from '@/utils/nav'
 
 const { statusBarHeight } = useStatusBar()
 
@@ -59,7 +60,7 @@ function goBack() {
 
 function onLogoutAll() {
   if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/login/index' })
+    navTo('/pages/login/index')
     return
   }
   uni.showModal({

@@ -1,5 +1,12 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-card sk-pad"><view class="sk-row"><view class="sk-circle sk-avatar-88" /><view class="sk-line sk-w-40" /></view></view>
+        <ListSkeleton :rows="4" variant="card" />
+      </view>
+    </template>
+    <template v-else>
     <view class="ph-card">
       <image v-if="photographerAvatar" :src="photographerAvatar" class="ph-avatar" mode="aspectFill" />
       <view v-else class="ph-avatar ph-avatar--initial">{{ photographerName.slice(0, 1) }}</view>
@@ -101,6 +108,7 @@
       </view>
     </view>
 
+    </template>
   </view>
 </template>
 
@@ -113,7 +121,12 @@ import { useUserStore } from '@/stores/user'
 import { TMPL, requestSubscribe, markSubscribed } from '@/utils/subscribe'
 import { formatPrice, encodeRedirect, resolveImage } from '@/utils/mappers'
 import { todayKey } from '@/utils/date'
+import { navTo } from '@/utils/nav'
 import type { Service } from '@/types'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 const ALL_SLOTS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
 
@@ -180,7 +193,7 @@ onMounted(() => {
 })
 
 async function loadServices() {
-  if (!photographerId.value) return
+  if (!photographerId.value) { firstLoading.value = false; return }
   try {
     const res = await apiGet<any>(`/v1/photographers/${photographerId.value}`)
     services.value = (res.services || []).map((s: any) => ({
@@ -212,6 +225,8 @@ async function loadServices() {
     }
   } catch {
     uni.showToast({ title: '加载服务失败', icon: 'none' })
+  } finally {
+    firstLoading.value = false
   }
 }
 
@@ -266,7 +281,7 @@ async function submitBooking() {
     uni.showToast({ title: '请先登录', icon: 'none' })
     // 回跳必须带 photographerId：否则登录回来 onLoad 会退回默认的 1 号摄影师
     const back = encodeRedirect(`/pages/booking/index?photographerId=${photographerId.value}`)
-    setTimeout(() => uni.navigateTo({ url: `/pages/login/index?redirect=${back}` }), 800)
+    setTimeout(() => navTo(`/pages/login/index?redirect=${back}`), 800)
     return
   }
   if (!canSubmit.value) {
@@ -297,7 +312,7 @@ async function submitBooking() {
     uni.removeStorageSync('bookingPhotographerId')
     uni.hideLoading()
     uni.showToast({ title: '预约成功', icon: 'success' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/order/list' }), 800)
+    setTimeout(() => navTo('/pages/order/list'), 800)
   } catch (e) {
     uni.hideLoading()
     const code = e instanceof ApiError ? e.status : 0
@@ -604,4 +619,19 @@ async function submitBooking() {
 .picker-trigger {
   display: none;
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

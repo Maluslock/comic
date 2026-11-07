@@ -1,5 +1,12 @@
 <template>
   <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-card sk-pad"><view class="sk-circle sk-avatar-120" /><view class="sk-line sk-w-60" /><view class="sk-line sk-w-40" /></view>
+        <ListSkeleton :rows="3" variant="card" />
+      </view>
+    </template>
+    <template v-else>
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
     <view class="nav-bar" :style="{ marginTop: statusBarHeight + 'px' }">
       <text class="back-arrow" @click="goBack">‹</text>
@@ -66,6 +73,7 @@
         <view class="btn-submit" @click="submit">立即开通</view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -75,6 +83,11 @@ import { useStatusBar } from '@/composables/useStatusBar'
 import { onShow } from '@dcloudio/uni-app'
 import { apiGet, apiPost } from '@/api/client'
 import { useUserStore } from '@/stores/user'
+import { navTo } from '@/utils/nav'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 const { statusBarHeight } = useStatusBar()
 const userStore = useUserStore()
@@ -101,9 +114,10 @@ const modeHint = computed(() => {
 
 onShow(() => {
   if (!userStore.user) {
+    firstLoading.value = false
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/login/index?redirect=/pages/photographer/activate' })
+      navTo('/pages/login/index?redirect=/pages/photographer/activate')
     }, 800)
   } else {
     loadCertified()
@@ -112,12 +126,14 @@ onShow(() => {
 
 async function loadCertified() {
   const pid = userStore.user?.photographerId
-  if (!pid) return
+  if (!pid) { firstLoading.value = false; return }
   try {
     const res = await apiGet<{ certified?: boolean }>(`/v1/photographers/${pid}`)
     certified.value = !!res.certified
   } catch {
     certified.value = false
+  } finally {
+    firstLoading.value = false
   }
 }
 
@@ -143,23 +159,23 @@ async function submit() {
 }
 
 function goOrders() {
-  uni.navigateTo({ url: '/pages/photographer/orders' })
+  navTo('/pages/photographer/orders')
 }
 
 function goProfileEdit() {
-  uni.navigateTo({ url: '/pages/photographer/profile-edit' })
+  navTo('/pages/photographer/profile-edit')
 }
 
 function goWorks() {
-  uni.navigateTo({ url: '/pages/photographer/works' })
+  navTo('/pages/photographer/works')
 }
 
 function goServices() {
-  uni.navigateTo({ url: '/pages/photographer/services' })
+  navTo('/pages/photographer/services')
 }
 
 function goCertApply() {
-  uni.navigateTo({ url: '/pages/photographer/cert-apply' })
+  navTo('/pages/photographer/cert-apply')
 }
 
 function goBack() {
@@ -205,4 +221,19 @@ function goBack() {
 .btn-submit { margin-top: 48rpx; text-align: center; padding: 24rpx 0; background: $neon-gradient; color: #fff; border-radius: 44rpx; font-size: 30rpx; font-weight: 600; box-shadow: 0 0 24rpx $neon-purple-glow;
   &:active { transform: scale(0.97); box-shadow: 0 0 12rpx $neon-purple-glow; }
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

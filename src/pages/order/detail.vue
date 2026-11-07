@@ -1,5 +1,12 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-block sk-hero" />
+        <ListSkeleton :rows="5" variant="card" />
+      </view>
+    </template>
+    <template v-else>
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     
     <view class="header">
@@ -247,6 +254,7 @@
         联系摄影师
       </view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -268,6 +276,7 @@ import type {
 } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote, confirmRespondQuote } from '@/utils/quote'
 import { formatDuration } from '@/utils/duration'
+import { navTo } from '@/utils/nav'
 import { resolveImage } from '@/utils/mappers'
 import {
   escrowState,
@@ -285,6 +294,10 @@ import {
   respondDispute as respondDisputeApi,
   escalateDispute as escalateDisputeApi
 } from '@/api'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 interface OrderDetail extends OrderPriceFields, EscrowBookingFields {
   id: string
@@ -349,6 +362,7 @@ const clock = ref(Date.now())
 onLoad((options: Record<string, string> | undefined) => {
   bookingId.value = options?.id || ''
   if (!bookingId.value) {
+    firstLoading.value = false
     uni.showToast({ title: '订单不存在', icon: 'none' })
     return
   }
@@ -422,6 +436,7 @@ async function loadOrder() {
   } else {
     uni.showToast({ title: '订单不存在', icon: 'none' })
   }
+  firstLoading.value = false
 }
 
 /** 加载履约事件与争议（失败静默降级，时间线仍能显示主链路）。 */
@@ -583,7 +598,7 @@ function goBack() {
 async function goChat() {
   if (!userStore.isLoggedIn || !userStore.user) {
     uni.showToast({ title: '请先登录', icon: 'none' })
-    setTimeout(() => uni.navigateTo({ url: '/pages/login/index?redirect=/pages/order/list' }), 800)
+    setTimeout(() => navTo('/pages/login/index?redirect=/pages/order/list'), 800)
     return
   }
   if (!order.value.photographerId) {
@@ -595,9 +610,7 @@ async function goChat() {
       userId: Number(userStore.user.id),
       otherUserId: Number(order.value.photographerUserId || order.value.photographerId)
     })
-    uni.navigateTo({
-      url: `/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(order.value.photographerName)}&peerAvatar=${encodeURIComponent(order.value.photographerAvatar || '')}`
-    })
+    navTo(`/pages/chat/index?sessionId=${res.id}&peerName=${encodeURIComponent(order.value.photographerName)}&peerAvatar=${encodeURIComponent(order.value.photographerAvatar || '')}`)
   } catch {
     uni.showToast({ title: '无法发起会话', icon: 'none' })
   }
@@ -769,7 +782,7 @@ function previewEvidence(index: number) {
 }
 
 function goReview() {
-  uni.navigateTo({ url: `/pages/comment/index?photographerId=${order.value.photographerId}` })
+  navTo(`/pages/comment/index?photographerId=${order.value.photographerId}`)
 }
 </script>
 
@@ -1249,4 +1262,19 @@ function goReview() {
   gap: $spacing-md;
   margin-top: $spacing-md;
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

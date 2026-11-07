@@ -58,6 +58,7 @@ import { markNotificationRead } from '@/api/index'
 import { updateMessageBadge } from '@/utils/badge'
 import { useUserStore } from '@/stores/user'
 import { resolveImage } from '@/utils/mappers'
+import { navTo } from '@/utils/nav'
 
 const userStore = useUserStore()
 
@@ -162,13 +163,13 @@ function readNotification(item: any) {
     item.read = wasRead
   })
 
-  // 点击后立即跳转：此处到 navigateTo 之间不得有 await
+  // 点击后立即跳转：此处到 navTo 之间不得有 await
   if (item.linkType === 'order' && item.linkId) {
-    uni.navigateTo({ url: `/pages/order/detail?id=${item.linkId}`, animationType: 'none' })
+    navTo(`/pages/order/detail?id=${item.linkId}`)
     return
   }
   if (item.linkType === 'photographer_orders') {
-    uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
+    navTo('/pages/photographer/orders')
     return
   }
   uni.showToast({ title: item.title, icon: 'none' })
@@ -179,10 +180,7 @@ function onSessionAvatarError(session: any) {
 }
 
 function goChat(session: any) {
-  uni.navigateTo({
-    url: `/pages/chat/index?sessionId=${session.id}&peerName=${encodeURIComponent(session.userName)}&peerAvatar=${encodeURIComponent(session.userAvatar)}`,
-    animationType: 'none'
-  })
+  navTo(`/pages/chat/index?sessionId=${session.id}&peerName=${encodeURIComponent(session.userName)}&peerAvatar=${encodeURIComponent(session.userAvatar)}`)
 }
 </script>
 

@@ -97,6 +97,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { useStatusBar } from '@/composables/useStatusBar'
+import { navTo } from '@/utils/nav'
 
 const { statusBarHeight } = useStatusBar()
 
@@ -182,26 +183,26 @@ const aboutItems: { label: string; action: () => void }[] = [
 function openDoc(type: 'privacy' | 'terms' | 'about' | 'help' | 'security' | 'blocks') {
   if (type === 'security' || type === 'blocks') {
     if (!userStore.isLoggedIn) {
-      uni.navigateTo({ url: '/pages/login/index' })
+      navTo('/pages/login/index')
       return
     }
-    uni.navigateTo({ url: `/pages/settings/${type}` })
+    navTo(`/pages/settings/${type}`)
     return
   }
-  uni.navigateTo({ url: `/pages/settings/doc?type=${type}` })
+  navTo(`/pages/settings/doc?type=${type}`)
 }
 
 function goProfileEdit() {
   if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/login/index' })
+    navTo('/pages/login/index')
     return
   }
-  uni.navigateTo({ url: '/pages/profile/edit' })
+  navTo('/pages/profile/edit')
 }
 
 function logout() {
   if (!userStore.isLoggedIn) {
-    uni.navigateTo({ url: '/pages/login/index' })
+    navTo('/pages/login/index')
     return
   }
   uni.showModal({

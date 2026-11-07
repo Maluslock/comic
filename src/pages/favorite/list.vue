@@ -33,6 +33,7 @@ import { useStatusBar } from '@/composables/useStatusBar'
 import { apiGet, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { resolveImage } from '@/utils/mappers'
+import { navTo } from '@/utils/nav'
 
 /** 收藏列表 DTO：后端 GET /v1/favorites/:userId 返回裸数组，字段见 service.FavoriteItem */
 interface FavoriteDTO {
@@ -93,7 +94,7 @@ async function unfavorite(pid: number) {
 }
 
 function goDetail(pid: number) {
-  uni.navigateTo({ url: `/pages/photographer/detail?id=${pid}` })
+  navTo(`/pages/photographer/detail?id=${pid}`)
 }
 
 function goHome() {

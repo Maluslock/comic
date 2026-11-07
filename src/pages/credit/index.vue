@@ -97,6 +97,7 @@ import {
   frozenHint,
   type CreditEventView
 } from '@/utils/credit'
+import { navTo } from '@/utils/nav'
 
 const PAGE_SIZE = 20
 
@@ -160,7 +161,7 @@ function loadMore() {
 }
 
 function goBooking(bookingId: number) {
-  uni.navigateTo({ url: `/pages/order/detail?id=${bookingId}` })
+  navTo(`/pages/order/detail?id=${bookingId}`)
 }
 
 onLoad(() => {

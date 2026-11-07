@@ -36,6 +36,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { apiGet, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { resolveImage } from '@/utils/mappers'
+import { navTo } from '@/utils/nav'
 
 /** 关注列表 DTO：后端 GET /v1/follows/:userId 返回 {list:[{id,eventId,name,location,venue,startDate,endDate,coverUrl,status}]} */
 interface FollowDTO {
@@ -113,7 +114,7 @@ function daysUntil(start: string): number {
 }
 
 function goDetail(eventId: number) {
-  uni.navigateTo({ url: `/pages/event/detail?id=${eventId}` })
+  navTo(`/pages/event/detail?id=${eventId}`)
 }
 
 function goHome() {

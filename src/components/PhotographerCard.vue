@@ -54,6 +54,7 @@ import { computed, ref } from 'vue'
 import type { Photographer } from '@/types'
 import { useUserStore } from '@/stores/user'
 import { describePrice } from '@/utils/price'
+import { navTo } from '@/utils/nav'
 import MPriceTag from '@/components/MPriceTag.vue'
 import MTag from '@/components/MTag.vue'
 
@@ -89,9 +90,7 @@ const isSelf = computed(() => {
 })
 
 function goDetail() {
-  uni.navigateTo({
-    url: `/pages/photographer/detail?id=${props.photographer.id}`
-  })
+  navTo(`/pages/photographer/detail?id=${props.photographer.id}`)
 }
 </script>
 

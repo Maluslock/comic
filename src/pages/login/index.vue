@@ -1,5 +1,14 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-line sk-w-60" />
+        <view class="sk-line sk-w-40" />
+        <view class="sk-card sk-pad"><view class="sk-line sk-w-30" /><view class="sk-line sk-w-full" /><view class="sk-line sk-w-full" /></view>
+        <ListSkeleton :rows="2" variant="card" />
+      </view>
+    </template>
+    <template v-else>
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
 
     <view class="container">
@@ -131,15 +140,22 @@
       </view>
     </view>
 
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useStatusBar } from '@/composables/useStatusBar'
 import { useUserStore } from '@/stores/user'
 import { decodeRedirect } from '@/utils/mappers'
 import { uploadFile, updateMyAvatar } from '@/api/index'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
+
+onMounted(() => { firstLoading.value = false })
 
 const userStore = useUserStore()
 
@@ -843,4 +859,19 @@ function goAfterLogin() {
   color: $dark-text-tertiary;
   margin-top: 24rpx;
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

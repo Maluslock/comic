@@ -86,6 +86,7 @@ import type { OrderPriceFields, EscrowBookingFields } from '@/types'
 import { renderOrderPrice, toPriceMode, toPriceStatus, promptQuote } from '@/utils/quote'
 import { escrowState } from '@/utils/escrow'
 import { checkinBooking, deliverBooking, markNoShow, pickAndUploadImages } from '@/api'
+import { navTo } from '@/utils/nav'
 
 interface PhotographerOrder extends OrderPriceFields, EscrowBookingFields {
   id: number
@@ -321,12 +322,12 @@ function subTone(order: PhotographerOrder): string {
 }
 
 function goActivate() {
-  uni.navigateTo({ url: '/pages/photographer/activate' })
+  navTo('/pages/photographer/activate')
 }
 
 // 定价入口：接单管理页顶部常驻，直达「我的套餐」（改价 / 新增 / 上下架）。
 function goServices() {
-  uni.navigateTo({ url: '/pages/photographer/services', animationType: 'none' })
+  navTo('/pages/photographer/services')
 }
 
 function goBack() {

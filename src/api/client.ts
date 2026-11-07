@@ -1,6 +1,7 @@
 // H5 走 vite 代理用相对路径 /api；小程序没有同源概念：
 // 构建时 VITE_API_BASE_URL 给默认绝对地址，运行时可在个人中心长按版本号改（storage: apiBase）
 import { getApiBase } from '@/utils/apiBase'
+import { navTo } from '@/utils/nav'
 
 function authHeader(): Record<string, string> {
   const token = uni.getStorageSync('token') as string
@@ -32,7 +33,7 @@ function handleUnauthorized(res: { statusCode: number }) {
         .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(opts[k]))}`)
         .join('&')
       const back = `/${cur}${qs ? '?' + qs : ''}`
-      uni.navigateTo({ url: `/pages/login/index?redirect=${encodeURIComponent(back)}` })
+      navTo(`/pages/login/index?redirect=${encodeURIComponent(back)}`)
     }
   }
 }

@@ -1,5 +1,12 @@
 <template>
   <view class="page">
+    <template v-if="firstLoading">
+      <view class="skeleton-page">
+        <view class="sk-card sk-pad"><view class="sk-row"><view class="sk-circle sk-avatar-120" /><view class="sk-line sk-w-40" /></view></view>
+        <ListSkeleton :rows="3" variant="card" />
+      </view>
+    </template>
+    <template v-else>
     <view class="avatar-card">
       <image v-if="form.avatar" :src="form.avatar" class="avatar-preview" mode="aspectFill" />
       <view v-else class="avatar-preview avatar-empty">
@@ -57,6 +64,7 @@
 
       <view class="btn-submit" @click="save">保存</view>
     </view>
+    </template>
   </view>
 </template>
 
@@ -66,6 +74,11 @@ import { onShow } from '@dcloudio/uni-app'
 import { ApiError } from '@/api/client'
 import { updateUserProfile, pickAndUploadImages, uploadFile } from '@/api/index'
 import { useUserStore } from '@/stores/user'
+import { navTo } from '@/utils/nav'
+import ListSkeleton from '@/components/ListSkeleton.vue'
+
+/** 首屏深色骨架：数据就绪前置 true，消除切页白屏（B 档） */
+const firstLoading = ref(true)
 
 const userStore = useUserStore()
 
@@ -73,7 +86,7 @@ const userStore = useUserStore()
 const isPhotographerAccount = computed(() => !!userStore.user?.photographerId)
 
 function goPhotographerProfileEdit() {
-  uni.navigateTo({ url: '/pages/photographer/profile-edit', animationType: 'none' })
+  navTo('/pages/photographer/profile-edit')
 }
 
 const form = reactive({
@@ -85,15 +98,17 @@ const form = reactive({
 onShow(() => {
   const user = userStore.user
   if (!user) {
+    firstLoading.value = false
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/login/index?redirect=/pages/profile/edit' })
+      navTo('/pages/login/index?redirect=/pages/profile/edit')
     }, 800)
     return
   }
   form.name = user.name || ''
   form.avatar = user.avatar || ''
   form.bio = user.bio || ''
+  firstLoading.value = false
 })
 
 async function pickAvatar() {
@@ -358,4 +373,19 @@ async function save() {
     box-shadow: 0 0 12rpx $neon-purple-glow;
   }
 }
+/* ── 首屏深色骨架：切页不再露白（B 档）── */
+.skeleton-page { min-height: 100vh; padding: $spacing-md; box-sizing: border-box; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-card { background: $dark-bg-card; border: 1rpx solid $dark-border; border-radius: 20rpx; box-sizing: border-box; }
+.sk-block { background: $surface-2; border-radius: 12rpx; }
+.sk-line { height: 28rpx; background: $surface-2; border-radius: 8rpx; }
+.sk-circle { background: $surface-2; border-radius: 50%; flex-shrink: 0; }
+.sk-row { display: flex; align-items: center; gap: 24rpx; }
+.sk-pad { padding: 28rpx; display: flex; flex-direction: column; gap: 24rpx; }
+.sk-avatar-120 { width: 120rpx; height: 120rpx; }
+.sk-avatar-88 { width: 88rpx; height: 88rpx; }
+.sk-hero { height: 160rpx; }
+.sk-grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.sk-grid-item { width: calc(50% - 8rpx); height: 320rpx; border-radius: 16rpx; }
+.sk-w-25 { width: 25%; } .sk-w-30 { width: 30%; } .sk-w-40 { width: 40%; }
+.sk-w-60 { width: 60%; } .sk-w-80 { width: 80%; } .sk-w-full { width: 100%; }
 </style>

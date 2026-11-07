@@ -163,6 +163,7 @@ import { useUserStore } from '@/stores/user'
 import { getApiBase, setApiBase, resetApiBase } from '@/utils/apiBase'
 import { creditLevelText as levelTextOf, creditTone as toneOf, frozenHint } from '@/utils/credit'
 import { isPlaceholderName as isPlaceholderNameValue } from '@/utils/placeholder-name'
+import { navTo } from '@/utils/nav'
 import type { CreditSummary } from '@/types'
 
 const userStore = useUserStore()
@@ -276,12 +277,12 @@ onShow(() => {
 
 function goLogin() {
   if (isLoggedIn.value) return
-  uni.navigateTo({ url: '/pages/login/index' })
+  navTo('/pages/login/index')
 }
 
 function goEdit() {
   if (needLogin('/pages/profile/edit')) return
-  uni.navigateTo({ url: '/pages/profile/edit', animationType: 'none' })
+  navTo('/pages/profile/edit')
 }
 
 // 名字行原本整体可点（占位名时直达资料编辑）。改版后占位引导交给旁边的
@@ -290,29 +291,29 @@ function goEdit() {
 
 function goActivate() {
   if (needLogin('/pages/photographer/activate')) return
-  uni.navigateTo({ url: '/pages/photographer/activate', animationType: 'none' })
+  navTo('/pages/photographer/activate')
 }
 
 function goPhotographerOrders() {
   if (needLogin('/pages/photographer/orders')) return
-  uni.navigateTo({ url: '/pages/photographer/orders', animationType: 'none' })
+  navTo('/pages/photographer/orders')
 }
 
 // 艺名入口：带登录守卫（与 goEdit/goPhotographerOrders 同口径），游客先进登录页再原地回来。
 function goPhotographerProfile() {
   const redirect = '/pages/photographer/profile-edit'
   if (needLogin(redirect)) return
-  uni.navigateTo({ url: redirect, animationType: 'none' })
+  navTo(redirect)
 }
 
 // 定价入口：从「我的套餐」页直接改价/建套餐（此前只有 activate.vue 一个入口）。
 function goPhotographerServices() {
-  uni.navigateTo({ url: '/pages/photographer/services', animationType: 'none' })
+  navTo('/pages/photographer/services')
 }
 
 // 漫展入驻：tab=mine 让申请页直接落在「我的申请」而不是申请表单。
 function goPhotographerEventApply() {
-  uni.navigateTo({ url: '/pages/photographer/event-apply?tab=mine', animationType: 'none' })
+  navTo('/pages/photographer/event-apply?tab=mine')
 }
 
 // ── 登录守卫 ───────────────────────────────────────────────────────────────
@@ -326,28 +327,28 @@ function goPhotographerEventApply() {
 function needLogin(redirect?: string): boolean {
   if (isLoggedIn.value) return false
   const target = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
-  uni.navigateTo({ url: `/pages/login/index${target}` })
+  navTo(`/pages/login/index${target}`)
   return true
 }
 
 function goOrders() {
   if (needLogin('/pages/order/list')) return
-  uni.navigateTo({ url: '/pages/order/list', animationType: 'none' })
+  navTo('/pages/order/list')
 }
 
 function goCredit() {
   if (needLogin('/pages/credit/index')) return
-  uni.navigateTo({ url: '/pages/credit/index', animationType: 'none' })
+  navTo('/pages/credit/index')
 }
 
 function goFavorites() {
   if (needLogin('/pages/favorite/list')) return
-  uni.navigateTo({ url: '/pages/favorite/list', animationType: 'none' })
+  navTo('/pages/favorite/list')
 }
 
 function goFollows() {
   if (needLogin('/pages/follow/list')) return
-  uni.navigateTo({ url: '/pages/follow/list', animationType: 'none' })
+  navTo('/pages/follow/list')
 }
 
 function goWorks() {
@@ -356,28 +357,28 @@ function goWorks() {
   // 屏幕上出现别人的作品但标题写着「我的作品」，这是数据串台的硬伤。
   const url = isPhotographer.value ? '/pages/photographer/works' : '/pages/portfolio/index'
   if (needLogin(url)) return
-  uni.navigateTo({ url, animationType: 'none' })
+  navTo(url)
 }
 
 function goReviews() {
   if (needLogin('/pages/comment/index')) return
-  uni.navigateTo({ url: '/pages/comment/index', animationType: 'none' })
+  navTo('/pages/comment/index')
 }
 
 function goSettings() {
   // 设置页里有退出登录、账号安全、拉黑名单等，游客进来只有一堆空洞的开关，
   // 且退出登录按钮会直接再跳一次登录页 —— 统一改成先登录。
   if (needLogin('/pages/settings/index')) return
-  uni.navigateTo({ url: '/pages/settings/index', animationType: 'none' })
+  navTo('/pages/settings/index')
 }
 
 function goHelp() {
-  uni.navigateTo({ url: '/pages/settings/doc?type=help', animationType: 'none' })
+  navTo('/pages/settings/doc?type=help')
 }
 
 function logout() {
   if (!isLoggedIn.value) {
-    uni.navigateTo({ url: '/pages/login/index' })
+    navTo('/pages/login/index')
     return
   }
   uni.showModal({

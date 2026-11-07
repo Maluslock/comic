@@ -1,4 +1,10 @@
 <template>
+  <page-meta
+    root-background-color="#0c0d14"
+    background-color="#0c0d14"
+    background-color-top="#0c0d14"
+    background-color-bottom="#0c0d14"
+  />
   <view class="page">
     <view class="filter-bar">
       <scroll-view scroll-x class="filter-scroll" show-scrollbar="false">

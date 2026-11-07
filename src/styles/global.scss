@@ -1,5 +1,8 @@
+/* 小程序端：page 是原生容器，必须显式撑满 + 深色，
+   否则内容未渲染的那一帧会露出 webview 默认白底 */
 page {
   background-color: $surface-page;
+  min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: $font-size-base;
   color: $text-1;

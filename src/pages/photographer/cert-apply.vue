@@ -1,4 +1,10 @@
 <template>
+  <page-meta
+    root-background-color="#0c0d14"
+    background-color="#0c0d14"
+    background-color-top="#0c0d14"
+    background-color-bottom="#0c0d14"
+  />
   <view class="page" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }" />
     <view class="nav-bar" :style="{ marginTop: statusBarHeight + 'px' }">

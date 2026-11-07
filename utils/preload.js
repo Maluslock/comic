@@ -1,0 +1,1 @@
+"use strict";const e=require("../common/vendor.js"),o=new Set;exports.preloadPhotographerDetail=function(r){try{const t=String(r);if(o.has(t))return;o.size>=8&&o.clear(),function(o){void 0!==e.wx$1&&"function"==typeof e.wx$1.preloadPage&&e.wx$1.preloadPage({url:"/pages/photographer/detail?id="+o})}(r),o.add(t)}catch{}};

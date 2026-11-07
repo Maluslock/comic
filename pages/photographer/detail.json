@@ -4,6 +4,7 @@
   "backgroundColorTop": "#0C0D14",
   "backgroundColorBottom": "#0C0D14",
   "usingComponents": {
-    "review-card": "../../components/ReviewCard"
+    "review-card": "../../components/ReviewCard",
+    "list-skeleton": "../../components/ListSkeleton"
   }
 }

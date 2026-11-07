@@ -4,6 +4,7 @@
   "backgroundColorTop": "#0C0D14",
   "backgroundColorBottom": "#0C0D14",
   "usingComponents": {
-    "service-card": "../../components/ServiceCard"
+    "service-card": "../../components/ServiceCard",
+    "list-skeleton": "../../components/ListSkeleton"
   }
 }

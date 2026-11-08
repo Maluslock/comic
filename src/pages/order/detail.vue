@@ -794,7 +794,15 @@ function goReview() {
 
 <style lang="scss" scoped>
 .page {
-  min-height: 100vh;
+  position: fixed;
+  top: var(--window-top, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: $dark-bg-primary;
 }
 
@@ -833,7 +841,11 @@ function goReview() {
 }
 
 .content {
-  height: calc(100vh - 140rpx - env(safe-area-inset-top));
+  /* 交给 flex 父容器分配高度：flex:1 + min-height:0 才能让 scroll-view 在 flex 列里拿到有限高度 */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .status-card {

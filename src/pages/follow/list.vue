@@ -133,21 +133,7 @@ function goBack() {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: $dark-bg-primary;
-  &::before {
-    content: '';
-    position: fixed;
-    top: var(--window-top, 0px);
-    right: 0;
-    bottom: 0;
-    left: 0;
-    background: $surface-page;
-    z-index: -1;
-    pointer-events: none;
-  }
-}
+.page { min-height: 100vh; background: $dark-bg-primary; }
 .status-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
 .nav-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 99; height: 44px; display: flex; align-items: center; background: $dark-bg-primary; border-bottom: 1rpx solid $dark-border; }
 .back-arrow { font-size: 48rpx; color: $dark-text-primary; padding: 0 24rpx; }

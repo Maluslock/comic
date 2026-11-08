@@ -87,17 +87,6 @@ function goBack() {
 .page {
   min-height: 100vh;
   background: $dark-bg-primary;
-  &::before {
-    content: '';
-    position: fixed;
-    top: var(--window-top, 0px);
-    right: 0;
-    bottom: 0;
-    left: 0;
-    background: $surface-page;
-    z-index: -1;
-    pointer-events: none;
-  }
 }
 
 .header {

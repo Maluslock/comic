@@ -235,17 +235,31 @@ function goDetail(id: string) {
 </script>
 
 <style lang="scss" scoped>
+/* 页面根 fixed 铺满视口：首帧就有深色盒子（真机 navigateTo 首帧白屏的直接解法），
+   内部改用 flex 链分配高度，不再依赖 100vh（真机上 100vh 在部分安卓 WebView 不等于可视高度）。 */
 .page {
-  min-height: 100vh;
+  position: fixed;
+  /* H5 的 default 导航页顶部有 44px 的 uni-page-head，fixed 必须让位；
+     小程序端 --window-top 恒为 0px（webview 已在导航栏下方），这里等价于 top:0。 */
+  top: var(--window-top, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: $dark-bg-primary;
 }
 
+/* 筛选条改为 flex 列里的固定头（不再 sticky）：滚动容器换到下面那个 scroll-view 后，
+   sticky 会相对 scroll-view 内部滚动，行为不确定；直接让它不滚动更稳。 */
 .filter-bar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   background: $dark-bg-secondary;
   z-index: 100;
   border-bottom: 1rpx solid $dark-border;
+  padding-top: env(safe-area-inset-top);
 }
 
 .filter-list {
@@ -278,7 +292,12 @@ function goDetail(id: string) {
 }
 
 .content {
-  height: 100vh;
+  /* 交给 flex 父容器分配高度：flex:1 + min-height:0 让 scroll-view 在 flex 列里拿到有限高度，
+     替换掉原来的 height:100vh。 */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .event-list {

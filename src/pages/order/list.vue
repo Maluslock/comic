@@ -366,8 +366,21 @@ function goHome() {
 </script>
 
 <style lang="scss" scoped>
+/* 页面根 fixed 铺满视口：首帧就有深色盒子（真机 navigateTo 首帧白屏的直接解法），
+   内部改用 flex 链分配高度，不再依赖 100vh / env() / rpx 混算的 calc
+   （真机上 env() 与 rpx 在 calc 内可能让整条声明判无效，一旦失效 scroll-view 就没高度）。 */
 .page {
-  min-height: 100vh;
+  position: fixed;
+  /* H5 的 default 导航页顶部有 44px 的 uni-page-head，fixed 必须让位；
+     小程序端 --window-top 恒为 0px（webview 已在导航栏下方），这里等价于 top:0。 */
+  top: var(--window-top, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   background: $dark-bg-primary;
 }
 
@@ -406,7 +419,12 @@ function goHome() {
 }
 
 .content {
-  height: calc(100vh - env(safe-area-inset-top) - 100rpx);
+  /* 交给 flex 父容器分配高度：flex:1 + min-height:0 才能让 scroll-view 在 flex 列里拿到有限高度，
+     替换掉原来的 calc(100vh - env(safe-area-inset-top) - 100rpx)。 */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .skeleton-wrap {

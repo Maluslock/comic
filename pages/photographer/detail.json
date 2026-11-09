@@ -5,6 +5,7 @@
   "backgroundColorBottom": "#0C0D14",
   "usingComponents": {
     "review-card": "../../components/ReviewCard",
+    "m-price-tag": "../../components/MPriceTag",
     "list-skeleton": "../../components/ListSkeleton"
   }
 }

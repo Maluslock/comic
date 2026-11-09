@@ -60,3 +60,4 @@ server/admin-dist/
 # 本地密钥备份与二进制产物，禁止入库
 server/.env.bak*
 server/api
+.cache/

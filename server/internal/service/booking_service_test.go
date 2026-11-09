@@ -46,6 +46,10 @@ type bookingRecorder struct {
 	rows []pgx.Row
 	args [][]any
 	next int
+	// queryRows 服务 :many 语句（如 GetActiveServicesByPhotographer），每次
+	// Query 消耗一个条目；未提供时 Query 保持旧行为报 unexpected call。
+	queryRows []pgx.Rows
+	queryNext int
 }
 
 func (f *bookingRecorder) QueryRow(_ context.Context, _ string, a ...any) pgx.Row {
@@ -59,7 +63,12 @@ func (f *bookingRecorder) QueryRow(_ context.Context, _ string, a ...any) pgx.Ro
 }
 
 func (f *bookingRecorder) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errors.New("bookingRecorder: Query not expected")
+	if f.queryNext >= len(f.queryRows) {
+		return nil, errors.New("bookingRecorder: Query not expected")
+	}
+	r := f.queryRows[f.queryNext]
+	f.queryNext++
+	return r, nil
 }
 
 func (f *bookingRecorder) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
@@ -236,6 +245,86 @@ func TestCreateBooking_MutualService(t *testing.T) {
 	}
 	if got := createBookingArg(t, db, 9); got != "agreed" {
 		t.Errorf("mutual PriceStatus = %v, want agreed", got)
+	}
+}
+
+func TestCreateBooking_MutualSentinelService(t *testing.T) {
+	profile := photographerScanValues(2, nil)
+	profile[9] = "free"
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{values: profile},
+		fakeRow{values: []any{int64(0)}}, // CountConflictBookings
+		fakeRow{values: bookingScanValues(13, "pending")},
+		fakeRow{err: errors.New("no photographer profile")}, // notifyPhotographer
+	}, queryRows: []pgx.Rows{
+		&fakeRows{}, // GetActiveServicesByPhotographer -> 0 个上架套餐（free+0 放行）
+	}}
+	svc := NewBookingService(repository.New(db))
+	if _, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 0, Date: futureDate(3), Time: "09:00",
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := createBookingInt32Arg(t, db, 2); got != 0 {
+		t.Errorf("sentinel ServiceID = %d, want 0", got)
+	}
+	if got := createBookingInt32Arg(t, db, 6); got != 0 {
+		t.Errorf("sentinel TotalPrice = %d, want 0", got)
+	}
+	if got := createBookingArg(t, db, 8); got != "mutual" {
+		t.Errorf("sentinel PriceMode = %v, want mutual", got)
+	}
+	if got := createBookingArg(t, db, 9); got != "agreed" {
+		t.Errorf("sentinel PriceStatus = %v, want agreed", got)
+	}
+	name, ok := createBookingArg(t, db, 10).(*string)
+	if !ok || name == nil || *name != "互勉约拍" {
+		t.Errorf("sentinel ServiceName = %v, want 互勉约拍", createBookingArg(t, db, 10))
+	}
+	duration, ok := createBookingArg(t, db, 11).(*int32)
+	if !ok || duration == nil || *duration != 120 {
+		t.Errorf("sentinel ServiceDuration = %v, want 120", createBookingArg(t, db, 11))
+	}
+	if got := createBookingArg(t, db, 12); got != (*int32)(nil) {
+		t.Errorf("sentinel PhotoCount = %v, want nil", got)
+	}
+	if got := createBookingArg(t, db, 13); got != "fixed" {
+		t.Errorf("sentinel PriceUnit = %v, want fixed", got)
+	}
+}
+
+func TestCreateBooking_NegativeServiceIDRejectedBeforeDatabase(t *testing.T) {
+	db := &bookingRecorder{}
+	svc := NewBookingService(repository.New(db))
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: -1, Date: futureDate(1), Time: "09:00",
+	})
+	if !errors.Is(err, ErrInvalidServiceID) {
+		t.Fatalf("want ErrInvalidServiceID, got %v", err)
+	}
+	if len(db.args) != 0 {
+		t.Fatalf("negative service ID should fail before DB calls, got %d", len(db.args))
+	}
+}
+
+func TestCreateBooking_MutualSentinelRejectsNonMutualPhotographer(t *testing.T) {
+	profile := photographerScanValues(2, nil)
+	profile[9] = "paid"
+	db := &bookingRecorder{rows: []pgx.Row{
+		fakeRow{values: profile},
+		fakeRow{values: []any{int64(0)}}, // CountConflictBookings
+	}, queryRows: []pgx.Rows{
+		&fakeRows{}, // GetActiveServicesByPhotographer -> 0 个上架套餐；pay 模式依然拒绝
+	}}
+	svc := NewBookingService(repository.New(db))
+	_, err := svc.Create(context.Background(), CreateBookingRequest{
+		PhotographerID: 2, CoserID: 5, ServiceID: 0, Date: futureDate(1), Time: "09:00",
+	})
+	if !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("want ErrInvalidReference, got %v", err)
+	}
+	if len(db.args) != 2 {
+		t.Fatalf("non-mutual sentinel should stop before insert, got %d DB calls", len(db.args))
 	}
 }
 

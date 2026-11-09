@@ -16,7 +16,7 @@ import (
 type CreateBookingRequest struct {
 	PhotographerID int32  `json:"photographerId" binding:"required"`
 	CoserID        int32  `json:"coserId"`
-	ServiceID      int32  `json:"serviceId" binding:"required"`
+	ServiceID      int32  `json:"serviceId"`
 	Date           string `json:"date" binding:"required"`
 	Time           string `json:"time" binding:"required"`
 	Remarks        string `json:"remarks"`
@@ -139,6 +139,10 @@ var (
 	// ErrSelfBooking：摄影师不能预约自己的套餐。自成交没业务意义，还会污染订单数、
 	// 并为「自己给自己评价」铺路。
 	ErrSelfBooking = errors.New("cannot book your own service")
+	// ErrInvalidServiceID：请求里的 serviceId 是负数——纯客户端参数错误，handler 映射
+	// 400。刻意不复用 ErrInvalidReference（引用不存在/不属于该摄影师 → 404）：
+	// 负数不是「引用不存在」，是「请求本身就长歪了」，语义和状态码都该分开。
+	ErrInvalidServiceID = errors.New("invalid service id")
 )
 
 // canTransition guards the four legacy top-level states. Sub-status flows are
@@ -477,6 +481,11 @@ func (s *BookingService) dedupedNotify(ctx context.Context, userID int32, typ, t
 }
 
 func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (*BookingItem, error) {
+	// ServiceID 允许缺省（0 = 互勉哨兵），但负数没有任何业务含义 → 400。
+	if req.ServiceID < 0 {
+		return nil, ErrInvalidServiceID
+	}
+
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
 		return nil, err
@@ -485,7 +494,8 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		return nil, ErrPastDate
 	}
 
-	if profile, err := s.queries.GetPhotographerById(ctx, req.PhotographerID); err == nil {
+	profile, profileErr := s.queries.GetPhotographerById(ctx, req.PhotographerID)
+	if profileErr == nil {
 		// 摄影师不能给自己下单：自成交没有业务含义，且会让「自己给自己评价」变成可能。
 		if profile.UserID != nil && *profile.UserID == int64(req.CoserID) {
 			return nil, ErrSelfBooking
@@ -511,36 +521,67 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest) (
 		remarks = &req.Remarks
 	}
 
-	// 套餐归属校验：套餐必须归属于被预约的摄影师，且**必须处于上架状态**。平台模板套餐
-	// （photographer_id IS NULL）不作为可售商品，一律拒绝；套餐不存在或已下架（ErrNoRows）
-	// 同样视为无效引用 —— 下架校验放在这里，避免「列表里看不到、下单却能成」。
-	// 不掩盖真实 DB 故障。
-	serviceID64 := int64(req.ServiceID)
-	ownerID, err := s.queries.GetBookableServicePhotographerID(ctx, serviceID64)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	var pricing bookingPricing
+	if req.ServiceID == 0 {
+		// ID 0 is a sentinel for a mode-level mutual booking option, never a services row.
+		// 判据与详情页虚拟互勉套餐注入条件逐字一致（mutualHasFreeFallback）：
+		// mode 接受互勉（free/both）且没有任何上架套餐才放行 serviceId=0。
+		// 有付费套餐的 both 绝不能走 0 元下单（付款红线），否则等于开白嫖入口；
+		// 套餐数与 GetDetail 同一数据源（GetActiveServicesByPhotographer，只算上架）。
+		if profileErr != nil {
 			return nil, ErrInvalidReference
 		}
-		return nil, err
-	}
-	if ownerID == nil || int64(req.PhotographerID) != *ownerID {
-		return nil, ErrInvalidReference
-	}
-
-	svc, err := s.queries.GetServiceById(ctx, serviceID64)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		services, err := s.queries.GetActiveServicesByPhotographer(ctx, req.PhotographerID)
+		if err != nil {
+			// DB 故障不掩盖成 404：拿不到套餐数就无法证明「0 套餐」，原样抛出。
+			return nil, err
+		}
+		if !mutualHasFreeFallback(profile.Mode, int32(len(services))) {
 			return nil, ErrInvalidReference
 		}
-		return nil, err
-	}
+		price := int32(0)
+		name := "互勉约拍"
+		duration := int32(120)
+		pricing = bookingPricing{
+			totalPrice:      price,
+			priceMode:       "mutual",
+			priceStatus:     "agreed",
+			serviceName:     &name,
+			serviceDuration: &duration,
+			priceUnit:       priceUnitFixed,
+		}
+	} else {
+		// 套餐归属校验：套餐必须归属于被预约的摄影师，且**必须处于上架状态**。平台模板套餐
+		// （photographer_id IS NULL）不作为可售商品，一律拒绝；套餐不存在或已下架（ErrNoRows）
+		// 同样视为无效引用 —— 下架校验放在这里，避免「列表里看不到、下单却能成」。
+		// 不掩盖真实 DB 故障。
+		serviceID64 := int64(req.ServiceID)
+		ownerID, err := s.queries.GetBookableServicePhotographerID(ctx, serviceID64)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrInvalidReference
+			}
+			return nil, err
+		}
+		if ownerID == nil || int64(req.PhotographerID) != *ownerID {
+			return nil, ErrInvalidReference
+		}
 
-	// 按套餐价格推导定价模式，并冻结名称/时长/计价单位快照。
-	// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
-	// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
-	pricing := deriveBookingPricing(svc, req.PhotoCount)
-	if pricing.selectionErr != nil {
-		return nil, pricing.selectionErr
+		svc, err := s.queries.GetServiceById(ctx, serviceID64)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrInvalidReference
+			}
+			return nil, err
+		}
+
+		// 按套餐价格推导定价模式，并冻结名称/时长/计价单位快照。
+		// price IS NULL = 面议；price = 0 = 互勉；price > 0 = 固定价。
+		// total_price 为 NOT NULL，互勉/面议写 0 占位，展示层靠 price_status 区分。
+		pricing = deriveBookingPricing(svc, req.PhotoCount)
+		if pricing.selectionErr != nil {
+			return nil, pricing.selectionErr
+		}
 	}
 
 	booking, err := s.queries.CreateBooking(ctx, repository.CreateBookingParams{

@@ -38,6 +38,11 @@ func (h *BookingHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "photographer or service not found"})
 			return
 		}
+		if errors.Is(err, service.ErrInvalidServiceID) {
+			// serviceId 是负数：纯客户端参数错误 → 400（与上面「引用不存在」→ 404 分开）。
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service id"})
+			return
+		}
 		if errors.Is(err, service.ErrPastDate) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "不能预约已经过去的日期"})
 			return

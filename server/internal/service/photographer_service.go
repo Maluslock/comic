@@ -536,6 +536,29 @@ func MarkSelf(items []PhotographerListItem, viewerUserID int64) []PhotographerLi
 	return items
 }
 
+// isMutualMode 是「这位摄影师接受互勉约拍吗」的唯一判定口径：
+// free=只互勉、both=互勉与收费都接（见 src/pages/photographer/activate.vue:116）、pay=只收费。
+// 详情页虚拟套餐注入、列表/首页/漫展详情的 hasFree 兜底全部走这里，
+// 防止多处各写 strings.Contains(mode, "free") 造成口径漂移（both 会被漏掉）。
+func isMutualMode(mode string) bool {
+	return mode == "free" || mode == "both"
+}
+
+// mutualHasFreeFallback 是「置 HasFree」的唯一判据（GetDetail 与全部价格汇总出口都走它）：
+// mode 接受互勉（free/both）且没有任何上架套餐（ServiceCount/ActiveCount == 0）才置位。
+// 有套餐的 both 一律不置位——否则详情/列表会把收费摄影师标成「互勉」，
+// 前端 describePrice 会短路掉 minPrice，把「¥399 起」吃掉，coser 以为能白嫖。
+func mutualHasFreeFallback(mode string, serviceCount int32) bool {
+	return isMutualMode(mode) && serviceCount == 0
+}
+
+// applyDetailMutualHasFree 是 GetDetail 价格汇总的互勉兜底唯一入口（供回归锁测试直连）。
+func applyDetailMutualHasFree(mode string, priceSummary *repository.ServicePriceSummary) {
+	if mutualHasFreeFallback(mode, priceSummary.ActiveCount) {
+		priceSummary.HasFree = true
+	}
+}
+
 // mergePriceSummaries attaches the price roll-up to a page of list rows. Pure, so it
 // is unit-testable without a database.
 func mergePriceSummaries(items []PhotographerListItem, sums []repository.ServicePriceSummary) []PhotographerListItem {
@@ -544,15 +567,42 @@ func mergePriceSummaries(items []PhotographerListItem, sums []repository.Service
 		byID[s.PhotographerID] = s
 	}
 	for i := range items {
-		s, ok := byID[items[i].ID]
-		if !ok {
-			continue
+		if s, ok := byID[items[i].ID]; ok {
+			items[i].MinPrice = s.MinPrice
+			items[i].MinPricePerPhoto = s.MinPricePerPhoto
+			items[i].HasFree = s.HasFree
+			items[i].HasNegotiable = s.HasNegotiable
+			items[i].ServiceCount = s.ActiveCount
 		}
-		items[i].MinPrice = s.MinPrice
-		items[i].MinPricePerPhoto = s.MinPricePerPhoto
-		items[i].HasFree = s.HasFree
-		items[i].HasNegotiable = s.HasNegotiable
-		items[i].ServiceCount = s.ActiveCount
+		// 互勉兜底（与详情页虚拟互勉套餐同口径）：mode 接受互勉且没有任何上架套餐
+		// （聚合查询没有它的行 → ServiceCount 保持 0）才置 HasFree。有套餐一律不置位
+		// —— 否则 mode=both 的收费摄影师会凭空多出 0 元选项，coser 误以为能免费约。
+		if mutualHasFreeFallback(items[i].Mode, items[i].ServiceCount) {
+			items[i].HasFree = true
+		}
+	}
+	return items
+}
+
+// mergePhotographerItemPriceSummaries 是首页 / 漫展详情推荐摄影师的价格汇总回填，
+// 与 mergePriceSummaries 同一规则（含互勉兜底）；两个出口共用这一份实现，防止再漂移。
+func mergePhotographerItemPriceSummaries(items []PhotographerItem, sums []repository.ServicePriceSummary) []PhotographerItem {
+	byID := make(map[int64]repository.ServicePriceSummary, len(sums))
+	for _, s := range sums {
+		byID[s.PhotographerID] = s
+	}
+	for i := range items {
+		if s, ok := byID[items[i].ID]; ok {
+			items[i].MinPrice = s.MinPrice
+			items[i].MinPricePerPhoto = s.MinPricePerPhoto
+			items[i].HasFree = s.HasFree
+			items[i].HasNegotiable = s.HasNegotiable
+			items[i].ServiceCount = s.ActiveCount
+		}
+		// 互勉兜底：同 mergePriceSummaries（互勉且 0 上架套餐才置位，有套餐不置位）。
+		if mutualHasFreeFallback(items[i].Mode, items[i].ServiceCount) {
+			items[i].HasFree = true
+		}
 	}
 	return items
 }
@@ -567,6 +617,17 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 	if err != nil {
 		services = []repository.Service{}
 	}
+
+	// Keep detail roll-ups based on real active services; a synthetic mutual item
+	// below must not inflate ServiceCount or alter the price summary.
+	priceSummary := repository.ServicePriceSummary{ActiveCount: int32(len(services))}
+	if summaries, summaryErr := s.queries.GetServicePriceSummaries(ctx, []int64{int64(id)}); summaryErr == nil && len(summaries) > 0 {
+		priceSummary = summaries[0]
+	}
+	isMutual := isMutualMode(p.Mode)
+	// 互勉兜底走唯一判据 mutualHasFreeFallback：只有「互勉且 0 上架套餐」才置 HasFree。
+	// 有套餐的 both 不能置位，否则会盖掉 minPrice，把收费摄影师标成可免费约。
+	applyDetailMutualHasFree(p.Mode, &priceSummary)
 
 	works, err := s.queries.GetWorksByPhotographer(ctx, id)
 	if err != nil {
@@ -584,29 +645,55 @@ func (s *PhotographerService) GetDetail(ctx context.Context, id int32) (*Photogr
 	}
 
 	rating := numericToFloat64(p.Rating)
+	serviceItems := mapServiceItems(services)
+	// ID 0 is a sentinel for the mode-level mutual booking option, not a row in services.
+	// Inject it only when the photographer has no active packages; real packages remain the
+	// source of ServiceCount and price roll-ups above.
+	serviceItems = appendMutualServiceItem(serviceItems, len(services) == 0 && isMutual)
 
 	detail := &PhotographerDetail{
 		PhotographerItem: PhotographerItem{
-			ID:          int64(p.ID),
-			Name:        p.Name,
-			Avatar:      derefString(p.Avatar),
-			Location:    derefString(p.Location),
-			Rating:      math.Round(rating*10) / 10,
-			ReviewCount: derefInt32(p.ReviewCount),
-			OrderCount:  derefInt32(p.OrderCount),
-			UserID:      derefInt64(p.UserID),
-			Mode:        p.Mode,
-			MutualIntro: derefString(p.MutualIntro),
-			Certified:   p.Certified,
-			Tags:        tags,
+			ID:               int64(p.ID),
+			Name:             p.Name,
+			Avatar:           derefString(p.Avatar),
+			Location:         derefString(p.Location),
+			Rating:           math.Round(rating*10) / 10,
+			ReviewCount:      derefInt32(p.ReviewCount),
+			OrderCount:       derefInt32(p.OrderCount),
+			UserID:           derefInt64(p.UserID),
+			Mode:             p.Mode,
+			MutualIntro:      derefString(p.MutualIntro),
+			Certified:        p.Certified,
+			Tags:             tags,
+			MinPrice:         priceSummary.MinPrice,
+			MinPricePerPhoto: priceSummary.MinPricePerPhoto,
+			HasFree:          priceSummary.HasFree,
+			HasNegotiable:    priceSummary.HasNegotiable,
+			ServiceCount:     priceSummary.ActiveCount,
 		},
 		Description: derefString(p.Description),
-		Services:    mapServiceItems(services),
+		Services:    serviceItems,
 		Works:       mapWorkItems(works),
 		Reviews:     mapReviewItems(reviews),
 	}
 	s.attachCreditOne(ctx, &detail.PhotographerItem)
 	return detail, nil
+}
+
+func appendMutualServiceItem(items []ServiceItem, enabled bool) []ServiceItem {
+	if !enabled {
+		return items
+	}
+	price := int32(0)
+	return append(items, ServiceItem{
+		ID:          0,
+		Name:        "互勉约拍",
+		Price:       &price,
+		Description: "互勉约拍，双方各取所需",
+		Duration:    120,
+		PriceUnit:   priceUnitFixed,
+		PhotoCount:  nil,
+	})
 }
 
 func mapServiceItems(services []repository.Service) []ServiceItem {

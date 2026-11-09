@@ -113,19 +113,7 @@ func (s *EventService) GetDetail(ctx context.Context, id int64) (*EventDetail, e
 			ids = append(ids, p.ID)
 		}
 		if sums, err := s.queries.GetServicePriceSummaries(ctx, ids); err == nil {
-			byID := make(map[int64]repository.ServicePriceSummary, len(sums))
-			for _, sum := range sums {
-				byID[sum.PhotographerID] = sum
-			}
-			for i := range items {
-				if sum, ok := byID[items[i].ID]; ok {
-					items[i].MinPrice = sum.MinPrice
-					items[i].MinPricePerPhoto = sum.MinPricePerPhoto
-					items[i].HasFree = sum.HasFree
-					items[i].HasNegotiable = sum.HasNegotiable
-					items[i].ServiceCount = sum.ActiveCount
-				}
-			}
+			items = mergePhotographerItemPriceSummaries(items, sums)
 		}
 	}
 

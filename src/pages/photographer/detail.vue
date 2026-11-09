@@ -69,6 +69,7 @@
       </view>
 
       <view class="tags-row">
+        <MPriceTag v-if="priceSummary.text" :text="priceSummary.text" :tone="priceSummary.tone" size="md" />
         <view v-if="photographer?.mode === 'free'" class="mode-tag">互勉</view>
         <view v-else-if="photographer?.mode === 'pay'" class="mode-tag pay">收费</view>
         <view v-else-if="photographer?.mode" class="mode-tag both">互勉 / 收费</view>
@@ -177,7 +178,8 @@ import { apiGet, apiPost, apiDelete } from '@/api/client'
 import { useUserStore } from '@/stores/user'
 import { blockUser, getPhotographerReviews } from '@/api/index'
 import { mapPhotographerItem, mapWorkItem, mapReviewItem, encodeRedirect } from '@/utils/mappers'
-import { describeServicePrice } from '@/utils/price'
+import { describeServicePrice, describePrice } from '@/utils/price'
+import MPriceTag from '@/components/MPriceTag.vue'
 import { previewImages } from '@/utils/preview'
 import { formatDuration } from '@/utils/duration'
 import { creditLevelShort, creditTone as creditToneOf } from '@/utils/credit'
@@ -205,6 +207,11 @@ interface PhotographerDetailResponse {
   creditLevel?: string
   tags: string[]
   description: string
+  minPrice?: number | null
+  minPricePerPhoto?: number | null
+  hasFree?: boolean
+  hasNegotiable?: boolean
+  serviceCount?: number
   // priceUnit / photoCount 必须留在这里：selectService() 会把整个 service 对象
   // 序列化进 storage 传给预约页，缺这两个字段会让预约页的 isPerPhoto 恒 false，
   // 按张套餐就会被当成「整套 ¥10」直接成交。
@@ -230,6 +237,18 @@ type PhotographerView = Photographer & {
 
 const userStore = useUserStore()
 const photographer = ref<PhotographerView | null>(null)
+
+const priceSummary = computed(() => {
+  const p = photographer.value
+  if (!p) return { text: '', tone: 'muted' as const }
+  return describePrice({
+    minPrice: p.minPrice,
+    minPricePerPhoto: p.minPricePerPhoto,
+    hasFree: p.hasFree,
+    hasNegotiable: p.hasNegotiable,
+    serviceCount: p.serviceCount,
+  })
+})
 
 // 评分按真实评价重算：没有评价时后端返回 rating=0 / reviewCount=0。
 // 直接显示「0」会被读成「被打 0 分」，故无评价时给文案。

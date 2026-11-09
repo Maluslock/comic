@@ -25,13 +25,18 @@
 
     <view class="section">
       <view class="section-title">选择服务</view>
-      <ServiceCard 
-        v-for="service in services" 
-        :key="service.id" 
-        :service="service"
-        :selected="selectedService?.id === service.id"
-        @select="selectService"
-      />
+      <template v-if="services.length">
+        <ServiceCard 
+          v-for="service in services" 
+          :key="service.id" 
+          :service="service"
+          :selected="selectedService?.id === service.id"
+          @select="selectService"
+        />
+      </template>
+      <view v-else class="empty-services">
+        <text class="empty-services-text">{{ emptyServicesText }}</text>
+      </view>
     </view>
 
     <view class="section">
@@ -151,6 +156,7 @@ const selectedTime = ref('')
 const timeSlots = ref<string[]>([])
 const disabledTimes = ref<string[]>([])
 const remark = ref('')
+const emptyServicesText = '该摄影师暂未设置套餐，可先私信沟通'
 // 按张计价的张数：默认 1 张。后端 photoCount 是 *int32，非按张套餐绝不下发这个字段。
 const photoCount = ref(1)
 
@@ -417,6 +423,19 @@ async function submitBooking() {
     background: $neon-gradient;
     border-radius: 3rpx;
   }
+}
+
+.empty-services {
+  padding: $spacing-lg $spacing-md;
+  background: $dark-bg-card;
+  border: 1rpx solid $dark-border;
+  border-radius: $border-radius-md;
+  text-align: center;
+}
+
+.empty-services-text {
+  font-size: $font-size-sm;
+  color: $dark-text-secondary;
 }
 
 .date-picker {

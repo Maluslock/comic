@@ -116,19 +116,7 @@ func (s *HomeService) GetHomeData(ctx context.Context) (*HomeResponse, error) {
 		if err != nil {
 			return nil, fmt.Errorf("home service: price summaries: %w", err)
 		}
-		byID := make(map[int64]repository.ServicePriceSummary, len(sums))
-		for _, s := range sums {
-			byID[s.PhotographerID] = s
-		}
-		for i := range photographers {
-			if s, ok := byID[photographers[i].ID]; ok {
-				photographers[i].MinPrice = s.MinPrice
-				photographers[i].MinPricePerPhoto = s.MinPricePerPhoto
-				photographers[i].HasFree = s.HasFree
-				photographers[i].HasNegotiable = s.HasNegotiable
-				photographers[i].ServiceCount = s.ActiveCount
-			}
-		}
+		photographers = mergePhotographerItemPriceSummaries(photographers, sums)
 	}
 
 	return &HomeResponse{

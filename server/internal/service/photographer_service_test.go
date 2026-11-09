@@ -11,6 +11,27 @@ import (
 	"github.com/Maluslock/comic/server/internal/repository"
 )
 
+func TestMutualServiceItem(t *testing.T) {
+	items := mapServiceItems(nil)
+	items = appendMutualServiceItem(items, true)
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	item := items[0]
+	if item.ID != 0 || item.Name != "互勉约拍" || item.Price == nil || *item.Price != 0 {
+		t.Fatalf("unexpected virtual item: %+v", item)
+	}
+	if item.Description != "互勉约拍，双方各取所需" || item.Duration != 120 || item.PriceUnit != "fixed" || item.PhotoCount != nil {
+		t.Fatalf("unexpected virtual item details: %+v", item)
+	}
+}
+
+func TestMutualServiceItemDoesNotAppendWhenNotMutual(t *testing.T) {
+	if got := appendMutualServiceItem(nil, false); got != nil {
+		t.Fatalf("got %#v, want nil", got)
+	}
+}
+
 type fakeWorksStore struct {
 	profile             repository.PhotographerWithTags
 	profileErr          error

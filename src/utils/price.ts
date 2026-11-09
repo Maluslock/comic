@@ -35,11 +35,14 @@ export function describePrice(p: PriceSummary): PriceLabel {
   if (typeof p.serviceCount !== 'number') {
     return { text: '', tone: 'muted' }
   }
-  if (p.serviceCount <= 0) {
-    return { text: '暂未设置', tone: 'muted' }
-  }
+  // 互勉优先于「套餐数」：mode 含 free/both 的摄影师即使一条上架套餐都没有，
+  // 也能接互勉单（后端 GetDetail 会注入 ID=0 的虚拟互勉套餐）。
+  // 这个分支必须在 serviceCount<=0 之前，否则 0 套餐的互勉摄影师会被显示成「暂未设置」。
   if (p.hasFree) {
     return { text: '互勉', tone: 'free' }
+  }
+  if (p.serviceCount <= 0) {
+    return { text: '暂未设置', tone: 'muted' }
   }
   if (typeof p.minPrice === 'number' && p.minPrice > 0) {
     return { text: `¥${p.minPrice} 起`, tone: 'price' }

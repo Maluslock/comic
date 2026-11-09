@@ -200,7 +200,7 @@ onMounted(() => {
   // 用本地日期，不能用 toISOString（UTC）：东八区 00:00–08:00 会得到「昨天」，
   // 默认就选中一个已过去的日期。若今天已没有可约时段，直接落到明天，
   // 避免用户选完日期才发现「每个时段都是灰的」。
-  selectedDate.value = ALL_SLOTS.some((t) => !isPastSlotLabel(t)) ? todayKey() : tomorrowKey()
+  selectedDate.value = ALL_SLOTS.some((t) => !isPastTimeOfDay(t)) ? todayKey() : tomorrowKey()
   loadTimeSlots(selectedDate.value)
 })
 
@@ -264,12 +264,23 @@ function onDateChange(e: { detail: { value: string } }) {
   loadTimeSlots(e.detail.value)
 }
 
-/** 当天已过去的时段（含当前这一小时）不可选，与后端 isPastSlot 口径一致。 */
-function isPastSlotLabel(time: string): boolean {
-  if (selectedDate.value !== todayKey()) return false
+/**
+ * 某个时刻「今天」是否已经过去（含当前这一小时），只看时钟，不看 selectedDate。
+ *
+ * 初始默认日期必须用这个函数判断：isPastSlotLabel 会先比对 selectedDate，
+ * 而那一刻 selectedDate 还是空串，于是所有时段都判成「未过去」，
+ * 17:00 之后进页面会默认选中今天 → 8 个时段全灰、按钮永久不可提交。
+ */
+function isPastTimeOfDay(time: string): boolean {
   const [h, m] = time.split(':').map(Number)
   const now = new Date()
   return h * 60 + m <= now.getHours() * 60 + now.getMinutes()
+}
+
+/** 当天已过去的时段（含当前这一小时）不可选，与后端 isPastSlot 口径一致。 */
+function isPastSlotLabel(time: string): boolean {
+  if (selectedDate.value !== todayKey()) return false
+  return isPastTimeOfDay(time)
 }
 
 function tomorrowKey(): string {

@@ -26,6 +26,7 @@
     "pages/photographer/event-apply",
     "pages/profile/index",
     "pages/profile/edit",
+    "pages/profile/style-prefs",
     "pages/credit/index",
     "pages/settings/index",
     "pages/settings/doc",

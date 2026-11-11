@@ -4,6 +4,7 @@
   "usingComponents": {
     "photographer-card": "../../components/PhotographerCard",
     "quick-action-bar": "../../components/QuickActionBar",
-    "home-skeleton": "../../components/HomeSkeleton"
+    "home-skeleton": "../../components/HomeSkeleton",
+    "style-picker": "../../components/StylePicker"
   }
 }

@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "风格偏好",
+  "navigationStyle": "custom",
+  "backgroundColor": "#0C0D14",
+  "backgroundColorTop": "#0C0D14",
+  "backgroundColorBottom": "#0C0D14",
+  "usingComponents": {
+    "style-tag-chips": "../../components/StyleTagChips"
+  }
+}

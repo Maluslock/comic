@@ -274,6 +274,14 @@
         </scroll-view>
       </view>
     </view>
+
+    <!-- 首启风格偏好弹层：仅登录、未选择、未跳过的用户在 onShow 触发 -->
+    <StylePicker
+      :visible="showStylePicker"
+      @save="onStyleSave"
+      @skip="onStyleSkip"
+      @update:visible="showStylePicker = $event"
+    />
   </view>
 </template>
 
@@ -286,12 +294,17 @@ import PhotographerCard from '@/components/PhotographerCard.vue'
 import QuickActionBar from '@/components/QuickActionBar.vue'
 import HomeSkeleton from '@/components/HomeSkeleton.vue'
 import { useHomeStore } from '@/stores/home'
+import { useStyleStore } from '@/stores/style'
+import StylePicker from '@/components/StylePicker.vue'
 import { preloadPhotographerDetail } from '@/utils/preload'
 import { navTo } from '@/utils/nav'
 
 const store = useHomeStore()
+const styleStore = useStyleStore()
 const { cityOptions } = storeToRefs(store)
 const { statusBarHeight } = useStatusBar()
+// 首启风格偏好半屏弹层：shouldPrompt() 判据在 onShow 里异步核验后再置 true。
+const showStylePicker = ref(false)
 // ── 顶部栏（单行）胶囊避让 ────────────────────────────────────────────────
 // 顶栏挂在 .hero-content 里面，而 .hero-content 已有 padding: 24rpx 32rpx 0。
 // 因此：
@@ -457,6 +470,13 @@ onShow(() => {
     preloadArmed = true
     preloadFirstTwoOnce() // 数据已加载（暖启动/再次进入）时立即补一次
   }
+  // 首启风格偏好：判据是「登录 + 已加载偏好 + 未选择 + 未跳过」，
+  // 异步核验（标签全集 + 我的偏好）后才置 visible。游客 loadPrefs 直接返回，
+  // 绝不会打鉴权接口、绝不会弹；已选/已跳过的用户进来也不会重复弹。
+  void (async () => {
+    await Promise.all([styleStore.loadTags(), styleStore.loadPrefs()])
+    if (styleStore.shouldPrompt()) showStylePicker.value = true
+  })()
 })
 
 // 冷启动 onShow 早于 onMounted 的 fetchHomeData：列表异步到达后再补触发一次，
@@ -481,6 +501,25 @@ async function onRefresh() {
   if (store.error) {
     uni.showToast({ title: '刷新失败，请稍后再试', icon: 'none' })
   }
+}
+
+// 首启风格偏好：组件只发事件，请求/持久化留在 store，刷新推荐区留在页面。
+async function onStyleSave(tagIds: number[]) {
+  try {
+    await styleStore.savePrefs(tagIds)
+  } catch {
+    return // 失败提示已在 store 内统一 toast，保留弹层与当前选择
+  }
+  uni.showToast({ title: '已为你记录风格偏好', icon: 'none' })
+  showStylePicker.value = false
+  // fetchHomeData 末尾会按新偏好重新拉摄影师列表覆盖推荐区；
+  // 用 refresh()（preserveLoaded）保住已加载内容，不闪骨架屏。
+  await store.refresh()
+}
+
+function onStyleSkip() {
+  styleStore.markSkipped()
+  showStylePicker.value = false
 }
 
 function goSearch() {

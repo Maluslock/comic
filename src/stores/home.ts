@@ -4,6 +4,8 @@ import type { Photographer, Work, ComicEvent, HomeResponse } from '@/types'
 import { getHomeData, getCities, type CityItem } from '@/api/index'
 import { apiGet } from '@/api/client'
 import { mapBannerItem, mapEventItem, mapPhotographerItem, mapWorkItem } from '@/utils/mappers'
+import type { PhotographerDTO } from '@/utils/mappers'
+import { useStyleStore } from '@/stores/style'
 
 export const useHomeStore = defineStore('home', () => {
   // --- State ---
@@ -139,6 +141,8 @@ export const useHomeStore = defineStore('home', () => {
       banners.value = (data.banners || []).map(mapBannerItem)
       events.value = (data.upcomingEvents || []).map(mapEventItem)
       hotTags.value = (data.hotTags || []).map(t => t.name).slice(0, 10)
+      // /v1/home 的推荐先落底：后面按偏好覆盖失败/空结果时直接保住这份，
+      // 绝不出现白屏或 0 卡。
       photographers.value = (data.recommendedPhotographers || []).map(mapPhotographerItem)
       featuredWorks.value = (data.featuredWorks || []).map(mapWorkItem)
 
@@ -151,6 +155,38 @@ export const useHomeStore = defineStore('home', () => {
     } finally {
       loading.value = false
       refreshing.value = false
+    }
+
+    // 有登录用户风格偏好时，推荐区改调按标签过滤的摄影师列表；
+    // 任何失败（网络 / 非 200 / 空结果）都保留上面的 /v1/home 推荐位。
+    // 不改 /v1/home 后端契约：这里只是前端展示层再拉一次列表覆盖 photographers。
+    try {
+      const styleStore = useStyleStore()
+      // 幂等：已加载则立即返回；游客 loadPrefs 直接 return，不会打鉴权接口。
+      await Promise.all([styleStore.loadTags(), styleStore.loadPrefs()])
+      const names = styleStore.selectedNames
+      if (names.length) {
+        // 分页参数名必须是 size：后端 photographer_handler.go 只读
+        // strconv.Atoi(c.DefaultQuery("size","10"))，传 limit 会被整条忽略、静默落到默认 10 条。
+        // 实测 6 个摄影师时 ?limit=1 返回 6 条、?size=1 返回 1 条。
+        const res = await apiGet<{ list: PhotographerDTO[] }>('/v1/photographers', {
+          tags: names.join(','),
+          size: '6',
+        })
+        // 兼容 { list: [...] } 与裸数组两种返回体；空结果不覆盖，保住 fallback。
+        const raw = res as unknown
+        const list: PhotographerDTO[] = Array.isArray(raw)
+          ? (raw as PhotographerDTO[])
+          : ((res && res.list) || [])
+        if (list.length) {
+          photographers.value = list.map(mapPhotographerItem)
+        }
+      }
+    } catch (e) {
+      console.warn(
+        '[HomeStore] style recommendation failed, keep /v1/home:',
+        e instanceof Error ? e.message : String(e),
+      )
     }
   }
 

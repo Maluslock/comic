@@ -99,6 +99,12 @@
           <text class="menu-text">我的评价</text>
           <text class="menu-arrow">›</text>
         </view>
+        <view class="menu-item" @click="goStylePrefs">
+          <image class="menu-icon" src="/static/icons/action-tag.png" mode="aspectFit" />
+          <text class="menu-text">风格偏好</text>
+          <text class="menu-value">{{ stylePrefsHint }}</text>
+          <text class="menu-arrow">›</text>
+        </view>
         <view v-if="isPhotographer" class="menu-item" @click="goPhotographerOrders">
           <image class="menu-icon" src="/static/icons/menu-camera.svg" mode="aspectFit" />
           <text class="menu-text">接单管理</text>
@@ -166,6 +172,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { apiGet } from '@/api/client'
 import { getMyPhotographerProfile, getMyCredit } from '@/api'
 import { useUserStore } from '@/stores/user'
+import { useStyleStore } from '@/stores/style'
 import { getApiBase, setApiBase, resetApiBase } from '@/utils/apiBase'
 import { creditLevelText as levelTextOf, creditTone as toneOf, frozenHint } from '@/utils/credit'
 import { isPlaceholderName as isPlaceholderNameValue } from '@/utils/placeholder-name'
@@ -173,9 +180,15 @@ import { navTo } from '@/utils/nav'
 import type { CreditSummary } from '@/types'
 
 const userStore = useUserStore()
+const styleStore = useStyleStore()
 
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const user = computed(() => userStore.user)
+// 个人中心入口右侧文案：已选 N 个 / 未设置（selected 由 loadPrefs 填充）。
+const stylePrefsHint = computed(() => {
+  const n = styleStore.selected.length
+  return n > 0 ? `已选 ${n} 个` : '未设置'
+})
 
 // 占位名（空 /「微信用户」/「11」这类纯数字 /「摄影师15」兜底名）不当真名展示：
 // 判定直接复用 isPlaceholderName，与后端 isPlaceholderName() 同源，避免两边漂移。
@@ -279,6 +292,9 @@ onShow(() => {
   // 从「开通摄影师」/「摄影师资料」返回时档案可能刚建好，这里再补一次，
   // 让分组与提示立刻跟着变，不用等下次冷启动。
   userStore.refreshMe()
+  // 「风格偏好」入口右侧「已选 N 个」来自 style store；游客 loadPrefs 直接返回，
+  // 幂等 in-flight Promise 保证与其它页面的并发加载只发一次请求。
+  void Promise.all([styleStore.loadTags(), styleStore.loadPrefs()])
 })
 
 function goLogin() {
@@ -369,6 +385,11 @@ function goWorks() {
 function goReviews() {
   if (needLogin('/pages/comment/index')) return
   navTo('/pages/comment/index')
+}
+
+function goStylePrefs() {
+  if (needLogin('/pages/profile/style-prefs')) return
+  navTo('/pages/profile/style-prefs')
 }
 
 function goSettings() {
@@ -757,6 +778,13 @@ function onVersionLongPress() {
   flex: 1;
   font-size: $font-size-base;
   color: $dark-text-primary;
+}
+
+// 「风格偏好」入口右侧状态文案（已选 N 个 / 未设置），与箭头并排。
+.menu-value {
+  font-size: $font-size-sm;
+  color: $dark-text-tertiary;
+  margin-right: $spacing-xs;
 }
 
 .menu-arrow {

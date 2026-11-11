@@ -205,6 +205,16 @@
       }
     },
     {
+      "path": "pages/profile/style-prefs",
+      "style": {
+        "navigationBarTitleText": "风格偏好",
+        "navigationStyle": "custom",
+        "backgroundColor": "#0C0D14",
+        "backgroundColorTop": "#0C0D14",
+        "backgroundColorBottom": "#0C0D14"
+      }
+    },
+    {
       "path": "pages/credit/index",
       "style": {
         "navigationBarTitleText": "信用明细",

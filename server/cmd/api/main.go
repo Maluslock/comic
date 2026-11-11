@@ -214,6 +214,10 @@ func main() {
 		creditH := handler.NewCreditHandler(service.NewCreditService(queries))
 		router.GET("/api/v1/me/credit", middleware.AuthRequired(userRepo), creditH.Summary)
 		router.GET("/api/v1/me/credit/events", middleware.AuthRequired(userRepo), creditH.Events)
+		// Style prefs (C-end first-launch picker, token user only).
+		stylePrefH := handler.NewStylePrefHandler(service.NewStylePrefService(queries))
+		router.GET("/api/v1/me/style-prefs", middleware.AuthRequired(userRepo), stylePrefH.Get)
+		router.PUT("/api/v1/me/style-prefs", middleware.AuthRequired(userRepo), stylePrefH.Replace)
 		router.POST("/api/v1/bookings/:id/checkin", middleware.AuthRequired(userRepo), bookingH.Checkin)
 		router.POST("/api/v1/bookings/:id/deliver", middleware.AuthRequired(userRepo), bookingH.MarkDelivered)
 		router.POST("/api/v1/bookings/:id/accept", middleware.AuthRequired(userRepo), bookingH.AcceptDelivery)

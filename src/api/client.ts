@@ -20,6 +20,13 @@ function handleUnauthorized(res: { statusCode: number }) {
         s.token = ''
       } catch { /* pinia 未安装时忽略 */ }
     })
+    // 风格偏好是账号维度的内存态：不清就会串号 —— 换账号后新用户不弹首启、
+    // 编辑页看到上一个账号的标签，点保存还会把上一个账号的 tagId 写进新账号。
+    void import('@/stores/style').then(({ useStyleStore }) => {
+      try {
+        useStyleStore().reset()
+      } catch { /* 同上 */ }
+    })
     const pages = getCurrentPages()
     const top = pages[pages.length - 1]
     const cur = top?.route

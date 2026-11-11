@@ -55,6 +55,14 @@ type Querier interface {
 	GetHotTags(ctx context.Context, limit int32) ([]Tag, error)
 	GetAllTags(ctx context.Context) ([]TagRow, error)
 
+	// Style prefs (C-end first-launch style picker)
+	ListStylePrefsByUser(ctx context.Context, userID int64) ([]int64, error)
+	ReplaceStylePrefs(ctx context.Context, userID int64, tagIDs []int64) error
+	ListStyleTagsByUser(ctx context.Context, userID int64) ([]StyleTagRow, error)
+	MarkStylePrefChosen(ctx context.Context, userID int64) error
+	GetStylePrefChosen(ctx context.Context, userID int64) (bool, error)
+	CountTags(ctx context.Context, tagIDs []int64) (int, error)
+
 	// Services
 	GetServices(ctx context.Context) ([]Service, error)
 	GetActiveServicesByPhotographer(ctx context.Context, photographerID int32) ([]Service, error)

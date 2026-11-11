@@ -77,6 +77,12 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     uni.removeStorageSync('token')
     uni.removeStorageSync('user')
+    // 风格偏好按账号隔离，登出必须清内存态：否则 A 登出 B 登录后沿用 A 的
+    // selected/chosen（B 不弹首启、编辑页看到 A 的标签、保存把 A 的 tagId 写进 B）。
+    try {
+      // 动态 import 避免 user ↔ style 形成循环依赖（style 顶层就 import user）。
+      void import('@/stores/style').then(({ useStyleStore }) => useStyleStore().reset())
+    } catch { /* pinia 未就绪时忽略 */ }
   }
 
   function init() {
